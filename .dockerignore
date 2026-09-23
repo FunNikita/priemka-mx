@@ -1,0 +1,16 @@
+node_modules/
+apps/*/node_modules/
+apps/*/dist/
+apps/*/generated/
+.git/
+.env
+.env.*
+coverage/
+*.log
+logs/
+.cache/
+/*.pdf
+priemka-review*.zip
+.idea/
+.vscode/
+.DS_Store

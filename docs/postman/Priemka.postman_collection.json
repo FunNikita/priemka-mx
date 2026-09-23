@@ -1,0 +1,89 @@
+{
+  "info": {
+    "name": "Приёмка — проверка API",
+    "description": "Локальная проверка трёх базовых endpoint. Не сохраняйте реальные initData или токен бота в коллекции.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "GET /api/health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('health: 200 и status ok', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().status).to.eql('ok');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /api/ready",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/ready"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('ready: 200 при работающей локальной БД', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /api/me",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Max-Init-Data",
+            "value": "{{maxInitData}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/api/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('me: 200 со свежей maxInitData', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:3000",
+      "type": "string"
+    },
+    {
+      "key": "maxInitData",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

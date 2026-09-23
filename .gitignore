@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+apps/api/generated/
+*.log
+logs/
+.cache/
+.DS_Store
+/*.pdf
+priemka-review*.zip
+.idea/
+.vscode/
+*.swp
+*.tmp
