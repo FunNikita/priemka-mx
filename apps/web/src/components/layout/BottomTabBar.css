@@ -1,0 +1,52 @@
+.tabbar {
+  position: sticky;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  border-top: 1px solid var(--app-stroke);
+  background-color: var(--MaxUi-background-floating-primary, rgba(18, 18, 20, .96));
+  backdrop-filter: blur(18px);
+}
+
+.tabbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 4px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 4px 12px 6px;
+  box-sizing: border-box;
+}
+
+.tabbar-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--MaxUi-foreground-tertiary, rgba(255, 255, 255, .64));
+  cursor: pointer;
+  font: 11px/14px system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Roboto, sans-serif;
+}
+
+.tabbar-item--active { font-weight: 600; }
+.tabbar-icon-button { padding: 0; background: transparent; color: inherit; box-shadow: none; }
+.tabbar-label { white-space: nowrap; }
+
+:root[data-color-scheme='light'] .tabbar { background-color: rgba(255, 255, 255, .96); }
+:root[data-color-scheme='light'] .tabbar-item { color: var(--app-text-secondary); }
+:root[data-color-scheme='light'] .tabbar-item--active,
+:root[data-color-scheme='light'] .tabbar-item--active .tabbar-icon-button { color: var(--MaxUi-foreground-accent, #2d7cff); }
+:root[data-color-scheme='dark'] .tabbar-item--active,
+:root[data-color-scheme='dark'] .tabbar-item--active .tabbar-icon-button { color: #fff; }
+
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .tabbar { padding-bottom: env(safe-area-inset-bottom); }
+}

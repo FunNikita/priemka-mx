@@ -1,0 +1,54 @@
+.page-header {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--app-stroke);
+  background-color: var(--MaxUi-background-floating-primary, rgba(18, 18, 20, .96));
+  backdrop-filter: blur(18px);
+}
+
+.page-header-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+  min-width: 44px;
+}
+
+.page-header-side--right { justify-content: flex-end; }
+
+.page-header-back {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 9999px;
+}
+
+.page-header-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-color-scheme='light'] .page-header {
+  background-color: rgba(255, 255, 255, .98);
+}
+
+@supports (padding-top: env(safe-area-inset-top)) {
+  .page-header { padding-top: calc(10px + env(safe-area-inset-top)); }
+}

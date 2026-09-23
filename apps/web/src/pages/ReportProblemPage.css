@@ -1,0 +1,36 @@
+.report-problem-panel { min-height: 100%; background: #17181c; }
+.report-problem-panel .report-problem-content { display: flex; width: 100%; max-width: none; flex-direction: column; gap: 12px; margin: 0; padding: 16px; }
+.report-problem-card { display: flex; width: 100%; flex-direction: column; gap: 12px; padding: 18px; border-radius: 24px; box-sizing: border-box; background: var(--app-surface-primary); box-shadow: var(--app-card-shadow); }
+.report-problem-card__intro { margin: 0; color: var(--app-text-primary); font-size: 14px; line-height: 20px; }
+.report-problem-photos h3 { font-size: 14px; line-height: 20px; }
+.report-problem-field { display: flex; flex-direction: column; gap: 7px; color: var(--app-text-secondary); }
+.report-problem-field > span:first-child, .report-problem-address > span { font-size: 12px; line-height: 16px; }
+.report-problem-field input, .report-problem-field textarea { width: 100%; padding: 12px 14px; border: 0; border-radius: 14px; box-sizing: border-box; background: var(--app-surface-secondary); color: var(--app-text-primary); font: inherit; font-size: 14px; line-height: 20px; outline: none; }
+.report-problem-field textarea { min-height: 76px; resize: vertical; }
+.report-problem-field input::placeholder, .report-problem-field textarea::placeholder { color: var(--app-text-secondary); opacity: .65; }
+.report-problem-description-photos { display: flex; flex-direction: column; gap: 12px; }
+.report-problem-field--description { position: relative; margin: 0; }
+.report-problem-field .app-select__trigger { min-height: 44px; padding: 10px 14px; border: 0; border-radius: 14px; background: var(--app-surface-secondary); font-size: 14px; line-height: 20px; }
+.report-problem-field .app-select__menu { top: calc(100% + 8px); overflow: visible; padding: 6px 10px; border-radius: 18px; box-sizing: border-box; background: var(--app-surface-primary); }
+.report-problem-field .app-select__option { min-height: 40px; padding: 10px 14px; border: 0; border-radius: 12px; box-sizing: border-box; font-size: 14px; line-height: 20px; }
+.report-problem-field .app-select__option--selected { background: rgb(13 122 251 / 18%); color: #0d7afb; }
+.report-problem-photos { display: flex; flex-direction: column; gap: 6px; }
+.report-problem-photos h3, .report-problem-photos > span { margin: 0; }
+.report-problem-photos > span { color: var(--app-text-secondary); font-size: 12px; line-height: 16px; }
+.report-problem-photos__input { display: none; }
+.report-problem-photos__list { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; scrollbar-width: none; }
+.report-problem-photos__list::-webkit-scrollbar { display: none; }
+.report-problem-photo, .report-problem-photo-add { width: 96px; height: 96px; flex: 0 0 96px; border-radius: 16px; }
+.report-problem-photo { position: relative; overflow: hidden; }
+.report-problem-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.report-problem-photo button { position: absolute; top: 5px; right: 5px; display: grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgb(0 0 0 / 60%); color: #fff; cursor: pointer; }
+.report-problem-photo-add { display: grid; place-items: center; padding: 0; border: 0; background: var(--app-surface-secondary); color: var(--app-text-primary); cursor: pointer; }
+.report-problem-success { align-items: center; padding: 40px 24px; background: transparent; box-shadow: none; text-align: center; }
+.report-problem-success h3, .report-problem-success p { margin: 0; }
+.report-problem-success p { color: var(--app-text-secondary); }
+.report-problem-success > button { width: min(100%, 280px); }
+.report-problem-success__icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 50%; background: rgb(34 197 94 / 18%); color: #22c55e; font-size: 28px; font-weight: 700; }
+:root[data-color-scheme='dark'] .report-problem-card { background: #202125; }
+:root[data-color-scheme='dark'] .report-problem-field input, :root[data-color-scheme='dark'] .report-problem-field textarea, :root[data-color-scheme='dark'] .report-problem-field .app-select__trigger, :root[data-color-scheme='dark'] .report-problem-photo-add { background: #2a2b30; }
+:root[data-color-scheme='dark'] .report-problem-field .app-select__menu { background: #2a2b30; }
+:root[data-color-scheme='dark'] .report-problem-panel .report-problem-success { background: transparent; box-shadow: none; }
