@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Приёмка — проверка API",
-    "description": "Локальная проверка трёх базовых endpoint. Не сохраняйте реальные initData или токен бота в коллекции.",
+    "description": "Локальная проверка трёх базовых endpoint. Для синтетического /api/me запустите npm run postman:signer -w @priemka/api. Токен бота хранится только в локальном .env. Для настоящего MAX переключите maxInitDataMode на real и вставьте свежую window.WebApp.initData локально.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -48,6 +48,7 @@
     },
     {
       "name": "GET /api/me",
+      "description": "По умолчанию pre-request script получает новую подписанную синтетическую initData от локального signer на 127.0.0.1:36901. Изменяйте max* переменные коллекции; maxAuthDate имеет приоритет над maxAuthDateOffsetSeconds. Для настоящего MAX установите maxInitDataMode=real и maxInitData. Для истёкшей или будущей даты установите maxExpectedStatus=401.",
       "request": {
         "method": "GET",
         "header": [
@@ -61,12 +62,32 @@
       },
       "event": [
         {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.variables.get('maxInitDataMode') !== 'real') {",
+              "  const keys = ['maxUserId', 'maxFirstName', 'maxLastName', 'maxUsername', 'maxLanguageCode', 'maxPhotoUrl', 'maxChatId', 'maxChatType', 'maxQueryId', 'maxStartParam', 'maxIp', 'maxAuthDate', 'maxAuthDateOffsetSeconds'];",
+              "  const profile = Object.fromEntries(keys.map(key => [key, String(pm.variables.get(key) ?? '')]));",
+              "  const response = await pm.sendRequest({",
+              "    url: 'http://127.0.0.1:36901/sign',",
+              "    method: 'POST',",
+              "    header: { 'Content-Type': 'application/json' },",
+              "    body: { mode: 'raw', raw: JSON.stringify(profile) }",
+              "  });",
+              "  if (response.code !== 200) throw new Error('Local MAX signer failed: ' + response.code);",
+              "  pm.variables.set('maxInitData', response.json().initData);",
+              "}"
+            ]
+          }
+        },
+        {
           "listen": "test",
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('me: 200 со свежей maxInitData', function () {",
-              "  pm.response.to.have.status(200);",
+              "pm.test('me: ожидаемый статус MAX-авторизации', function () {",
+              "  pm.response.to.have.status(Number(pm.variables.get('maxExpectedStatus') || 200));",
               "});"
             ]
           }
@@ -83,6 +104,81 @@
     {
       "key": "maxInitData",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "maxInitDataMode",
+      "value": "synthetic",
+      "type": "string"
+    },
+    {
+      "key": "maxExpectedStatus",
+      "value": "200",
+      "type": "string"
+    },
+    {
+      "key": "maxUserId",
+      "value": "9007199254740993",
+      "type": "string"
+    },
+    {
+      "key": "maxFirstName",
+      "value": "Макс",
+      "type": "string"
+    },
+    {
+      "key": "maxLastName",
+      "value": "Пользователь",
+      "type": "string"
+    },
+    {
+      "key": "maxUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "maxLanguageCode",
+      "value": "ru",
+      "type": "string"
+    },
+    {
+      "key": "maxPhotoUrl",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "maxChatId",
+      "value": "-9007199254740995",
+      "type": "string"
+    },
+    {
+      "key": "maxChatType",
+      "value": "DIALOG",
+      "type": "string"
+    },
+    {
+      "key": "maxQueryId",
+      "value": "local-postman-test",
+      "type": "string"
+    },
+    {
+      "key": "maxStartParam",
+      "value": "local-test",
+      "type": "string"
+    },
+    {
+      "key": "maxIp",
+      "value": "203.0.113.9",
+      "type": "string"
+    },
+    {
+      "key": "maxAuthDate",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "maxAuthDateOffsetSeconds",
+      "value": "0",
       "type": "string"
     }
   ]

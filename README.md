@@ -50,7 +50,19 @@ API-схема генерируется из Fastify-маршрутов в `docs
 
 ## Ручная проверка API
 
-Импортируйте [`docs/postman/Priemka.postman_collection.json`](docs/postman/Priemka.postman_collection.json) в Postman. Укажите `baseUrl` как `http://127.0.0.1:<APP_PORT>` из локального `.env`; `/api/health` и `/api/ready` доступны сразу после запуска Docker. Для `/api/me` откройте мини-приложение в MAX, получите свежую исходную строку `window.WebApp.initData` и временно вставьте её в переменную коллекции `maxInitData`. Не сохраняйте её в Git или документации; после истечения `auth_date` получите новую. `MAX_BOT_TOKEN` в Postman не нужен и не должен туда попадать.
+Импортируйте [`docs/postman/Priemka.postman_collection.json`](docs/postman/Priemka.postman_collection.json) в Postman. Укажите `baseUrl` как `http://127.0.0.1:<APP_PORT>` из локального `.env`; `/api/health` и `/api/ready` доступны сразу после запуска Docker.
+
+Для синтетической локальной проверки `/api/me` запустите в отдельном терминале из корня проекта:
+
+```bash
+npm run postman:signer -w @priemka/api
+```
+
+Signer читает `MAX_BOT_TOKEN` только из локального `.env` и слушает `127.0.0.1:36901`; в production API он не добавляется. В Postman режим `maxInitDataMode=synthetic` включён по умолчанию: перед каждым `GET /api/me` коллекция автоматически получает свежую подписанную строку и временно подставляет её в запрос. Можно менять `maxUserId`, `maxFirstName`, `maxLastName`, `maxUsername`, `maxLanguageCode`, `maxPhotoUrl`, `maxChatId`, `maxChatType`, `maxQueryId`, `maxStartParam` и `maxIp` в переменных коллекции. ID задавайте десятичными строками, чтобы сохранить большие числа без потери точности. Пустые `maxUsername` и `maxPhotoUrl` означают `null`.
+
+Для проверки времени оставьте `maxAuthDate` пустым. `maxAuthDateOffsetSeconds=0` даст текущий `auth_date` и `200`; `-3601` даст просроченные данные, `+61` — слишком далёкое будущее, оба случая вернут `401` при стандартном лимите 3600 секунд. Для этих двух случаев измените `maxExpectedStatus` на `401`, чтобы тест Postman считался успешным. Можно указать точный Unix timestamp в секундах через `maxAuthDate`: он имеет приоритет над offset. После проверки верните `maxExpectedStatus=200` и offset `0`.
+
+Это только синтетические данные для локальных проверок. Для проверки реальной интеграции откройте мини-приложение в MAX, переключите `maxInitDataMode=real` и временно вставьте свежую исходную строку `window.WebApp.initData` в переменную `maxInitData`. Не сохраняйте её в Git или документации; после истечения `auth_date` получите новую. `MAX_BOT_TOKEN` в Postman не нужен и не должен туда попадать.
 
 ```bash
 curl -i http://127.0.0.1:3000/api/health

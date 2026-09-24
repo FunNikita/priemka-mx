@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "openapi:export": "tsx src/scripts/export-openapi.ts"
+    "openapi:export": "tsx src/scripts/export-openapi.ts",
+    "postman:signer": "tsx src/scripts/postman-signer.ts"
   },
   "dependencies": {
     "@fastify/static": "^10.1.4",
