@@ -37,7 +37,7 @@ function fixture() {
     houseMembership: {
       findUnique: async ({ where }: { where: { houseId_userId: { houseId: number } } }) => hasMembership && where.houseId_userId.houseId === 1 ? { role, status, createdAt: new Date("2026-09-23T00:00:00Z") } : null,
       findFirst: async () => hasMembership && status === "ACTIVE" ? { id: 1 } : null,
-      findMany: async () => hasMembership ? [{ houseId: 1, house, role, status }] : [],
+      findMany: async () => hasMembership ? [{ houseId: 1, house, role, status, joinedVia: "ADMIN" }] : [],
     },
     house: { findUniqueOrThrow: async () => ({ ...house, chat }), findUnique: async ({ where }: { where: { id: number } }) => where.id === 1 ? { ...house, chat } : null },
     houseObject: { findFirst: async () => null },

@@ -12,6 +12,7 @@ import { PrismaUserRepository } from "./repositories/prisma-user-repository.js";
 import type { UserRepository } from "./repositories/user-repository.js";
 import { mediaUploadBodySchema, permissionsFor, photoResponseSchema, registerBusinessApi } from "./business.js";
 import { registerWorkflowApi } from "./workflow.js";
+import { registerHousesApi } from "./houses.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 
 const healthSchema = {
@@ -129,7 +130,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
               },
             },
             start_param: { type: "string" },
-            houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "permissions"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, permissions: permissionsSchema } } },
+            houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "joinedVia", "permissions"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, joinedVia: { type: "string", enum: ["CHAT", "INVITE", "REQUEST", "ADMIN"] }, permissions: permissionsSchema } } },
           },
         },
         401: unauthorizedSchema,
@@ -147,9 +148,10 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
       const rank = (m: typeof a) => m.status === "ACTIVE" ? (m.houseId === lastHouseId ? 0 : 1) : 2;
       return rank(a) - rank(b) || a.houseId - b.houseId;
     });
-    return { ...toMaxResponse(initData, identity), houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, permissions: permissionsFor(membership.role, membership.status, identity.isAdmin) })) };
+    return { ...toMaxResponse(initData, identity), houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, permissions: permissionsFor(membership.role, membership.status, identity.isAdmin) })) };
   });
 
+  await registerHousesApi(app, config, repository, now, options.businessDb);
   await registerBusinessApi(app, config, repository, now, options.businessDb);
   await registerWorkflowApi(app, config, repository, now, options.businessDb);
   registerDocumentBot(app, options.businessDb ?? (repository instanceof PrismaUserRepository ? repository.prisma : null), config.botToken);
