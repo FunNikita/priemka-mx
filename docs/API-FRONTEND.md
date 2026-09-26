@@ -1,36 +1,34 @@
 # API «Приёмки» для frontend
 
-Backend доступен по относительным адресам `/api/*`. В production запросы идут на тот же домен, что и мини-приложение; локально Vite направляет `/api/*` на Fastify. Исходная строка `window.WebApp.initData` передаётся helper'ом `apiFetch` в заголовке `X-Max-Init-Data`. Backend проверяет подпись и срок действия. Frontend не отправляет от себя `userId`, роль или права доступа.
+Backend доступен по относительным адресам `/api/*`. В production запросы идут на тот же домен, что и мини-приложение; локально Vite направляет `/api/*` на Fastify. Исходная строка `window.WebApp.initData` передаётся helper'ом `apiFetch` в заголовке `X-Max-Init-Data`. Backend проверяет подпись и срок действия. Frontend не отправляет `userId` или права доступа за текущего пользователя; желаемую роль он передаёт только в специальном запросе смены собственной роли.
 
 Источники контракта: во время выполнения — схемы Fastify; опубликованная спецификация — [`openapi.json`](openapi.json). Типы DTO, параметры и маршруты для TypeScript находятся в [`packages/shared/src/api.ts`](../packages/shared/src/api.ts) и экспортируются из `@priemka/shared`. Этот файл описывает API, но не проверяет ответы во время выполнения. Используйте полученные от backend `actions` для кнопок и переходов; не повторяйте правила ролей и статусов в UI.
 
 ## Как пользоваться из frontend
 
-`apiRoutes` хранит полные пути `/api/*`. `apiFetch` принимает и полный путь, и прежний короткий путь: `apiFetch("/api/houses")` и `apiFetch("/houses")` оба обращаются к `/api/houses`. Header MAX добавляется самим helper'ом. Точный относительный импорт `apiFetch` зависит от расположения файла в `apps/web/src`.
+`apiRoutes` в shared-пакете хранит полные пути `/api/*`. Текущий `apps/web` ещё не подключён к этому пакету. Его `apiFetch` принимает и полный путь, и прежний короткий путь: `apiFetch("/api/houses")` и `apiFetch("/houses")` оба обращаются к `/api/houses`. Заголовок MAX добавляется самим helper'ом. Точный относительный импорт `apiFetch` зависит от расположения файла в `apps/web/src`.
 
 ```ts
-import { apiRoutes, type ListHousesResponse } from "@priemka/shared";
 import { apiFetch } from "./api"; // поправьте относительный путь для своего файла
 
-const response = await apiFetch(apiRoutes.houses.path);
+const response = await apiFetch("/api/houses");
 if (!response.ok) throw new Error("Не удалось получить список домов");
-const data: ListHousesResponse = await response.json();
+const data = await response.json();
 
-const workPath = apiRoutes.work(workId).path;
-const workResponse = await apiFetch(workPath);
+const workResponse = await apiFetch(`/api/works/${workId}`);
 
-const requestResponse = await apiFetch(apiRoutes.createJoinRequest(houseId).path, {
+const requestResponse = await apiFetch(`/api/houses/${houseId}/join-requests`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({}),
 });
 ```
 
-Builder возвращает `{ method, path }`; в `apiFetch` передавайте `.path`. Для query используйте `URLSearchParams`. `apiFetch` возвращает обычный `Response`: проверяйте `response.ok`, а для `204` не вызывайте `response.json()`.
+Если позднее подключите shared-пакет, builder `apiRoutes` вернёт `{ method, path }`; в `apiFetch` передавайте `.path`. Для query используйте `URLSearchParams`. `apiFetch` возвращает обычный `Response`: проверяйте `response.ok`, а для `204` не вызывайте `response.json()`.
 
 ## Личность и доступ к дому
 
-`GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `permissions`. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
+`GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `executorCompanyName`, `permissions`. Компания может быть сохранена и при другой текущей роли. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
 
 MAX User сам по себе не является участником дома. Рабочие права от членства появляются только при `status=ACTIVE`; `PENDING` и `REJECTED` членства их не дают. `user.isAdmin` обозначает отдельного системного администратора, а не домовую роль; его административные полномочия могут действовать без членства. Frontend не передаёт `lastHouseId` как условие доступа и не использует его как механизм безопасности. Backend обновляет его для обычного пользователя при успешном открытии списка работ активного дома.
 
@@ -49,13 +47,13 @@ MAX User сам по себе не является участником дом�
 
 Для других `PENDING` членств `cancelRequest` может быть `false`. Frontend **не вычисляет самостоятельно**, можно ли запросить доступ: используйте `actions.requestAccess`. Даже системный администратор без членства видит `access.status=NONE`, а не искусственный `ACTIVE`.
 
-Самостоятельная заявка: `POST /api/houses/:houseId/join-requests` с JSON body `{}`. Ответ содержит `id`, `houseId`, `role`, `status`, `joinedVia`, `createdAt`, `updatedAt`. Первый запрос создаёт `PENDING RESIDENT REQUEST` (`201`), повторный возвращает существующую заявку (`200`). При `REJECTED RESIDENT` повторная подача переводит то же членство обратно в `PENDING REQUEST`. `DELETE /api/houses/:houseId/join-requests/me` отменяет только свою ожидающую `RESIDENT REQUEST` заявку и возвращает `204`; повторная отмена безопасна. Другие членства этот endpoint не удаляет.
+Самостоятельная заявка: `POST /api/houses/:houseId/join-requests` с JSON body `{}`. Ответ содержит `id`, `houseId`, `role`, `status`, `joinedVia`, `executorCompanyName`, `createdAt`, `updatedAt`. Первый запрос создаёт `PENDING RESIDENT REQUEST` (`201`), повторный возвращает существующую заявку (`200`). При `REJECTED RESIDENT` повторная подача переводит то же членство обратно в `PENDING REQUEST`. `DELETE /api/houses/:houseId/join-requests/me` отменяет только свою ожидающую `RESIDENT REQUEST` заявку и возвращает `204`; повторная отмена безопасна. Другие членства этот endpoint не удаляет.
 
 Жизненный цикл: `NONE → PENDING RESIDENT → ACTIVE RESIDENT` при одобрении или `REJECTED RESIDENT` при отклонении. Frontend **никогда** не передаёт `role`, `status` или `userId` в самостоятельной заявке.
 
 ### Рассмотрение председателем
 
-`GET /api/houses/:houseId/join-requests` по умолчанию показывает ожидающие `RESIDENT REQUEST` заявки; доступны фильтр `status=PENDING|ACTIVE|REJECTED` и `page`/`limit`. Ответ — страница заявок с краткими `user.id`, `firstName`, `lastName`, `photoUrl`. Доступен активному председателю этого дома и системному администратору по действующим permissions.
+`GET /api/houses/:houseId/join-requests` по умолчанию показывает ожидающие `RESIDENT REQUEST` заявки; доступны фильтр `status=PENDING|ACTIVE|REJECTED` и `page`/`limit`. Ответ — страница заявок с краткими `user.id`, `firstName`, `lastName`, `photoUrl`. Доступен только активному председателю этого дома; системный администратор управляет членством через отдельный API.
 
 `PATCH /api/houses/:houseId/join-requests/:membershipId` принимает только одно решение:
 
@@ -67,55 +65,58 @@ MAX User сам по себе не является участником дом�
 { "decision": "REJECT" }
 ```
 
-Председатель здесь только одобряет или отклоняет базовый доступ `RESIDENT`. Назначить повышенную роль этим endpoint нельзя. `COUNCIL_MEMBER`, `CHAIRMAN`, `EXECUTOR` выдаются отдельным административным процессом; произвольный выбор роли в этой форме не нужен. Противоположное решение после завершения заявки возвращает `409`.
+Председатель здесь только одобряет или отклоняет базовый доступ `RESIDENT`. Назначить повышенную роль этим endpoint нельзя. После активации участник MVP может переключить домовую роль отдельным endpoint; решение по заявке всегда выдаёт только `RESIDENT`. Противоположное решение после завершения заявки возвращает `409`.
+
+## Роли и администратор
+
+При `ALLOW_SELF_ROLE_SWITCH=true` активный участник меняет **только свою** роль через `PATCH /api/me/houses/:houseId/membership` с `{ "role": "EXECUTOR", "executorCompanyName": "Демо УК" }`. Доступные роли: `RESIDENT`, `COUNCIL_MEMBER`, `CHAIRMAN`, `EXECUTOR`. Для роли исполнителя нужно непустое название компании до 255 символов. Оно сохраняется при уходе из роли и доступно при возвращении. `PENDING` и `REJECTED` менять роль не могут. В доме одновременно может быть максимум один активный председатель; попытка занять уже занятую роль даёт `409`. Один человек может последовательно переключать роли и проходить весь демо-сценарий.
+
+Системный `isAdmin` управляет пользователями через `GET /api/admin/users?q=&page=&limit=` и `PUT /api/admin/houses/:houseId/members/:userId`. Второй метод создаёт или изменяет роль, статус и компанию членства существующего пользователя. В списке есть только публичные данные профиля и членств. Администратор без соответствующей активной домовой роли не создаёт работы, не проверяет и не подтверждает акт.
 
 ## Работы, наблюдения и комментарии
 
-`GET /api/houses/:houseId/works` возвращает страницу работ дома и действия для дома; `GET /api/works/:workId` — подробности работы, историю, медиа, документы и `actions`. `POST /api/works/:workId/watch` подписывает на работу, `DELETE` по тому же пути снимает подписку; успешный ответ — `204`.
+Активный председатель создаёт работу через `POST /api/houses/:houseId/works`: `{ "executorUserId": 123, "title": "...", "description": "...", "category": "..." }`. Назначенный пользователь должен быть активным исполнителем дома с компанией. Для демо председатель может назначить самого себя, если у него сохранена компания исполнителя. Backend сохраняет название компании и имя представителя как snapshot работы: будущие изменения профиля их не меняют. Новая работа имеет `status=NEW` и `dates.submittedForInspectionAt=null`.
 
-В подробной карточке используйте следующие флаги для доступности кнопок:
+`GET /api/houses/:houseId/works` возвращает работы дома; исполнитель видит только назначенные ему. `GET /api/works/:workId` содержит подробности, историю, документы и флаги `actions`. Исполнитель после фактического завершения вызывает `POST /api/works/:workId/submit-for-inspection` с `{}`. Повторный вызов безопасен. До этого работа остаётся `NEW`, а назначить проверяющего нельзя.
 
-| Флаг | Действие UI |
+| Флаг `actions` | Действие |
 | --- | --- |
-| `watch`, `unwatch` | подписка или отписка |
-| `comment` | отправка комментария |
-| `reportRemediation` | исполнитель может отправить устранение открытого замечания; запрос идёт через `/api/issues/:issueId/remediations` |
-| `assignInspectors` | назначить проверяющего |
+| `submitForInspection` | исполнитель передаёт назначенную работу на проверку |
+| `assignInspector` | председатель назначает одного проверяющего после передачи |
 | `performInspection` | перейти к своей проверке |
-| `generateReasonedRefusal` | оформить мотивированный отказ |
-| `generateAcceptanceAct` | оформить акт приёмки |
-| `confirmAcceptance` | подтвердить акт |
-| `manageDocuments` | управление документами, разрешённое backend |
+| `reportRemediation` | устранить открытое замечание |
+| `generateReasonedRefusal` | председатель оформляет отказ при незакрытых замечаниях |
+| `generateAcceptanceAct` | исполнитель формирует акт после устранения всех замечаний |
+| `confirmAcceptance` | текущая сторона подтверждает акт |
+| `watch`, `unwatch`, `comment`, `manageDocuments` | подписка, комментарий и доступные операции с документами |
 
-Не заменяйте эти флаги проверкой вроде `role === "CHAIRMAN" && status === ...`. Backend остаётся владельцем бизнес-переходов и повторно проверяет права при каждом запросе.
+Frontend использует эти флаги и всё равно обрабатывает ответ endpoint: состояние может измениться после загрузки карточки. `POST /api/works/:workId/watch` и `DELETE` переключают подписку и возвращают `204`.
 
-`GET /api/houses/:houseId/observations` возвращает страницу наблюдений; `POST` по тому же пути принимает `category`, `title`, `description`, необязательные `houseObjectId` и `mediaIds`. `GET /api/works/:workId/comments` возвращает комментарии; `POST` принимает `text` и/или `mediaIds` (пустой комментарий без файлов запрещён). `PUT /api/houses/:houseId/chat` сохраняет `{ "joinUrl": "https://max.ru/..." }`, `DELETE` удаляет ссылку; разрешённость операции определяет backend.
+`GET /api/houses/:houseId/observations` возвращает наблюдения жителей; `POST` принимает `category`, `title`, `description`, необязательные `houseObjectId` и `mediaIds`. `GET /api/works/:workId/comments` возвращает `{items,page,limit,total}`; `page` по умолчанию 1, `limit` по умолчанию 20 и не более 100. `POST` по тому же пути добавляет комментарии. `PUT /api/houses/:houseId/chat` с `{ "joinUrl": "https://max.ru/..." }` и `DELETE` управляют ссылкой чата по правам backend.
 
 ## Загрузка изображений
 
-`POST /api/media` принимает `multipart/form-data` с полем **`file`**: JPEG, PNG или WebP до 10 MiB. Успешный ответ `201`: `{ "id": 123 }`. Загрузка требует активного членства. Для `FormData` не задавайте `Content-Type` вручную: браузер добавит boundary.
-
-Загрузка двухэтапная: сначала отправьте файл и получите `mediaId`, затем передайте его в массиве `mediaIds` нужного бизнес-запроса — наблюдения, комментария, ответа `FAIL` в проверке, устранения или повторной проверки. `URL.createObjectURL(file)` служит только локальному preview; он не заменяет загрузку на backend. Загруженные медиа временные до привязки к бизнес-объекту.
+`POST /api/media` принимает `multipart/form-data` с полем `file`: JPEG, PNG или WebP до 10 MiB. Ответ `201` содержит `id`. Передайте этот `id` в `mediaIds` бизнес-запроса. Загруженные файлы временные до привязки. Для `FormData` не задавайте `Content-Type` вручную.
 
 ## Проверка работ
 
-Председатель: `GET /api/checklist-templates` получает шаблоны, `GET /api/houses/:houseId/members?role=COUNCIL_MEMBER` — активных членов совета, `POST /api/works/:workId/inspections` назначает проверку с `checklistTemplateId` и `assigneeUserId`.
+Председатель получает шаблоны через `GET /api/checklist-templates`, кандидатов через `GET /api/houses/:houseId/members?role=COUNCIL_MEMBER` или `role=EXECUTOR`. Для EXECUTOR кандидат содержит `executorCompanyName` (nullable). После передачи работы он вызывает `POST /api/works/:workId/inspections` с `checklistTemplateId` той же категории, что и Work, и **одним** `assigneeUserId`. Для демо председатель может назначить самого себя и затем переключиться в `COUNCIL_MEMBER`. Backend создаёт snapshot пунктов и переводит работу в `IN_REVIEW`.
 
-Проверяющий член совета: `GET /api/me/inspection-assignments` получает свои назначения, `GET /api/inspection-assignments/:assignmentId` — снимок чек-листа и ответы, `PUT /api/inspection-assignments/:assignmentId/answers/:itemId` сохраняет `{ result, comment?, mediaIds? }`, `POST /api/inspection-assignments/:assignmentId/complete` завершает проверку с body `{}`.
+Назначенный член совета видит список `GET /api/me/inspection-assignments` и детали `GET /api/inspection-assignments/:assignmentId`. Шаблон и snapshot пункта содержат `rules`: `allowedResults`, `commentAllowed`, `maxCommentLength=512`, `photosAllowed`, `maxPhotos=5`, `evidenceRequiredOnFail`. Пользователь выбирает `PASS` («Соответствует») или `FAIL` («Есть замечание»). До ответа пункт внутренне имеет `PENDING`.
 
-Значения ответа: `PENDING` — ещё не проверено; `PASS` — принято; `FAIL` — дефект, обязательны комментарий и фото; `UNABLE_TO_CHECK` — проверить невозможно, обязателен комментарий. Завершить проверку можно лишь после `PASS` или `FAIL` для каждого пункта: `PENDING` и `UNABLE_TO_CHECK` блокируют завершение. Завершённая проверка не редактируется; повторный вызов завершения безопасен. Отчёт и замечания создаёт backend.
+`PUT /api/inspection-assignments/:assignmentId/answers/:itemId` принимает `{ "result": "FAIL", "comment": "Дефект", "mediaIds": [] }`. Комментарий ограничен 512 символами. Для `FAIL` нужен **комментарий или от 1 до 5 фото**; можно передать оба вида доказательства. `PASS` не требует доказательств. После ответа на каждый пункт `POST /api/inspection-assignments/:assignmentId/complete` с `{}` завершает проверку. После завершения ответы неизменяемы, повторное завершение безопасно. Каждый `FAIL` даёт отдельное замечание.
 
-## Замечания, устранение и повторная проверка
+## Замечания и повторная проверка
 
-`GET /api/works/:workId/issues` и `GET /api/me/issues` показывают замечания в пределах разрешённого доступа. Исполнитель отправляет устранение через `POST /api/issues/:issueId/remediations` с обязательными `comment` и непустым `mediaIds`. Каждая допустимая отправка — отдельная `Remediation`; после неё backend сам создаёт `Reinspection` тому же проверяющему.
+`GET /api/me/issues` и `GET /api/works/:workId/issues` возвращают `work` с `category`, `checklistItem` с названием, описанием и порядком, `evidence` с исходным комментарием и фото, статус, историю `remediations` и `reinspections`. `actions.submitRemediation` показывает возможность отправить устранение. Исполнитель должен устранить **все** замечания. `POST /api/issues/:issueId/remediations` требует комментарий и фото; каждая отправка остаётся отдельной неизменяемой попыткой. Backend создаёт повторную проверку исходному проверяющему.
 
-Проверяющий получает очередь через `GET /api/me/reinspections`, детали через `GET /api/reinspections/:reinspectionId` и завершает `POST /api/reinspections/:reinspectionId/complete` с `result=RESOLVED|NOT_RESOLVED`, необязательными `comment`, `mediaIds`. Для `NOT_RESOLVED` комментарий обязателен. `RESOLVED` переводит замечание в `RESOLVED`, `NOT_RESOLVED` возвращает его в `OPEN`. Завершённая повторная проверка не редактируется; повторный вызов возвращает сохранённый результат. Статус работы пересчитывает backend.
+Проверяющий после переключения обратно в `COUNCIL_MEMBER` получает `GET /api/me/reinspections`, детали `GET /api/reinspections/:reinspectionId` и завершает `POST /api/reinspections/:reinspectionId/complete` с `RESOLVED` или `NOT_RESOLVED`. Для `NOT_RESOLVED` обязателен комментарий. Завершённая повторная проверка неизменяема. Пока хоть одно замечание `OPEN` или `REMEDIATION_SUBMITTED`, акт недоступен.
 
 ## Документы и акт приёмки
 
-Существующие типы документов: `INSPECTION_REPORT`, `REINSPECTION_REPORT`, `REASONED_REFUSAL`, `ACCEPTANCE_ACT`. Отчёты о проверке и повторной проверке backend генерирует автоматически. `POST /api/works/:workId/documents` вручную создаёт мотивированный отказ (`{ "type": "REASONED_REFUSAL" }`) или акт приёмки (`{ "type": "ACCEPTANCE_ACT", "data": { ... } }`). Поля формы акта перечислены в `AcceptanceActData` shared-контракта и OpenAPI. `REASONED_REFUSAL` оформляет только активный председатель при незакрытых замечаниях. `ACCEPTANCE_ACT` оформляет назначенный исполнитель после завершённой проверки и устранения всех замечаний.
+Backend автоматически формирует отчёты о проверках. Председатель может создать мотивированный отказ через `POST /api/works/:workId/documents` с `{ "type": "REASONED_REFUSAL" }`, если есть незакрытые замечания. Исполнитель формирует акт тем же endpoint с `{ "type": "ACCEPTANCE_ACT" }`, когда проверка завершена и **все** замечания закрыты. Большую форму и вымышленные реквизиты frontend не передаёт: PDF строится из snapshot работы и результатов проверки.
 
-Только акт подтверждается через `POST /api/documents/:documentId/confirm` с body `{}`: сначала исполнитель, затем активный `CHAIRMAN` или `COUNCIL_MEMBER` с `canSignAcceptanceAct=true`. Основание полномочий хранится в `authorityBasis` членства; текущий confirm endpoint непосредственно проверяет активную роль и `canSignAcceptanceAct`, а не текст `authorityBasis`. После двух корректных подтверждений backend переводит работу в `ACCEPTED`; frontend не меняет её статус самостоятельно. `fileUrl` ведёт к PDF `/doc/:key.pdf`. PDF и QR помогают просмотреть и проверить документ, но не являются электронной подписью.
+`POST /api/documents/:documentId/confirm` принимает `{}`. Сначала акт подтверждает назначенный активный `EXECUTOR`, затем единственный текущий активный `CHAIRMAN` дома. Член совета акт не подтверждает. Один и тот же `userId` может подтвердить обе стороны, переключившись из исполнителя в председателя. После двух подтверждений backend формирует финальную версию PDF и переводит работу в `ACCEPTED`. `fileUrl` указывает на PDF `/doc/:key.pdf`; подтверждение в приложении не является УКЭП.
 
 ## Ошибки HTTP
 
@@ -128,3 +129,5 @@ MAX User сам по себе не является участником дом�
 | `409` | текущее бизнес-состояние не позволяет операцию |
 
 Поле `message` из ответа backend можно показать как основу пользовательской ошибки. Не стройте бизнес-логику на точном тексте сообщения: ориентируйтесь на HTTP статус, DTO и `actions`.
+
+Пять больших списков (`/api/works/:workId/comments`, `/api/me/inspection-assignments`, `/api/works/:workId/issues`, `/api/me/issues`, `/api/me/reinspections`) принимают `page` и `limit` и возвращают `{items,page,limit,total}`. Фильтры `houseId`/`status` сохраняются при пагинации. Загрузка `POST /api/media` ограничена 10 попытками за 60 секунд на внутренний userId после проверки ACTIVE membership; 11-я возвращает `429` и `Retry-After`. Фото выдаются с `Cache-Control: private, no-store` и `X-Robots-Tag: noindex, nofollow, noarchive`.
