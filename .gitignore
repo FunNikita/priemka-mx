@@ -12,14 +12,16 @@ logs/
 .DS_Store
 # Рабочие материалы проекта и исходные документы хакатона.
 /*.pdf
+/*.jpg
+/*.jpeg
 /*.zip
 /[0-9][0-9]_*.md
-/[0-9][0-9]_*.jpg
 /docs/[0-9][0-9]_*.md
-/docs/[0-9][0-9]_*.pdf
-/docs/[0-9][0-9]_*.jpg
+/docs/*.pdf
+/docs/*.jpg
+/docs/*.jpeg
 /docs/*.zip
-review/
+/review/
 .idea/
 .vscode/
 *.swp
