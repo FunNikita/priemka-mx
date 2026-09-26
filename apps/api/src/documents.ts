@@ -7,6 +7,7 @@ import { createQR } from "@vkontakte/vk-qr";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 
+import { isValidMaxBotName } from "./max/bot-name.js";
 import type { DocumentType, DocumentVersion, PrismaClient } from "../generated/prisma/client.js";
 
 export type PdfRow = { label: string; value: string };
@@ -46,7 +47,7 @@ export function newPublicDocumentKey() {
   return Array.from({ length: 20 }, () => alphabet[randomInt(alphabet.length)]).join("");
 }
 export function botDocumentLink(botName: string, publicKey: string) {
-  if (!/^[A-Za-z0-9_]{5,64}$/.test(botName) || !publicKeyPattern.test(publicKey)) throw new Error("Invalid bot document link");
+  if (!isValidMaxBotName(botName) || !publicKeyPattern.test(publicKey)) throw new Error("Invalid bot document link");
   return `https://max.ru/${botName}?start=doc_${publicKey}`;
 }
 export function parseDocumentPayload(value: unknown): string | null {
@@ -131,34 +132,20 @@ export async function renderDocumentPdf(type: DocumentType, id: number, version:
   };
 
   if (type === "ACCEPTANCE_ACT") {
-    const act = payload.act ?? Object.fromEntries(payload.rows.map(({ label, value }) => [label, value]));
-    const field = (key: string, fallback = "—") => act[key] ?? fallback;
-    const actLine = (text: string) => line(text, false, 10, 3);
-    title(`АКТ № ${field("actNumber", field("Номер акта", String(id)))}`);
-    actLine("приёмки оказанных услуг и (или) выполненных работ по содержанию и текущему ремонту общего имущества в многоквартирном доме");
-    actLine(`г. ${field("city", field("Место составления"))} · ${new Date(payload.createdAt).toLocaleDateString("ru-RU")}`);
-    actLine(`Собственники помещений в многоквартирном доме по адресу ${payload.house}, именуемые «Заказчик», в лице ${field("customerName", field("Уполномоченный представитель заказчика"))}, собственника квартиры ${field("customerApartment", field("Квартира представителя заказчика"))}, действующего на основании ${field("customerAuthorityBasis", field("Основание полномочий заказчика"))}, с одной стороны, и ${field("executorOrganization", payload.executor)}, именуемый «Исполнитель», в лице ${field("executorRepresentative", field("Представитель исполнителя"))}, действующего на основании ${field("executorAuthorityBasis", field("Основание полномочий исполнителя"))}, с другой стороны, составили настоящий Акт о нижеследующем:`);
-    actLine(`1. Исполнителем предъявлены к приёмке выполненные на основании договора № ${field("contractNumber", field("Номер договора"))} от ${field("contractDate", field("Дата договора"))} работы по содержанию и текущему ремонту общего имущества в многоквартирном доме по адресу ${payload.house}:`);
-    const labels = ["Наименование вида работы", "Периодичность / количественный показатель", "Единица измерения", "Стоимость за единицу", "Цена работы, руб."];
-    const values = [payload.work, field("frequencyOrQuantity", field("Показатель")), field("unit", field("Единица")), field("unitPrice", field("Стоимость за единицу")), field("totalPrice", field("Общая сумма"))];
-    const widths = [142, 107, 64, 88, width - 401];
-    const drawCells = (cells: string[], bold: boolean, h: number) => {
-      const y = doc.y; let x = left;
-      cells.forEach((cell, index) => { doc.rect(x, y, widths[index], h).lineWidth(0.6).strokeColor("#9ca3af").stroke(); doc.font(bold ? "Bold" : "Regular").fontSize(8.1).fillColor("#202124").text(cell, x + 4, y + 5, { width: widths[index] - 8, height: h - 9 }); x += widths[index]; });
-      doc.y = y + h;
-    };
-    ensure(88); drawCells(labels, true, 44); drawCells(values, false, 44); doc.y += 9;
-    actLine(`2. Всего за период с ${field("periodFrom", field("Период работ: с"))} по ${field("periodTo", field("Период работ: по"))} выполнено работ на общую сумму ${field("totalPrice", field("Общая сумма"))} (${field("totalPriceWords")}) рублей.`);
-    actLine("3. Работы (услуги) выполнены (оказаны) полностью, в установленные сроки, с надлежащим качеством.");
-    actLine("4. Претензий по выполнению условий Договора Стороны друг к другу не имеют.");
-    actLine("Настоящий Акт составлен в 2-х экземплярах, имеющих одинаковую юридическую силу, по одному для каждой из Сторон.");
-    heading("ПОДПИСИ СТОРОН");
-    actLine(`Исполнитель — ${field("executorRepresentative", field("Представитель исполнителя"))} ____________________`);
-    actLine(`Заказчик — ${field("customerName", field("Уполномоченный представитель заказчика"))} ____________________`);
-    heading("СВЕДЕНИЯ СИСТЕМЫ «ПРИЁМКА»");
-    for (const item of payload.confirmations ?? []) line(`${displayRole(item.role)}: ${item.name}. Подтверждено: ${date(item.at)}`, false, 10.5, 4);
+    title(`АКТ ПРИЁМКИ № ${id}`);
+    line(`Дата формирования: ${date(payload.createdAt)}`);
+    line(`Дом: ${payload.house}`);
+    line(`Работа: ${payload.work}`);
+    line(`Описание: ${payload.description}`);
+    line(`Исполнитель: ${payload.executor}`);
+    heading("РЕЗУЛЬТАТЫ ПРИЁМКИ");
+    for (const row of payload.rows) line(`${row.label}: ${row.value}`);
+    line(payload.summary);
+    heading("ПОДТВЕРЖДЕНИЯ СТОРОН В СИСТЕМЕ «ПРИЁМКА»");
+    if (!payload.confirmations?.length) line("Ожидаются подтверждения исполнителя и председателя дома.");
+    for (const item of payload.confirmations ?? []) line(`${displayRole(item.role)}: ${item.name}. Подтверждено: ${date(item.at)}`);
     qrBlock();
-    line("Электронные подтверждения в системе «Приёмка» не являются усиленной квалифицированной электронной подписью.", false, 8.5, 2);
+    line("Подтверждения в системе не являются усиленной квалифицированной электронной подписью.", false, 8.5, 2);
   } else if (type === "INSPECTION_REPORT") {
     title(`ОТЧЁТ О ПРОВЕРКЕ № ${id}`);
     line(`Дом: ${payload.house}`); line(`Работа: ${payload.work}`); line(`Описание: ${payload.description}`); line(`Исполнитель: ${payload.executor}`);

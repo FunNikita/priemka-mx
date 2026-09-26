@@ -22,6 +22,9 @@ function fixture() {
   let role = "RESIDENT";
   let status = "ACTIVE";
   let hasMembership = true;
+  let company: string | null = null;
+  const createdWorks: Array<Record<string, unknown>> = [];
+  const historyEvents: Array<Record<string, unknown>> = [];
   const subscriptions = new Set<string>();
   const media = new Map<number, MediaRow>();
   const blobs = new Map<number, BlobRow>();
@@ -29,20 +32,23 @@ function fixture() {
   const comments: Array<Record<string, unknown>> = [];
   let chat: { title: string | null; joinUrl: string } | null = null;
   const house = { id: 1, address: "Тестовая, 1" };
-  const work = { id: 7, houseId: 1, executorUserId: null as number | null, house, houseObject: null, executor: null as { id: number; firstName: string; lastName: string } | null, title: "Лифт", description: "Ремонт", category: "ELEVATOR", status: "NEW" as string, date: new Date("2026-09-24T00:00:00Z"), createdAt: new Date("2026-09-24T00:00:00Z"), updatedAt: new Date("2026-09-24T00:00:00Z"), completedAt: null, executorName: null, representativeName: null, media: [], history: [] };
+  const work = { id: 7, houseId: 1, executorUserId: null as number | null, house, houseObject: null, executor: null as { id: number; firstName: string; lastName: string } | null, title: "Лифт", description: "Ремонт", category: "ELEVATOR", status: "NEW" as string, date: new Date("2026-09-24T00:00:00Z"), createdAt: new Date("2026-09-24T00:00:00Z"), updatedAt: new Date("2026-09-24T00:00:00Z"), completedAt: null, submittedForInspectionAt: null as Date | null, executorName: null, representativeName: null, media: [], history: [] };
   const user = { id: 1, firstName: "Макс", lastName: "Пользователь" };
   let lastHouseId: number | null = null;
   const db = {
     user: { findUniqueOrThrow: async () => ({ id: 1 }), findUnique: async () => ({ lastHouseId }), update: async ({ data }: { data: { lastHouseId: number } }) => { lastHouseId = data.lastHouseId; return { id: 1, lastHouseId }; } },
     houseMembership: {
-      findUnique: async ({ where }: { where: { houseId_userId: { houseId: number } } }) => hasMembership && where.houseId_userId.houseId === 1 ? { role, status, createdAt: new Date("2026-09-23T00:00:00Z") } : null,
+      findUnique: async ({ where }: { where: { houseId_userId: { houseId: number } } }) => hasMembership && where.houseId_userId.houseId === 1 ? { userId: 1, role, status, executorCompanyName: company, user: { id: 1, firstName: "Макс", lastName: "Пользователь" }, createdAt: new Date("2026-09-23T00:00:00Z") } : null,
       findFirst: async () => hasMembership && status === "ACTIVE" ? { id: 1 } : null,
-      findMany: async () => hasMembership ? [{ houseId: 1, house, role, status, joinedVia: "ADMIN" }] : [],
+      findMany: async () => hasMembership ? [{ houseId: 1, house, role, status, joinedVia: "ADMIN", executorCompanyName: company }] : [],
     },
     house: { findUniqueOrThrow: async () => ({ ...house, chat }), findUnique: async ({ where }: { where: { id: number } }) => where.id === 1 ? { ...house, chat } : null },
     houseObject: { findFirst: async () => null },
     work: {
-      findUnique: async ({ where }: { where: { id: number } }) => where.id === 7 ? work : null,
+      findUnique: async ({ where }: { where: { id: number } }) => where.id === 7 ? work : createdWorks.find((item) => item.id === where.id) ?? null,
+      findUniqueOrThrow: async ({ where }: { where: { id: number } }) => where.id === 7 ? work : createdWorks.find((item) => item.id === where.id)!,
+      create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: 8 + createdWorks.length, submittedForInspectionAt: null }; createdWorks.push(row); return row; },
+      update: async ({ data }: { data: Partial<typeof work> }) => { Object.assign(work, data); return work; },
       findMany: async ({ where }: { where: { status?: string; executorUserId?: number } }) => where.status && where.status !== work.status || where.executorUserId && where.executorUserId !== work.executorUserId ? [] : [{ ...work, subscriptions: subscriptions.has("7:1") ? [{ id: 1 }] : [] }],
       count: async ({ where }: { where: { status?: string; executorUserId?: number } }) => where.status && where.status !== work.status || where.executorUserId && where.executorUserId !== work.executorUserId ? 0 : 1,
     },
@@ -54,6 +60,9 @@ function fixture() {
     issue: { count: async () => 0 },
     document: { findMany: async () => [] },
     inspectionAssignment: { count: async () => 0 },
+    inspection: { count: async () => 0 },
+    workHistory: { create: async ({ data }: { data: Record<string, unknown> }) => { historyEvents.push(data); return data; } },
+    $queryRaw: async () => [{ id: 7 }],
     houseChat: {
       upsert: async ({ create, update }: { create: { joinUrl: string }; update: { joinUrl: string } }) => { chat = { title: null, joinUrl: chat ? update.joinUrl : create.joinUrl }; return chat; },
       deleteMany: async () => { chat = null; return { count: 1 }; },
@@ -88,8 +97,9 @@ function fixture() {
       findMany: async ({ where }: { where: { status?: string } }) => observations.filter((item) => !where.status || item.status === where.status).map((item) => ({ ...item, author: user, media: [...media.values()].filter((m) => m.observationId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
     },
     comment: {
+      count: async () => comments.length,
       create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: comments.length + 1, createdAt: new Date() }; comments.push(row); return row; },
-      findMany: async () => comments.map((item) => ({ ...item, author: user, media: [...media.values()].filter((m) => m.commentId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
+      findMany: async ({ skip = 0, take = 20 }: { skip?: number; take?: number }) => comments.slice(skip, skip + take).map((item) => ({ ...item, author: user, media: [...media.values()].filter((m) => m.commentId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
     },
     $transaction: async (fn: (client: unknown) => Promise<unknown>) => {
       const observationCount = observations.length;
@@ -97,11 +107,11 @@ function fixture() {
       try { return await fn(db); } catch (error) { observations.splice(observationCount); comments.splice(commentCount); throw error; }
     },
   };
-  return { db: db as unknown as PrismaClient, media, blobs, subscriptions, observations, comments, setRole: (value: string) => { role = value; }, setStatus: (value: string) => { status = value; }, setMembership: (value: boolean) => { hasMembership = value; }, setChat: (value: typeof chat) => { chat = value; }, setWorkStatus: (value: string) => { work.status = value; }, assignExecutor: (value: number | null) => { work.executorUserId = value; work.executor = value ? { id: value, firstName: "Сергей", lastName: "Петров" } : null; }, getChat: () => chat };
+  return { db: db as unknown as PrismaClient, media, blobs, subscriptions, observations, comments, createdWorks, historyEvents, setCompany: (value: string | null) => { company = value; }, setRole: (value: string) => { role = value; }, setStatus: (value: string) => { status = value; }, setMembership: (value: boolean) => { hasMembership = value; }, setChat: (value: typeof chat) => { chat = value; }, setWorkStatus: (value: string) => { work.status = value; }, assignExecutor: (value: number | null) => { work.executorUserId = value; work.executor = value ? { id: value, firstName: "Сергей", lastName: "Петров" } : null; }, getChat: () => chat };
 }
 
-async function appFor(db: PrismaClient, isAdmin = false) {
-  return createApp({ config: { botToken, maxInitDataMaxAgeSeconds: 3600 }, userRepository: { isReady: async () => true, upsertFromMax: async () => ({ id: 1, isAdmin }) }, businessDb: db, logger: false, staticRoot: "/nonexistent-priemka-static" });
+async function appFor(db: PrismaClient, isAdmin = false, now?: () => Date) {
+  return createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin }) }, businessDb: db, now, logger: false, staticRoot: "/nonexistent-priemka-static" });
 }
 
 function multipartBody(bytes: Buffer, mimeType = "image/png") {
@@ -111,6 +121,41 @@ function multipartBody(bytes: Buffer, mimeType = "image/png") {
 }
 
 describe("business API", () => {
+  it("limits media attempts to ten per user per minute after membership", async () => {
+    const f = fixture();
+    let time = Date.now();
+    const app = await appFor(f.db, false, () => new Date(time));
+    const invalid = multipartBody(Buffer.from("invalid"));
+    const otherUser = createSignedMaxInitData(botToken, { user: '{"id":9007199254740994,"first_name":"Другой","last_name":"Пользователь","username":null,"language_code":"ru","photo_url":null}' });
+    try {
+      for (let index = 0; index < 10; index++) expect((await app.inject({ method: "POST", url: "/api/media", ...invalid })).statusCode).toBe(400);
+      const limited = await app.inject({ method: "POST", url: "/api/media", ...invalid });
+      expect(limited.statusCode).toBe(429);
+      expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+      expect((await app.inject({ method: "POST", url: "/api/media", headers: { ...invalid.headers, "x-max-init-data": otherUser }, payload: invalid.payload })).statusCode).toBe(400);
+      time += 60_000;
+      expect((await app.inject({ method: "POST", url: "/api/media", ...invalid })).statusCode).toBe(400);
+    } finally { await app.close(); }
+  });
+  it("lets a chairman assign own work with a company snapshot and submit once as executor", async () => {
+    const f = fixture();
+    f.setRole("CHAIRMAN");
+    f.setCompany("Сохранённая компания");
+    const app = await appFor(f.db);
+    try {
+      const payload = { executorUserId: 1, title: "  Ремонт  ", description: "  Описание  ", category: "COMMON_AREAS" };
+      expect((await app.inject({ method: "POST", url: "/api/houses/1/works", headers: auth, payload })).statusCode).toBe(201);
+      expect(f.createdWorks[0]).toEqual(expect.objectContaining({ executorName: "Сохранённая компания", representativeName: "Макс Пользователь", title: "Ремонт", status: "NEW" }));
+      expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).statusCode).toBe(403);
+      f.setRole("EXECUTOR");
+      f.assignExecutor(1);
+      const first = await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} });
+      expect(first.statusCode).toBe(200);
+      expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).json()).toEqual(first.json());
+      expect(f.historyEvents.filter((event) => event.event === "SUBMITTED_FOR_INSPECTION")).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
   it("enforces MAX auth and house permissions, and keeps work flags separate", async () => {
     const f = fixture();
     const app = await appFor(f.db);
@@ -118,7 +163,8 @@ describe("business API", () => {
       expect((await app.inject({ method: "GET", url: "/api/houses/1/works" })).statusCode).toBe(401);
       const me = await app.inject({ method: "GET", url: "/api/me", headers: auth });
       expect(me.json().user).toEqual(expect.objectContaining({ id: 1, maxUserId: "9007199254740993", isAdmin: false }));
-      expect(me.json().houses[0]).toEqual(expect.objectContaining({ id: 1, role: "RESIDENT", permissions: expect.objectContaining({ reportRemediation: false, manageHouseChat: false, viewWorks: true }) }));
+      expect(me.json().houses[0]).toEqual(expect.objectContaining({ id: 1, role: "RESIDENT", permissions: expect.objectContaining({ manageHouseChat: false, viewWorks: true }) }));
+      expect(me.json().houses[0].permissions).not.toHaveProperty("reportRemediation");
       const list = await app.inject({ method: "GET", url: "/api/houses/1/works", headers: auth });
       expect(list.json().items[0]).toEqual(expect.objectContaining({ id: 7, status: "NEW", isWatching: false }));
       expect(list.json().items[0]).not.toHaveProperty("isNewForMe");
@@ -183,7 +229,7 @@ describe("business API", () => {
       expect((await app.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).statusCode).toBe(403);
       const me = await app.inject({ method: "GET", url: "/api/me", headers: auth });
       expect(me.json().houses[0].permissions).toEqual(expect.objectContaining({ viewObservations: false, viewHouseChat: false }));
-      expect(detail.json().actions).toEqual(expect.objectContaining({ reportRemediation: false, confirmAcceptance: false, assignInspectors: false }));
+      expect(detail.json().actions).toEqual(expect.objectContaining({ reportRemediation: false, confirmAcceptance: false, assignInspector: false }));
       expect(detail.json().representative).toEqual({ id: 1, name: "Сергей Петров", phone: null, maxUrl: null });
     } finally { await app.close(); }
   });
@@ -200,10 +246,10 @@ describe("business API", () => {
       const me = await admin.inject({ method: "GET", url: "/api/me", headers: auth });
       expect(me.json().user.isAdmin).toBe(true);
       expect(me.json().houses).toEqual([]);
-      expect((await admin.inject({ method: "PUT", url: "/api/houses/1/chat", headers: auth, payload: { joinUrl: "https://max.ru/chat/example" } })).statusCode).toBe(200);
+      expect((await admin.inject({ method: "PUT", url: "/api/houses/1/chat", headers: auth, payload: { joinUrl: "https://max.ru/chat/example" } })).statusCode).toBe(403);
       expect((await admin.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).statusCode).toBe(200);
-      expect((await admin.inject({ method: "GET", url: "/api/houses/1/works", headers: auth })).json().house.chat.joinUrl).toBe("https://max.ru/chat/example");
-      expect((await admin.inject({ method: "DELETE", url: "/api/houses/1/chat", headers: auth })).statusCode).toBe(204);
+      expect((await admin.inject({ method: "GET", url: "/api/houses/1/works", headers: auth })).statusCode).toBe(200);
+      expect((await admin.inject({ method: "DELETE", url: "/api/houses/1/chat", headers: auth })).statusCode).toBe(403);
     } finally { await admin.close(); }
   });
 
@@ -232,7 +278,7 @@ describe("business API", () => {
       for (const status of ["NEW", "IN_REVIEW", "IN_PROGRESS", "WAITING", "ACCEPTED"]) {
         f.setWorkStatus(status);
         const response = await app.inject({ method: "GET", url: "/api/works/7", headers: auth });
-        expect(response.json().actions).toEqual(expect.objectContaining({ assignInspectors: status === "NEW", confirmAcceptance: false, reportRemediation: false, comment: true }));
+        expect(response.json().actions).toEqual(expect.objectContaining({ assignInspector: false, confirmAcceptance: false, reportRemediation: false, comment: true }));
       }
     } finally { await app.close(); }
   });
@@ -266,7 +312,7 @@ describe("business API", () => {
       expect((await app.inject({ method: "POST", url: "/api/works/7/comments", headers: auth, payload: { text: "", mediaIds: [secondId] } })).statusCode).toBe(400);
       const observation = await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Тест", description: "Описание", mediaIds: [firstId] } });
       expect(observation.statusCode).toBe(201);
-      expect(f.media.get(firstId)).toEqual(expect.objectContaining({ temporary: false, expiresAt: null, publicKey: expect.stringMatching(/^[a-z0-9]{12,16}$/) }));
+      expect(f.media.get(firstId)).toEqual(expect.objectContaining({ temporary: false, expiresAt: null, publicKey: expect.stringMatching(/^[a-z0-9]{20}$/) }));
       const observationList = await app.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth });
       expect(observationList.statusCode, observationList.body).toBe(200);
       expect(observationList.json().items[0].media[0]).toEqual(expect.objectContaining({ id: firstId, url: expect.stringMatching(/^\/photo\//) }));
@@ -280,10 +326,15 @@ describe("business API", () => {
       const commentList = await app.inject({ method: "GET", url: "/api/works/7/comments", headers: auth });
       expect(commentList.json().items[0].media[0].id).toBe(thirdId);
       expect(commentList.json().items[0].author.id).toBe(internalId);
+      expect(commentList.json()).toEqual(expect.objectContaining({ page: 1, limit: 20, total: 1 }));
+      expect((await app.inject({ method: "GET", url: "/api/works/7/comments?page=2&limit=1", headers: auth })).json()).toEqual({ items: [], page: 2, limit: 1, total: 1 });
+      expect((await app.inject({ method: "GET", url: "/api/works/7/comments?page=0", headers: auth })).statusCode).toBe(400);
+      expect((await app.inject({ method: "GET", url: "/api/works/7/comments?limit=101", headers: auth })).statusCode).toBe(400);
       const key = f.media.get(firstId)!.publicKey!;
       const original = await app.inject({ method: "GET", url: `/photo/${key}` });
       expect(original.statusCode).toBe(200);
-      expect(original.rawPayload.equals(bytes)).toBe(true);
+      expect(original.headers["cache-control"]).toBe("private, no-store");
+      expect(original.headers["x-robots-tag"]).toBe("noindex, nofollow, noarchive");
       for (const query of ["?w=200&h=200", "?w=400&h=240&fit=cover", "?w=800&h=800&fit=contain"]) {
         const response = await app.inject({ method: "GET", url: `/photo/${key}${query}` });
         expect(response.statusCode).toBe(200);
@@ -292,6 +343,8 @@ describe("business API", () => {
         expect(meta.height).toBeLessThanOrEqual(80);
       }
       for (const query of ["?w=31&h=200", "?w=2049&h=200"]) expect((await app.inject({ method: "GET", url: `/photo/${key}${query}` })).statusCode).toBe(400);
+      f.media.get(firstId)!.publicKey = "abcdef0123456789";
+      expect((await app.inject({ method: "GET", url: "/photo/abcdef0123456789" })).statusCode).toBe(200);
       const blob = [...f.blobs.values()][0];
       f.media.get(secondId)!.expiresAt = new Date(0);
       expect(await cleanupExpiredMedia(f.db, new Date(), dir)).toEqual({ media: 1, blobs: 0 });
@@ -332,7 +385,10 @@ describe("business API", () => {
       expect(attach.statusCode).toBe(201);
       const key = f.media.get(upload.json().id)!.publicKey;
       const original = await app.inject({ method: "GET", url: `/photo/${key}` });
-      expect(original.rawPayload.equals(bytes)).toBe(true);
+      const stored = await sharp(original.rawPayload).metadata();
+      expect([stored.width, stored.height]).toEqual([80, 120]);
+      expect(stored.exif).toBeUndefined();
+      expect(stored.orientation).toBeUndefined();
       const preview = await app.inject({ method: "GET", url: `/photo/${key}?w=80&h=120&fit=contain` });
       expect(preview.statusCode).toBe(200);
       const metadata = await sharp(preview.rawPayload).metadata();
@@ -348,9 +404,9 @@ describe("permissions", () => {
     expect(Object.values(HouseMembershipRole)).not.toContain("ADMIN");
   });
   it("keeps remediation away from residents and disables pending memberships", () => {
-    expect(permissionsFor("RESIDENT", "ACTIVE").reportRemediation).toBe(false);
-    expect(permissionsFor("EXECUTOR", "ACTIVE").reportRemediation).toBe(false);
-    expect(permissionsFor(null, null, true).manageHouseChat).toBe(true);
+    expect(permissionsFor("RESIDENT", "ACTIVE").reviewJoinRequests).toBe(false);
+    expect(permissionsFor("EXECUTOR", "ACTIVE").reviewJoinRequests).toBe(false);
+    expect(permissionsFor(null, null, true).manageHouseChat).toBe(false);
     expect(Object.values(permissionsFor("CHAIRMAN", "PENDING")).every((value) => !value)).toBe(true);
     expect(Object.values(permissionsFor("RESIDENT", "REJECTED")).every((value) => !value)).toBe(true);
   });

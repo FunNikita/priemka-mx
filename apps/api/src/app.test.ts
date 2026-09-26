@@ -26,10 +26,23 @@ class MemoryUserRepository implements UserRepository {
 const botToken = "test-bot-token";
 
 async function testApp(repository = new MemoryUserRepository(), options: Omit<Parameters<typeof createApp>[0], "config" | "userRepository" | "logger"> = {}) {
-  return { app: await createApp({ config: { botToken, maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, logger: false, ...options }), repository };
+  return { app: await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, logger: false, ...options }), repository };
 }
 
 describe("system routes", () => {
+  it("documents actual public PDF and photo responses", async () => {
+    const { app } = await testApp();
+    try {
+      await app.ready();
+      const spec = app.swagger() as { paths: Record<string, { get: { responses: Record<string, unknown> } }> };
+      expect(Object.keys(spec.paths["/doc/{key}.pdf"].get.responses).sort()).toEqual(["200", "404", "409", "503"]);
+      expect(Object.keys(spec.paths["/photo/{key}"].get.responses).sort()).toEqual(["200", "400", "404", "503"]);
+      expect((await app.inject({ method: "GET", url: `/doc/${"a".repeat(20)}.pdf` })).statusCode).toBe(503);
+      expect((await app.inject({ method: "GET", url: `/photo/${"a".repeat(20)}` })).statusCode).toBe(503);
+    } finally {
+      await app.close();
+    }
+  });
   it("returns liveness response", async () => {
     const { app } = await testApp();
     try {
@@ -164,7 +177,7 @@ describe("GET /api/me", () => {
     const logs: string[] = [];
     const repository = new MemoryUserRepository();
     const loggedApp = await createApp({
-      config: { botToken, maxInitDataMaxAgeSeconds: 3600 },
+      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
       userRepository: repository,
       logStream: new Writable({
         write(chunk, _encoding, callback) {
@@ -204,7 +217,7 @@ describe("GET /api/me", () => {
   it("logs request metadata and an error stack without exposing initData", async () => {
     const logs: string[] = [];
     const loggedApp = await createApp({
-      config: { botToken, maxInitDataMaxAgeSeconds: 3600 },
+      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
       userRepository: {
         isReady: async () => true,
         upsertFromMax: async () => { throw new Error("test repository failure"); },

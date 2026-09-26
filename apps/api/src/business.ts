@@ -1,5 +1,5 @@
 import multipart from "@fastify/multipart";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
@@ -10,6 +10,7 @@ import type { AppConfig } from "./config.js";
 import { requireMaxAuth } from "./max/require-max-auth.js";
 import { PrismaUserRepository } from "./repositories/prisma-user-repository.js";
 import type { UserRepository } from "./repositories/user-repository.js";
+import { newPublicPhotoKey } from "./photo-keys.js";
 
 const mediaRoot = () => resolve(process.env.MEDIA_DIR ?? "/app/data/media");
 const maxFileSize = 10 * 1024 * 1024;
@@ -32,7 +33,7 @@ const houseSummarySchema = { type: "object", additionalProperties: false, requir
 const houseActionsSchema = { type: "object", additionalProperties: false, required: ["manageChat"], properties: { manageChat: { type: "boolean" } } } as const;
 const worksResponseSchema = { type: "object", additionalProperties: false, required: ["house", "actions", "items", "page", "limit", "total"], properties: { house: houseSummarySchema, actions: houseActionsSchema, items: { type: "array", items: workCardSchema }, page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" } } } as const;
 const representativeSchema = { type: "object", additionalProperties: false, nullable: true, required: ["id", "name", "phone", "maxUrl"], properties: { id: { type: "integer" }, name: { type: "string" }, phone: { type: "string", nullable: true }, maxUrl: { type: "string", nullable: true } } } as const;
-const workActionsSchema = { type: "object", additionalProperties: false, required: ["watch", "unwatch", "comment", "reportRemediation", "assignInspectors", "performInspection", "generateReasonedRefusal", "generateAcceptanceAct", "confirmAcceptance", "manageDocuments"], properties: { watch: { type: "boolean" }, unwatch: { type: "boolean" }, comment: { type: "boolean" }, reportRemediation: { type: "boolean" }, assignInspectors: { type: "boolean" }, performInspection: { type: "boolean" }, generateReasonedRefusal: { type: "boolean" }, generateAcceptanceAct: { type: "boolean" }, confirmAcceptance: { type: "boolean" }, manageDocuments: { type: "boolean" } } } as const;
+const workActionsSchema = { type: "object", additionalProperties: false, required: ["watch", "unwatch", "comment", "submitForInspection", "reportRemediation", "assignInspector", "performInspection", "generateReasonedRefusal", "generateAcceptanceAct", "confirmAcceptance", "manageDocuments"], properties: { watch: { type: "boolean" }, unwatch: { type: "boolean" }, comment: { type: "boolean" }, submitForInspection: { type: "boolean" }, reportRemediation: { type: "boolean" }, assignInspector: { type: "boolean" }, performInspection: { type: "boolean" }, generateReasonedRefusal: { type: "boolean" }, generateAcceptanceAct: { type: "boolean" }, confirmAcceptance: { type: "boolean" }, manageDocuments: { type: "boolean" } } } as const;
 const documentSchema = { type: "object", additionalProperties: false, required: ["id", "type", "title", "version", "status", "createdAt", "confirmedAt", "fileUrl", "actions"], properties: { id: { type: "integer" }, type: { type: "string" }, title: { type: "string" }, version: { type: "integer" }, status: { type: "string" }, createdAt: { type: "string", format: "date-time" }, confirmedAt: { type: "string", format: "date-time", nullable: true }, fileUrl: { type: "string" }, actions: { type: "object", additionalProperties: false, required: ["confirm"], properties: { confirm: { type: "boolean" } } } } } as const;
 const workDetailSchema = {
   type: "object", additionalProperties: false,
@@ -41,14 +42,14 @@ const workDetailSchema = {
     id: { type: "integer" }, house: houseRefSchema,
     houseObject: { type: "object", additionalProperties: false, nullable: true, required: ["id", "title"], properties: { id: { type: "integer" }, title: { type: "string" } } },
     title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, date: { type: "string", format: "date-time" },
-    dates: { type: "object", additionalProperties: false, required: ["createdAt", "updatedAt", "completedAt"], properties: { createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, completedAt: { type: "string", format: "date-time", nullable: true } } },
+    dates: { type: "object", additionalProperties: false, required: ["createdAt", "updatedAt", "completedAt", "submittedForInspectionAt"], properties: { createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, completedAt: { type: "string", format: "date-time", nullable: true }, submittedForInspectionAt: { type: "string", format: "date-time", nullable: true } } },
     history: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "event", "details", "createdAt"], properties: { id: { type: "integer" }, event: { type: "string" }, details: { type: "string", nullable: true }, createdAt: { type: "string", format: "date-time" } } } },
     media: { type: "array", items: mediaRefSchema }, executor: { type: "string", nullable: true }, representative: representativeSchema,
     isWatching: { type: "boolean" }, actions: workActionsSchema, documents: { type: "array", description: "По одной записи на документ: только версия с наибольшим номером.", items: documentSchema },
   },
 } as const;
 const observationListSchema = { type: "object", additionalProperties: false, required: ["items", "page", "limit", "total"], properties: { items: { type: "array", items: observationSchema }, page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" } } } as const;
-const commentsListSchema = { type: "object", additionalProperties: false, required: ["items"], properties: { items: { type: "array", items: commentSchema } } } as const;
+const commentsListSchema = { type: "object", additionalProperties: false, required: ["items", "page", "limit", "total"], properties: { items: { type: "array", items: commentSchema }, page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" } } } as const;
 const observationCreatedSchema = { type: "object", additionalProperties: false, required: ["id", "status"], properties: { id: { type: "integer" }, status: statusSchema } } as const;
 const idResponseSchema = { type: "object", additionalProperties: false, required: ["id"], properties: { id: { type: "integer" } } } as const;
 export const mediaUploadBodySchema = { type: "object", additionalProperties: false, required: ["file"], properties: { file: { type: "string", format: "binary" } } } as const;
@@ -67,14 +68,12 @@ export function permissionsFor(role: string | null, status: string | null, isAdm
     viewObservations: admin || residentSide,
     viewHouseChat: admin || residentSide,
     createObservation: residentSide,
-    commentWork: admin || active,
-    watchWork: admin || active,
-    manageHouseChat: admin || chatManager,
-    assignInspectors: admin || (active && role === "CHAIRMAN"),
-    performInspection: admin || (active && role === "COUNCIL_MEMBER"),
-    reportRemediation: false,
-    confirmWorkResult: active && role === "CHAIRMAN",
-    reviewJoinRequests: admin || (active && role === "CHAIRMAN"),
+    commentWork: active,
+    watchWork: active,
+    manageHouseChat: chatManager,
+    assignInspector: active && role === "CHAIRMAN",
+    performInspection: active && role === "COUNCIL_MEMBER",
+    reviewJoinRequests: active && role === "CHAIRMAN",
   };
 }
 
@@ -131,7 +130,7 @@ async function attachMedia(db: PrismaClient, ownerUserId: number, mediaIds: numb
   const items = await db.media.findMany({ where: { id: { in: mediaIds }, ownerUserId, temporary: true, expiresAt: { gt: currentTime } } });
   if (items.length !== mediaIds.length) throw new Error("INVALID_MEDIA");
   for (const item of items) {
-    const updated = await db.media.updateMany({ where: { id: item.id, ownerUserId, temporary: true, expiresAt: { gt: currentTime } }, data: { ...target, temporary: false, expiresAt: null, publicKey: item.publicKey ?? randomBytes(9).toString("hex").slice(0, 16) } });
+    const updated = await db.media.updateMany({ where: { id: item.id, ownerUserId, temporary: true, expiresAt: { gt: currentTime } }, data: { ...target, temporary: false, expiresAt: null, publicKey: item.publicKey ?? newPublicPhotoKey() } });
     if (updated.count !== 1) throw new Error("INVALID_MEDIA");
   }
 }
@@ -151,6 +150,45 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
   };
   const secured = { preHandler: authenticate };
   const security = [{ maxInitData: [] }];
+
+  app.post("/api/houses/:houseId/works", { ...secured, schema: { tags: ["Works"], security, params: idParams, body: { type: "object", additionalProperties: false, required: ["executorUserId", "title", "description", "category"], properties: { executorUserId: { type: "integer", minimum: 1 }, title: { type: "string", minLength: 1, maxLength: 255 }, description: { type: "string", minLength: 1, maxLength: 10000 }, category: { type: "string", minLength: 1, maxLength: 100 } } }, response: { 201: idResponseSchema, 400: errorResponse, 403: errorResponse, 404: errorResponse } } }, async (request, reply) => {
+    const ctx = request.business!, { houseId } = request.params as { houseId: number };
+    const input = request.body as { executorUserId: number; title: string; description: string; category: string };
+    if (!await ctx.db.house.findUnique({ where: { id: houseId }, select: { id: true } })) return bad(reply, 404, "Дом не найден");
+    const chair = await membership(ctx, houseId);
+    if (chair?.status !== "ACTIVE" || chair.role !== "CHAIRMAN") return bad(reply, 403, "Работу создаёт председатель дома");
+    const candidate = await ctx.db.houseMembership.findUnique({ where: { houseId_userId: { houseId, userId: input.executorUserId } }, include: { user: true } });
+    if (!candidate || candidate.status !== "ACTIVE" || (candidate.role !== "EXECUTOR" && candidate.userId !== ctx.userId) || !candidate.executorCompanyName?.trim()) return bad(reply, 400, "Нужен активный исполнитель с компанией");
+    if (!input.title.trim() || !input.description.trim() || !input.category.trim()) return bad(reply, 400, "Заполните данные работы");
+    const created = await ctx.db.$transaction(async (tx) => {
+      const work = await tx.work.create({ data: { houseId, executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), title: input.title.trim(), description: input.description.trim(), category: input.category.trim(), status: "NEW" } });
+      await tx.workHistory.create({ data: { workId: work.id, event: "WORK_CREATED", details: `Исполнитель ${candidate.userId}` } });
+      return work;
+    });
+    return reply.code(201).send({ id: created.id });
+  });
+
+  app.post("/api/works/:workId/submit-for-inspection", { ...secured, schema: { tags: ["Works"], security, params: workParams, body: { type: "object", additionalProperties: false, properties: {} }, response: { 200: { type: "object", additionalProperties: false, required: ["submittedForInspectionAt"], properties: { submittedForInspectionAt: { type: "string", format: "date-time" } } }, 403: errorResponse, 404: errorResponse, 409: errorResponse } } }, async (request, reply) => {
+    const ctx = request.business!, { workId } = request.params as { workId: number };
+    const work = await ctx.db.work.findUnique({ where: { id: workId } });
+    if (!work) return bad(reply, 404, "Работа не найдена");
+    const m = await membership(ctx, work.houseId);
+    if (m?.status !== "ACTIVE" || m.role !== "EXECUTOR" || work.executorUserId !== ctx.userId) return bad(reply, 403, "Только назначенный исполнитель может передать работу");
+    if (work.status === "ACCEPTED") return bad(reply, 409, "Работа уже принята");
+    if (work.submittedForInspectionAt) return { submittedForInspectionAt: work.submittedForInspectionAt };
+    if (work.status !== "NEW") return bad(reply, 409, "Работа уже находится на проверке");
+    const submitted = await ctx.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM Work WHERE id = ${workId} FOR UPDATE`;
+      const current = await tx.work.findUniqueOrThrow({ where: { id: workId } });
+      if (current.submittedForInspectionAt) return current.submittedForInspectionAt;
+      if (current.status !== "NEW") return null;
+      const at = now();
+      await tx.work.update({ where: { id: workId }, data: { submittedForInspectionAt: at } });
+      await tx.workHistory.create({ data: { workId, event: "SUBMITTED_FOR_INSPECTION" } });
+      return at;
+    });
+    return submitted ? { submittedForInspectionAt: submitted } : bad(reply, 409, "Работа уже находится на проверке");
+  });
 
   app.get("/api/houses/:houseId/works", { ...secured, schema: { tags: ["Works"], security, params: idParams, querystring: listQuery, response: { 200: worksResponseSchema, 403: errorResponse } } }, async (request, reply) => {
     const { houseId } = typedRequest<{ params: { houseId: number } }>(request).params;
@@ -173,25 +211,27 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const access = await workAccess(ctx, workId);
     if (!access) return bad(reply, 404, "Работа не найдена");
     const { work, permissions } = access;
-    const [watching, membership, activeIssues, openIssues, documents, myAssignments] = await Promise.all([
+    const [watching, membership, activeIssues, openIssues, documents, myAssignments, inspections, completedInspections] = await Promise.all([
       ctx.db.workSubscription.findUnique({ where: { workId_userId: { workId, userId: ctx.userId } } }),
       ctx.db.houseMembership.findUnique({ where: { houseId_userId: { houseId: work.houseId, userId: ctx.userId } } }),
       ctx.db.issue.count({ where: { workId, status: { not: "RESOLVED" } } }),
       ctx.db.issue.count({ where: { workId, status: "OPEN" } }),
       ctx.db.document.findMany({ where: { workId }, include: { versions: { orderBy: { version: "desc" }, take: 1, include: { confirmations: true } } } }),
       ctx.db.inspectionAssignment.count({ where: { assigneeUserId: ctx.userId, inspection: { workId }, status: { not: "COMPLETED" } } }),
+      ctx.db.inspection.count({ where: { workId } }),
+      ctx.db.inspectionAssignment.count({ where: { inspection: { workId }, status: "COMPLETED" } }),
     ]);
-    const chair = ctx.isAdmin || (membership?.status === "ACTIVE" && membership.role === "CHAIRMAN");
+    const chair = membership?.status === "ACTIVE" && membership.role === "CHAIRMAN";
     const refusalChair = membership?.status === "ACTIVE" && membership.role === "CHAIRMAN";
     const executor = membership?.status === "ACTIVE" && membership.role === "EXECUTOR" && work.executorUserId === ctx.userId;
-    const representative = membership?.status === "ACTIVE" && ["CHAIRMAN", "COUNCIL_MEMBER"].includes(membership.role) && membership.canSignAcceptanceAct;
+    const representative = chair;
     const hasAcceptanceAct = documents.some((document) => document.type === "ACCEPTANCE_ACT");
-    const canConfirm = (type: string, status: string, confirmations: { userId: number; roleSnapshot: string }[]) => work.status !== "ACCEPTED" && type === "ACCEPTANCE_ACT" && status === "FINAL" && !confirmations.some((item) => item.userId === ctx.userId) && ((executor && !confirmations.length) || (representative && confirmations.some((item) => item.roleSnapshot === "EXECUTOR")));
+    const canConfirm = (type: string, status: string, confirmations: { userId: number; roleSnapshot: string }[]) => work.status !== "ACCEPTED" && type === "ACCEPTANCE_ACT" && status === "FINAL" && ((executor && !confirmations.some((item) => item.roleSnapshot === "EXECUTOR") && !confirmations.length) || (representative && confirmations.some((item) => item.roleSnapshot === "EXECUTOR") && !confirmations.some((item) => item.roleSnapshot === "CHAIRMAN")));
     const documentItems = documents.flatMap((document) => {
       const version = document.versions[0];
       return version ? [{ id: document.id, type: document.type, title: document.title, version: version.version, status: version.status, createdAt: version.createdAt, confirmedAt: version.confirmedAt, fileUrl: `/doc/${version.publicKey}.pdf`, actions: { confirm: canConfirm(document.type, version.status, version.confirmations) } }] : [];
     });
-    return { id: work.id, house: { id: work.house.id, address: work.house.address }, houseObject: work.houseObject ? { id: work.houseObject.id, title: work.houseObject.title } : null, title: work.title, description: work.description, category: work.category, status: work.status, date: work.date, dates: { createdAt: work.createdAt, updatedAt: work.updatedAt, completedAt: work.completedAt }, history: work.history.map((event) => ({ id: event.id, event: event.event, details: event.details, createdAt: event.createdAt })), media: work.media.map(mediaRef), executor: work.executorName, representative: work.executor ? { id: work.executor.id, name: work.representativeName ?? `${work.executor.firstName} ${work.executor.lastName}`.trim(), phone: null, maxUrl: null } : null, isWatching: !!watching, documents: documentItems, actions: { watch: permissions.watchWork && !watching, unwatch: permissions.watchWork && !!watching, comment: permissions.commentWork, reportRemediation: executor && !!openIssues, assignInspectors: chair && work.status === "NEW", performInspection: !!myAssignments, generateReasonedRefusal: !!refusalChair && !!activeIssues, generateAcceptanceAct: executor && work.status === "WAITING" && !activeIssues && !hasAcceptanceAct, confirmAcceptance: documentItems.some((item) => item.type === "ACCEPTANCE_ACT" && item.actions.confirm), manageDocuments: chair || executor } };
+    return { id: work.id, house: { id: work.house.id, address: work.house.address }, houseObject: work.houseObject ? { id: work.houseObject.id, title: work.houseObject.title } : null, title: work.title, description: work.description, category: work.category, status: work.status, date: work.date, dates: { createdAt: work.createdAt, updatedAt: work.updatedAt, completedAt: work.completedAt, submittedForInspectionAt: work.submittedForInspectionAt }, history: work.history.map((event) => ({ id: event.id, event: event.event, details: event.details, createdAt: event.createdAt })), media: work.media.map(mediaRef), executor: work.executorName, representative: work.executor ? { id: work.executor.id, name: work.representativeName ?? `${work.executor.firstName} ${work.executor.lastName}`.trim(), phone: null, maxUrl: null } : null, isWatching: !!watching, documents: documentItems, actions: { watch: permissions.watchWork && !watching, unwatch: permissions.watchWork && !!watching, comment: permissions.commentWork, reportRemediation: executor && !!openIssues, submitForInspection: executor && work.status === "NEW" && !work.submittedForInspectionAt, assignInspector: chair && work.status === "NEW" && !!work.submittedForInspectionAt && !inspections, performInspection: membership?.status === "ACTIVE" && membership.role === "COUNCIL_MEMBER" && !!myAssignments, generateReasonedRefusal: !!refusalChair && !!activeIssues, generateAcceptanceAct: executor && work.status === "WAITING" && !!completedInspections && !activeIssues && !hasAcceptanceAct, confirmAcceptance: documentItems.some((item) => item.type === "ACCEPTANCE_ACT" && item.actions.confirm), manageDocuments: chair || executor } };
   });
 
   for (const method of ["POST", "DELETE"] as const) {
@@ -237,12 +277,13 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     }
   });
 
-  app.get("/api/works/:workId/comments", { ...secured, schema: { tags: ["Comments"], security, params: workParams, response: { 200: commentsListSchema, 404: errorResponse } } }, async (request, reply) => {
+  app.get("/api/works/:workId/comments", { ...secured, schema: { tags: ["Comments"], security, params: workParams, querystring: { type: "object", properties: { page: listQuery.properties.page, limit: listQuery.properties.limit } }, response: { 200: commentsListSchema, 404: errorResponse } } }, async (request, reply) => {
     const { workId } = typedRequest<{ params: { workId: number } }>(request).params;
     const ctx = request.business!;
     if (!await workAccess(ctx, workId)) return bad(reply, 404, "Работа не найдена");
-    const comments = await ctx.db.comment.findMany({ where: { workId }, orderBy: { createdAt: "asc" }, include: { author: true, media: { include: { blob: true } } } });
-    return { items: comments.map((item) => ({ id: item.id, text: item.text, author: author(item.author), createdAt: item.createdAt, media: item.media.map(mediaRef) })) };
+    const { page, limit, skip } = pageOf(request.query as { page?: number; limit?: number });
+    const [total, comments] = await Promise.all([ctx.db.comment.count({ where: { workId } }), ctx.db.comment.findMany({ where: { workId }, skip, take: limit, orderBy: { id: "asc" }, include: { author: true, media: { include: { blob: true } } } })]);
+    return { items: comments.map((item) => ({ id: item.id, text: item.text, author: author(item.author), createdAt: item.createdAt, media: item.media.map(mediaRef) })), page, limit, total };
   });
 
   app.post("/api/works/:workId/comments", { ...secured, schema: { tags: ["Comments"], security, params: workParams, body: { type: "object", additionalProperties: false, properties: { text: { type: "string", maxLength: 10000 }, mediaIds: mediaIdsProperty } }, response: { 201: idResponseSchema, 400: errorResponse, 404: errorResponse } } }, async (request, reply) => {
@@ -283,10 +324,24 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     return reply.code(204).send();
   });
 
-  app.post("/api/media", { ...secured, schema: { tags: ["Media"], security, consumes: ["multipart/form-data"], response: { 201: idResponseSchema, 400: errorResponse, 403: errorResponse, 413: errorResponse } } }, async (request, reply) => {
+  const uploadAttempts = new Map<number, number[]>();
+  let uploadSweepCount = 0;
+  app.post("/api/media", { ...secured, schema: { tags: ["Media"], security, consumes: ["multipart/form-data"], response: { 201: idResponseSchema, 400: errorResponse, 403: errorResponse, 413: errorResponse, 429: errorResponse } } }, async (request, reply) => {
     const ctx = request.business!;
     const activeMembership = await ctx.db.houseMembership.findFirst({ where: { userId: ctx.userId, status: "ACTIVE" }, select: { id: true } });
     if (!activeMembership) return bad(reply, 403, "Нет доступа к загрузке медиа");
+    const currentTime = now().getTime();
+    if (++uploadSweepCount % 100 === 0) {
+      for (const [userId, attempts] of uploadAttempts) {
+        const active = attempts.filter((time) => currentTime - time < 60_000);
+        if (active.length) uploadAttempts.set(userId, active);
+        else uploadAttempts.delete(userId);
+      }
+    }
+    const recent = (uploadAttempts.get(ctx.userId) ?? []).filter((time) => currentTime - time < 60_000);
+    if (recent.length >= 10) return reply.header("Retry-After", String(Math.max(1, Math.ceil((60_000 - (currentTime - recent[0])) / 1000)))).code(429).send({ message: "Слишком много загрузок" });
+    recent.push(currentTime);
+    uploadAttempts.set(ctx.userId, recent);
     let part;
     try { part = await request.file(); } catch (error) {
       if (error instanceof app.multipartErrors.RequestFileTooLargeError) return bad(reply, 413, "Файл слишком большой");
@@ -303,18 +358,20 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     try { metadata = await sharp(bytes, { limitInputPixels: 50_000_000 }).metadata(); } catch { return bad(reply, 400, "Некорректное изображение"); }
     const mimeType = { jpeg: "image/jpeg", png: "image/png", webp: "image/webp" }[metadata.format as "jpeg" | "png" | "webp"];
     if (!mimeType || mimeType !== part.mimetype || !metadata.width || !metadata.height) return bad(reply, 400, "Некорректное изображение");
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const normalized = await sharp(bytes, { limitInputPixels: 50_000_000 }).autoOrient().toFormat(metadata.format as "jpeg" | "png" | "webp").toBuffer();
+    const storedMetadata = await sharp(normalized).metadata();
+    const sha256 = createHash("sha256").update(normalized).digest("hex");
     const extension = metadata.format === "jpeg" ? "jpg" : metadata.format!;
     const storagePath = join("blobs", sha256.slice(0, 2), sha256.slice(2, 4), `${sha256}.${extension}`);
     const fullPath = join(mediaRoot(), storagePath);
     await mkdir(resolve(fullPath, ".."), { recursive: true });
-    try { await writeFile(fullPath, bytes, { flag: "wx" }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-    const blob = await ctx.db.mediaBlob.upsert({ where: { sha256 }, create: { sha256, mimeType, size: bytes.length, width: metadata.autoOrient.width, height: metadata.autoOrient.height, storagePath }, update: {} });
+    try { await writeFile(fullPath, normalized, { flag: "wx" }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    const blob = await ctx.db.mediaBlob.upsert({ where: { sha256 }, create: { sha256, mimeType, size: normalized.length, width: storedMetadata.width!, height: storedMetadata.height!, storagePath }, update: {} });
     const media = await ctx.db.media.create({ data: { blobId: blob.id, ownerUserId: ctx.userId, temporary: true, expiresAt: new Date(now().getTime() + 12 * 60 * 60 * 1000) } });
     return reply.code(201).send({ id: media.id });
   });
 
-  app.get("/photo/:key", { schema: { tags: ["Media"], params: { type: "object", required: ["key"], properties: { key: { type: "string", pattern: "^[a-z0-9]{12,16}$" } } }, querystring: { type: "object", properties: { w: { type: "integer", minimum: 32, maximum: 2048 }, h: { type: "integer", minimum: 32, maximum: 2048 }, fit: { type: "string", enum: ["cover", "contain"] } }, dependencies: { w: ["h"], h: ["w"] } }, response: { 400: errorResponse, 404: errorResponse } } }, async (request, reply) => {
+  app.get("/photo/:key", { schema: { tags: ["Media"], params: { type: "object", required: ["key"], properties: { key: { type: "string", pattern: "^(?:[a-z0-9]{12,16}|[a-z0-9]{20})$" } } }, querystring: { type: "object", properties: { w: { type: "integer", minimum: 32, maximum: 2048 }, h: { type: "integer", minimum: 32, maximum: 2048 }, fit: { type: "string", enum: ["cover", "contain"] } }, dependencies: { w: ["h"], h: ["w"] } }, response: { 400: errorResponse, 404: errorResponse, 503: errorResponse } } }, async (request, reply) => {
     if (!db) return bad(reply, 503, "База данных недоступна");
     const { key } = typedRequest<{ params: { key: string } }>(request).params;
     const { w, h, fit } = typedRequest<{ query: { w?: number; h?: number; fit?: "cover" | "contain" } }>(request).query;
@@ -327,13 +384,13 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       bytes = await sharp(bytes).autoOrient().resize(Math.max(1, Math.floor(w * scale)), Math.max(1, Math.floor(h * scale)), { fit: fit ?? "cover", withoutEnlargement: true }).toBuffer();
     }
     const etag = createHash("sha256").update(`${key}:${w ?? 0}:${h ?? 0}:${fit ?? "cover"}`).digest("base64url");
-    return reply.header("Cache-Control", "public, max-age=31536000, immutable").header("ETag", `"${etag}"`).type(media.blob.mimeType).send(bytes);
+    return reply.header("Cache-Control", "private, no-store").header("X-Robots-Tag", "noindex, nofollow, noarchive").header("ETag", `"${etag}"`).type(media.blob.mimeType).send(bytes);
   });
 
   if (db) {
     const timer = setInterval(() => { cleanupExpiredMedia(db, now()).catch((error: unknown) => app.log.error(error, "media cleanup failed")); }, 60 * 60 * 1000);
     timer.unref();
-    app.addHook("onClose", async () => clearInterval(timer));
+    app.addHook("onClose", async () => { clearInterval(timer); uploadAttempts.clear(); });
   }
 }
 

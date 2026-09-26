@@ -22,6 +22,7 @@ logs/
 /docs/*.jpeg
 /docs/*.zip
 /review/
+/docs/DEPLOY.local.md
 .idea/
 .vscode/
 *.swp

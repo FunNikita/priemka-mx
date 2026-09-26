@@ -150,6 +150,7 @@ model HouseMembership {
   joinedVia MembershipJoinSource @default(ADMIN)
   canSignAcceptanceAct Boolean @default(false)
   authorityBasis String? @db.VarChar(512)
+  executorCompanyName String? @db.VarChar(255)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   house     House            @relation(fields: [houseId], references: [id])
@@ -190,6 +191,7 @@ model Work {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   completedAt      DateTime?
+  submittedForInspectionAt DateTime?
   executorName     String?            @db.VarChar(255)
   representativeName String?          @db.VarChar(255)
   house            House              @relation(fields: [houseId], references: [id])
@@ -272,7 +274,7 @@ model Media {
   id            Int          @id @default(autoincrement())
   blobId        Int
   ownerUserId   Int
-  publicKey     String?      @unique @db.VarChar(16)
+  publicKey     String?      @unique @db.VarChar(20)
   temporary     Boolean      @default(true)
   expiresAt     DateTime?
   observationId Int?
@@ -468,7 +470,7 @@ model DocumentConfirmation {
   confirmedAt DateTime @default(now())
   documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id])
   user User @relation(fields: [userId], references: [id])
-  @@unique([documentVersionId, userId])
+  @@unique([documentVersionId, roleSnapshot])
 }
 
 model BotOutbox {

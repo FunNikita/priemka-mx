@@ -216,6 +216,7 @@
                           "role",
                           "status",
                           "joinedVia",
+                          "executorCompanyName",
                           "permissions"
                         ],
                         "properties": {
@@ -251,6 +252,10 @@
                               "ADMIN"
                             ]
                           },
+                          "executorCompanyName": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "permissions": {
                             "type": "object",
                             "additionalProperties": false,
@@ -262,10 +267,8 @@
                               "commentWork",
                               "watchWork",
                               "manageHouseChat",
-                              "assignInspectors",
+                              "assignInspector",
                               "performInspection",
-                              "reportRemediation",
-                              "confirmWorkResult",
                               "reviewJoinRequests"
                             ],
                             "properties": {
@@ -290,16 +293,10 @@
                               "manageHouseChat": {
                                 "type": "boolean"
                               },
-                              "assignInspectors": {
+                              "assignInspector": {
                                 "type": "boolean"
                               },
                               "performInspection": {
-                                "type": "boolean"
-                              },
-                              "reportRemediation": {
-                                "type": "boolean"
-                              },
-                              "confirmWorkResult": {
                                 "type": "boolean"
                               },
                               "reviewJoinRequests": {
@@ -316,6 +313,618 @@
             }
           },
           "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/houses/{houseId}/membership": {
+      "patch": {
+        "tags": [
+          "Memberships"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "RESIDENT",
+                      "COUNCIL_MEMBER",
+                      "CHAIRMAN",
+                      "EXECUTOR"
+                    ]
+                  },
+                  "executorCompanyName": {
+                    "type": "string",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "houseId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "houseId",
+                    "role",
+                    "status",
+                    "joinedVia",
+                    "executorCompanyName",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "houseId": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "RESIDENT",
+                        "COUNCIL_MEMBER",
+                        "CHAIRMAN",
+                        "EXECUTOR"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACTIVE",
+                        "REJECTED"
+                      ]
+                    },
+                    "joinedVia": {
+                      "type": "string",
+                      "enum": [
+                        "CHAT",
+                        "INVITE",
+                        "REQUEST",
+                        "ADMIN"
+                      ]
+                    },
+                    "executorCompanyName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "maxUserId",
+                          "firstName",
+                          "lastName",
+                          "username",
+                          "photoUrl",
+                          "memberships"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "maxUserId": {
+                            "type": "string"
+                          },
+                          "firstName": {
+                            "type": "string"
+                          },
+                          "lastName": {
+                            "type": "string"
+                          },
+                          "username": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "photoUrl": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "memberships": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "houseId",
+                                "houseAddress",
+                                "role",
+                                "status",
+                                "joinedVia",
+                                "executorCompanyName"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "houseId": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "houseAddress": {
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "type": "string",
+                                  "enum": [
+                                    "RESIDENT",
+                                    "COUNCIL_MEMBER",
+                                    "CHAIRMAN",
+                                    "EXECUTOR"
+                                  ]
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PENDING",
+                                    "ACTIVE",
+                                    "REJECTED"
+                                  ]
+                                },
+                                "joinedVia": {
+                                  "type": "string",
+                                  "enum": [
+                                    "CHAT",
+                                    "INVITE",
+                                    "REQUEST",
+                                    "ADMIN"
+                                  ]
+                                },
+                                "executorCompanyName": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "default": 1
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100,
+                      "default": 20
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/houses/{houseId}/members/{userId}": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "role",
+                  "status"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "RESIDENT",
+                      "COUNCIL_MEMBER",
+                      "CHAIRMAN",
+                      "EXECUTOR"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "PENDING",
+                      "ACTIVE",
+                      "REJECTED"
+                    ]
+                  },
+                  "executorCompanyName": {
+                    "type": "string",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "houseId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "houseId",
+                    "role",
+                    "status",
+                    "joinedVia",
+                    "executorCompanyName",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "houseId": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "RESIDENT",
+                        "COUNCIL_MEMBER",
+                        "CHAIRMAN",
+                        "EXECUTOR"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "ACTIVE",
+                        "REJECTED"
+                      ]
+                    },
+                    "joinedVia": {
+                      "type": "string",
+                      "enum": [
+                        "CHAT",
+                        "INVITE",
+                        "REQUEST",
+                        "ADMIN"
+                      ]
+                    },
+                    "executorCompanyName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -581,6 +1190,7 @@
                     "role",
                     "status",
                     "joinedVia",
+                    "executorCompanyName",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -618,6 +1228,10 @@
                         "REQUEST",
                         "ADMIN"
                       ]
+                    },
+                    "executorCompanyName": {
+                      "type": "string",
+                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -645,6 +1259,7 @@
                     "role",
                     "status",
                     "joinedVia",
+                    "executorCompanyName",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -682,6 +1297,10 @@
                         "REQUEST",
                         "ADMIN"
                       ]
+                    },
+                    "executorCompanyName": {
+                      "type": "string",
+                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -855,6 +1474,7 @@
                           "role",
                           "status",
                           "joinedVia",
+                          "executorCompanyName",
                           "createdAt",
                           "updatedAt",
                           "user"
@@ -893,6 +1513,10 @@
                               "REQUEST",
                               "ADMIN"
                             ]
+                          },
+                          "executorCompanyName": {
+                            "type": "string",
+                            "nullable": true
                           },
                           "createdAt": {
                             "type": "string",
@@ -1122,6 +1746,7 @@
                     "role",
                     "status",
                     "joinedVia",
+                    "executorCompanyName",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -1159,6 +1784,10 @@
                         "REQUEST",
                         "ADMIN"
                       ]
+                    },
+                    "executorCompanyName": {
+                      "type": "string",
+                      "nullable": true
                     },
                     "createdAt": {
                       "type": "string",
@@ -1272,6 +1901,140 @@
       }
     },
     "/api/houses/{houseId}/works": {
+      "post": {
+        "tags": [
+          "Works"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "executorUserId",
+                  "title",
+                  "description",
+                  "category"
+                ],
+                "properties": {
+                  "executorUserId": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "houseId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "Works"
@@ -1510,6 +2273,117 @@
         }
       }
     },
+    "/api/works/{workId}/submit-for-inspection": {
+      "post": {
+        "tags": [
+          "Works"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "workId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "submittedForInspectionAt"
+                  ],
+                  "properties": {
+                    "submittedForInspectionAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/works/{workId}": {
       "get": {
         "tags": [
@@ -1623,7 +2497,8 @@
                       "required": [
                         "createdAt",
                         "updatedAt",
-                        "completedAt"
+                        "completedAt",
+                        "submittedForInspectionAt"
                       ],
                       "properties": {
                         "createdAt": {
@@ -1635,6 +2510,11 @@
                           "format": "date-time"
                         },
                         "completedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "submittedForInspectionAt": {
                           "type": "string",
                           "format": "date-time",
                           "nullable": true
@@ -1746,8 +2626,9 @@
                         "watch",
                         "unwatch",
                         "comment",
+                        "submitForInspection",
                         "reportRemediation",
-                        "assignInspectors",
+                        "assignInspector",
                         "performInspection",
                         "generateReasonedRefusal",
                         "generateAcceptanceAct",
@@ -1764,10 +2645,13 @@
                         "comment": {
                           "type": "boolean"
                         },
+                        "submitForInspection": {
+                          "type": "boolean"
+                        },
                         "reportRemediation": {
                           "type": "boolean"
                         },
-                        "assignInspectors": {
+                        "assignInspector": {
                           "type": "boolean"
                         },
                         "performInspection": {
@@ -2342,6 +3226,27 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
               "minimum": 1
             },
             "in": "path",
@@ -2363,7 +3268,10 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "items"
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
                   ],
                   "properties": {
                     "items": {
@@ -2446,6 +3354,15 @@
                           }
                         }
                       }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
                     }
                   }
                 }
@@ -2831,6 +3748,24 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2876,7 +3811,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-z0-9]{12,16}$"
+              "pattern": "^(?:[a-z0-9]{12,16}|[a-z0-9]{20})$"
             },
             "in": "path",
             "name": "key",
@@ -2952,6 +3887,50 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Default Response",
             "content": {
               "image/jpeg": {
@@ -3078,8 +4057,7 @@
                                 "method",
                                 "sourceType",
                                 "sourceLabel",
-                                "commentRequiredOnFail",
-                                "photoRequiredOnFail"
+                                "rules"
                               ],
                               "properties": {
                                 "id": {
@@ -3107,11 +4085,44 @@
                                   "type": "string",
                                   "nullable": true
                                 },
-                                "commentRequiredOnFail": {
-                                  "type": "boolean"
-                                },
-                                "photoRequiredOnFail": {
-                                  "type": "boolean"
+                                "rules": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "allowedResults",
+                                    "commentAllowed",
+                                    "maxCommentLength",
+                                    "photosAllowed",
+                                    "maxPhotos",
+                                    "evidenceRequiredOnFail"
+                                  ],
+                                  "properties": {
+                                    "allowedResults": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": [
+                                          "PASS",
+                                          "FAIL"
+                                        ]
+                                      }
+                                    },
+                                    "commentAllowed": {
+                                      "type": "boolean"
+                                    },
+                                    "maxCommentLength": {
+                                      "type": "integer"
+                                    },
+                                    "photosAllowed": {
+                                      "type": "boolean"
+                                    },
+                                    "maxPhotos": {
+                                      "type": "integer"
+                                    },
+                                    "evidenceRequiredOnFail": {
+                                      "type": "boolean"
+                                    }
+                                  }
                                 }
                               }
                             }
@@ -3137,7 +4148,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "COUNCIL_MEMBER"
+                "COUNCIL_MEMBER",
+                "EXECUTOR"
               ]
             },
             "in": "query",
@@ -3178,7 +4190,8 @@
                         "additionalProperties": false,
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "executorCompanyName"
                         ],
                         "properties": {
                           "id": {
@@ -3187,6 +4200,10 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "executorCompanyName": {
+                            "type": "string",
+                            "nullable": true
                           }
                         }
                       }
@@ -3440,6 +4457,27 @@
             "in": "query",
             "name": "status",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
           }
         ],
         "security": [
@@ -3456,7 +4494,10 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "items"
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
                   ],
                   "properties": {
                     "items": {
@@ -3484,7 +4525,8 @@
                             "required": [
                               "id",
                               "title",
-                              "houseId"
+                              "houseId",
+                              "category"
                             ],
                             "properties": {
                               "id": {
@@ -3497,6 +4539,9 @@
                               "houseId": {
                                 "type": "integer",
                                 "minimum": 1
+                              },
+                              "category": {
+                                "type": "string"
                               }
                             }
                           },
@@ -3506,6 +4551,18 @@
                           }
                         }
                       }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
                     }
                   }
                 }
@@ -3680,8 +4737,7 @@
                           "method",
                           "sourceType",
                           "sourceLabel",
-                          "commentRequiredOnFail",
-                          "photoRequiredOnFail",
+                          "rules",
                           "answer"
                         ],
                         "properties": {
@@ -3710,11 +4766,44 @@
                             "type": "string",
                             "nullable": true
                           },
-                          "commentRequiredOnFail": {
-                            "type": "boolean"
-                          },
-                          "photoRequiredOnFail": {
-                            "type": "boolean"
+                          "rules": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "allowedResults",
+                              "commentAllowed",
+                              "maxCommentLength",
+                              "photosAllowed",
+                              "maxPhotos",
+                              "evidenceRequiredOnFail"
+                            ],
+                            "properties": {
+                              "allowedResults": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PASS",
+                                    "FAIL"
+                                  ]
+                                }
+                              },
+                              "commentAllowed": {
+                                "type": "boolean"
+                              },
+                              "maxCommentLength": {
+                                "type": "integer"
+                              },
+                              "photosAllowed": {
+                                "type": "boolean"
+                              },
+                              "maxPhotos": {
+                                "type": "integer"
+                              },
+                              "evidenceRequiredOnFail": {
+                                "type": "boolean"
+                              }
+                            }
                           },
                           "answer": {
                             "type": "object",
@@ -3872,21 +4961,19 @@
                   "result": {
                     "type": "string",
                     "enum": [
-                      "PENDING",
                       "PASS",
-                      "FAIL",
-                      "UNABLE_TO_CHECK"
+                      "FAIL"
                     ]
                   },
                   "comment": {
                     "type": "string",
                     "nullable": true,
-                    "maxLength": 10000
+                    "maxLength": 512
                   },
                   "mediaIds": {
                     "type": "array",
                     "uniqueItems": true,
-                    "maxItems": 20,
+                    "maxItems": 5,
                     "items": {
                       "type": "integer",
                       "minimum": 1
@@ -3952,7 +5039,7 @@
                     "mediaIds": {
                       "type": "array",
                       "uniqueItems": true,
-                      "maxItems": 20,
+                      "maxItems": 5,
                       "items": {
                         "type": "integer",
                         "minimum": 1
@@ -4043,7 +5130,7 @@
         "tags": [
           "Inspections"
         ],
-        "description": "Завершение доступно только после ответа PASS или FAIL на каждый пункт; PENDING и UNABLE_TO_CHECK блокируют завершение с ошибкой 400. Повторный вызов восстанавливает отсутствующий отчёт и возвращает 200.",
+        "description": "Завершение доступно только после ответа PASS или FAIL на каждый пункт; неотвеченные пункты блокируют завершение с ошибкой 400. Повторный вызов восстанавливает отсутствующий отчёт и возвращает 200.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4175,6 +5262,27 @@
           {
             "schema": {
               "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
               "minimum": 1
             },
             "in": "path",
@@ -4196,7 +5304,10 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "items"
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
                   ],
                   "properties": {
                     "items": {
@@ -4213,6 +5324,10 @@
                           "createdAt",
                           "resolvedAt",
                           "before",
+                          "checklistItem",
+                          "evidence",
+                          "actions",
+                          "work",
                           "remediations",
                           "reinspections"
                         ],
@@ -4260,6 +5375,79 @@
                                 "url": {
                                   "type": "string"
                                 }
+                              }
+                            }
+                          },
+                          "checklistItem": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "order",
+                              "title",
+                              "description"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "order": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "evidence": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "comment",
+                              "photos"
+                            ],
+                            "properties": {
+                              "comment": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "photos": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "url"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "actions": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "submitRemediation"
+                            ],
+                            "properties": {
+                              "submitRemediation": {
+                                "type": "boolean"
                               }
                             }
                           },
@@ -4356,7 +5544,8 @@
                             "required": [
                               "id",
                               "title",
-                              "houseId"
+                              "houseId",
+                              "category"
                             ],
                             "properties": {
                               "id": {
@@ -4369,11 +5558,26 @@
                               "houseId": {
                                 "type": "integer",
                                 "minimum": 1
+                              },
+                              "category": {
+                                "type": "string"
                               }
                             }
                           }
                         }
                       }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
                     }
                   }
                 }
@@ -4482,6 +5686,27 @@
             "in": "query",
             "name": "status",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
           }
         ],
         "security": [
@@ -4498,7 +5723,10 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "items"
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
                   ],
                   "properties": {
                     "items": {
@@ -4515,6 +5743,10 @@
                           "createdAt",
                           "resolvedAt",
                           "before",
+                          "checklistItem",
+                          "evidence",
+                          "actions",
+                          "work",
                           "remediations",
                           "reinspections"
                         ],
@@ -4562,6 +5794,79 @@
                                 "url": {
                                   "type": "string"
                                 }
+                              }
+                            }
+                          },
+                          "checklistItem": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "order",
+                              "title",
+                              "description"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "order": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "evidence": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "comment",
+                              "photos"
+                            ],
+                            "properties": {
+                              "comment": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "photos": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "url"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "actions": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "submitRemediation"
+                            ],
+                            "properties": {
+                              "submitRemediation": {
+                                "type": "boolean"
                               }
                             }
                           },
@@ -4658,7 +5963,8 @@
                             "required": [
                               "id",
                               "title",
-                              "houseId"
+                              "houseId",
+                              "category"
                             ],
                             "properties": {
                               "id": {
@@ -4671,11 +5977,26 @@
                               "houseId": {
                                 "type": "integer",
                                 "minimum": 1
+                              },
+                              "category": {
+                                "type": "string"
                               }
                             }
                           }
                         }
                       }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
                     }
                   }
                 }
@@ -4937,6 +6258,27 @@
             "in": "query",
             "name": "status",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
           }
         ],
         "security": [
@@ -4953,7 +6295,10 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "items"
+                    "items",
+                    "page",
+                    "limit",
+                    "total"
                   ],
                   "properties": {
                     "items": {
@@ -4985,7 +6330,8 @@
                             "required": [
                               "id",
                               "title",
-                              "houseId"
+                              "houseId",
+                              "category"
                             ],
                             "properties": {
                               "id": {
@@ -4998,11 +6344,26 @@
                               "houseId": {
                                 "type": "integer",
                                 "minimum": 1
+                              },
+                              "category": {
+                                "type": "string"
                               }
                             }
                           }
                         }
                       }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
                     }
                   }
                 }
@@ -5486,97 +6847,6 @@
                       "REASONED_REFUSAL",
                       "ACCEPTANCE_ACT"
                     ]
-                  },
-                  "data": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "actNumber": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "city": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "contractNumber": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "contractDate": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "customerName": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "customerApartment": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "customerAuthorityBasis": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "executorOrganization": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "executorRepresentative": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "executorAuthorityBasis": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "periodFrom": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "periodTo": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "frequencyOrQuantity": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "unit": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "unitPrice": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "totalPrice": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "totalPriceWords": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      }
-                    }
                   }
                 }
               }
@@ -5876,6 +7146,42 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Default Response",
             "content": {
               "application/pdf": {
