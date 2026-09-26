@@ -1,5 +1,6 @@
 import { Icon20DocumentOutline, Icon24Attach, Icon24Dismiss } from '@vkontakte/icons';
-import { Button, Typography } from '@maxhub/max-ui';
+import { Typography } from '@maxhub/max-ui';
+import { Button } from './LegacyButton';
 import { useRef, useState } from 'react';
 
 export function AttachmentButton({ disabled = false, accept }) {

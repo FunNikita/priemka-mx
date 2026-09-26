@@ -1,0 +1,9 @@
+.legacy-button--medium { height: 40px; min-height: 40px; min-width: 40px; padding: 0 12px; border-radius: var(--size-border-radius-action-medium, 12px); }
+.legacy-button--small { height: 28px; min-height: 28px; min-width: 28px; padding: 0 8px; border-radius: var(--size-border-radius-action-small, 8px); }
+.legacy-button--large { height: 48px; min-height: 48px; padding: 0 16px; }
+
+.legacy-button--link-neutral, .legacy-button--link-contrast-static { background: transparent; padding: 0; }
+.legacy-button--link-neutral { color: var(--app-text-primary); }
+
+.legacy-icon-button--link-neutral, .legacy-icon-button--link-contrast-static { background: transparent; }
+.legacy-icon-button--link-neutral { color: var(--app-text-primary); opacity: .8; }

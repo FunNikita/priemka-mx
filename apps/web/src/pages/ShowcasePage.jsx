@@ -1,4 +1,5 @@
-import { Button, CellHeader, Container, Counter, Flex, Grid, Input, Panel, Switch, Typography } from '@maxhub/max-ui';
+import { CellHeader, Container, Counter, Flex, Grid, Input, Panel, Switch, Typography } from '@maxhub/max-ui';
+import { Button } from '../components/ui/LegacyButton';
 import { Icon24MenuOutline, Icon24MessageOutline, Icon28BookSpreadOutline, Icon28WriteOutline } from '@vkontakte/icons';
 import { useState } from 'react';
 

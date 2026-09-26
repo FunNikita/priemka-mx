@@ -1,4 +1,5 @@
-import { Button, Typography } from '@maxhub/max-ui';
+import { Typography } from '@maxhub/max-ui';
+import { Button } from './LegacyButton';
 import { Icon24Dismiss } from '@vkontakte/icons';
 
 export function Modal({ title, titleVariant = 'medium-strong', children, onClose, actions, className = '' }) {

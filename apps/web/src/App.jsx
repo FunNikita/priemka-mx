@@ -5,6 +5,7 @@ import { AchievementsPage } from './pages/AchievementsPage';
 import { AdminPage } from './pages/AdminPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { HomePage } from './pages/HomePage';
+import { InspectionsPage } from './pages/InspectionsPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ReportProblemPage } from './pages/ReportProblemPage';
 import { ShowcasePage } from './pages/ShowcasePage';
@@ -16,6 +17,7 @@ const pages = { works: WorksPage, 'report-problem': ReportProblemPage, notificat
 export default function App() {
   const [tab, setTab] = useState('home');
   const [page, setPage] = useState(null);
+  const [currentRole, setCurrentRole] = useState('admin');
   const systemScheme = useSystemColorScheme();
   const InnerPage = page ? pages[page] : null;
   const closePage = () => setPage(null);
@@ -24,8 +26,8 @@ export default function App() {
   }, [systemScheme]);
   return <div className="app-root">
     <div className={`app-scroll${page ? ' app-scroll--without-tabbar' : ''}`}>
-      {page && InnerPage ? page === 'works' ? <WorksPage onBack={closePage} onOpenReport={() => setPage('report-problem')} /> : <InnerPage onBack={closePage} /> : tab === 'home' ? <HomePage onOpen={setPage} /> : tab === 'works' ? <WorksPage onBack={() => setTab('home')} onOpenReport={() => setPage('report-problem')} /> : <AdminPage />}
+      {page && InnerPage ? page === 'works' ? <WorksPage onBack={closePage} onOpenReport={() => setPage('report-problem')} role={currentRole} /> : <InnerPage onBack={closePage} /> : tab === 'home' ? <HomePage onOpen={setPage} role={currentRole} /> : tab === 'inspections' ? <InspectionsPage /> : tab === 'works' ? <WorksPage onBack={() => setTab('home')} onOpenReport={() => setPage('report-problem')} role={currentRole} /> : <AdminPage onCurrentUserRoleChange={(role) => { setCurrentRole(role); setTab('home'); }} />}
     </div>
-    {!page ? <BottomTabBar activeTab={tab} onChange={setTab} /> : null}
+    {!page ? <BottomTabBar activeTab={tab} onChange={setTab} role={currentRole} /> : null}
   </div>;
 }

@@ -1,4 +1,5 @@
-import { Button, Typography } from '@maxhub/max-ui';
+import { Typography } from '@maxhub/max-ui';
+import { Button } from './LegacyButton';
 
 // Паттерн пустого состояния гостевых пропусков и других списков MaXline.
 export function EmptyState({ message = 'Пока нет ни одного гостевого пропуска.', actionLabel, onAction }) {

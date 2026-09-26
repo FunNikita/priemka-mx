@@ -1,4 +1,5 @@
-import { Avatar, Button, Panel, Typography } from '@maxhub/max-ui';
+import { Avatar, Panel, Typography } from '@maxhub/max-ui';
+import { Button } from '../components/ui/LegacyButton';
 import { Icon20ChevronLeftOutline, Icon20ChevronRight, Icon20ChevronRightOutline, Icon24AddCircle, Icon24Attach, Icon24DeleteOutline, Icon24Dismiss, Icon24DismissOverlay, Icon24LocationOutline, Icon28WriteOutline } from '@vkontakte/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -30,7 +31,7 @@ const EVENTS = [
   { id: 5, title: 'Убрана наледь у подъезда', place: 'Подъезд 3', status: 'accepted', statusLabel: 'Принята', tone: 'green', createdAt: '12.09.2026', displayDate: '6 сентября 08:40', description: 'Наледь у входа убрана, проход к подъезду безопасен.', deadline: '13.09.2026', executor: 'ООО «Домсервис»', image: WORK_PHOTO, photos: WORK_PHOTOS },
 ];
 
-export function WorksPage({ onBack, onOpenReport }) {
+export function WorksPage({ onBack, onOpenReport, role = 'resident' }) {
   const [filter, setFilter] = useState('all');
   const [eventsData, setEventsData] = useState(EVENTS);
   const [query, setQuery] = useState('');
@@ -101,13 +102,13 @@ export function WorksPage({ onBack, onOpenReport }) {
       description: selectedEvent.description,
       photos: selectedEvent.photos ?? (selectedEvent.image ? [selectedEvent.image] : []),
     };
-    return <ActiveWorkDetails work={work} isObserved={observedEventIds.includes(selectedEvent.id)} onBack={() => setSelectedEvent(null)} onStopObserving={() => setObservedEventIds((ids) => ids.filter((id) => id !== selectedEvent.id))} onReportResolved={() => setEventsData((items) => items.map((item) => item.id === selectedEvent.id ? { ...item, status: 'waiting-review', statusLabel: 'Ожидает проверки' } : item))} />;
+    return <ActiveWorkDetails work={work} viewerRole={role} isObserved={observedEventIds.includes(selectedEvent.id)} onBack={() => setSelectedEvent(null)} onStopObserving={() => setObservedEventIds((ids) => ids.filter((id) => id !== selectedEvent.id))} onReportResolved={() => setEventsData((items) => items.map((item) => item.id === selectedEvent.id ? { ...item, status: 'waiting-review', statusLabel: 'Ожидает проверки' } : item))} />;
   }
 
   return <Panel mode="primary" className="inner-panel house-events-panel">
     <PageHeader title="События дома" onBack={onBack} />
     <main className="panel-content house-events-content">
-      <section className="house-events-shell">
+      <section className="house-events-layout">
         <div className="house-events-toolbar">
           <button type="button" className="house-events-toolbar__report" onClick={onOpenReport}><span className="house-events-toolbar__report-icon"><Icon24AddCircle /></span><span className="house-events-toolbar__report-copy"><b>Сообщить о проблеме</b><small>Новое обращение в управляющую компанию</small></span><Icon20ChevronRight className="house-events-toolbar__report-chevron" /></button>
           <SearchInput placeholder="Поиск событий" value={query} onChange={(event) => setQuery(typeof event === 'string' ? event : event.target.value)} />
@@ -133,7 +134,7 @@ function EventPhotoGallery({ title, photos, onClose }) {
   return <div className="image-modal-backdrop" role="presentation" onClick={onClose}><section className="image-modal event-photo-gallery" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><button type="button" className="image-modal__close" aria-label="Закрыть изображения" onClick={onClose}><Icon24DismissOverlay width={24} height={24} /></button><img className="image-modal__image" src={photos[index]} alt={`${title}: фото ${index + 1}`} />{photos.length > 1 ? <><button type="button" className="event-photo-gallery__arrow event-photo-gallery__arrow--previous" aria-label="Предыдущее фото" onClick={() => setIndex((value) => (value - 1 + photos.length) % photos.length)}><Icon20ChevronLeftOutline /></button><button type="button" className="event-photo-gallery__arrow event-photo-gallery__arrow--next" aria-label="Следующее фото" onClick={() => setIndex((value) => (value + 1) % photos.length)}><Icon20ChevronRightOutline /></button><span className="event-photo-gallery__counter">{index + 1} / {photos.length}</span></> : null}</section></div>;
 }
 
-function EventDetails({ event, onBack }) {
+export function EventDetails({ event, onBack }) {
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState([]);
   const [editingCommentIndex, setEditingCommentIndex] = useState(null);

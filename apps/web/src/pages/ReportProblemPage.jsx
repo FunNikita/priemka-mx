@@ -1,4 +1,5 @@
-import { Button, Panel, Typography } from '@maxhub/max-ui';
+import { Panel, Typography } from '@maxhub/max-ui';
+import { Button } from '../components/ui/LegacyButton';
 import { Icon24AddCircle, Icon24Dismiss } from '@vkontakte/icons';
 import { useRef, useState } from 'react';
 

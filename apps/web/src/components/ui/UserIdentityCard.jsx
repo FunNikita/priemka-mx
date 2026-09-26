@@ -1,4 +1,5 @@
-import { Avatar, IconButton, Typography } from '@maxhub/max-ui';
+import { Avatar, Typography } from '@maxhub/max-ui';
+import { IconButton } from './LegacyButton';
 import { Icon16CopyOutline, Icon16Done } from '@vkontakte/icons';
 import { useState } from 'react';
 

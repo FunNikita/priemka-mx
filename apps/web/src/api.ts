@@ -10,5 +10,6 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
 
   if (initData) headers.set("X-Max-Init-Data", initData);
 
-  return fetch(`/api${path}`, { ...init, headers });
+  const url = path === "/api" || path.startsWith("/api/") ? path : `/api${path}`;
+  return fetch(url, { ...init, headers });
 }

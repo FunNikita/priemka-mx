@@ -1,4 +1,5 @@
-import { IconButton, Typography } from '@maxhub/max-ui';
+import { Typography } from '@maxhub/max-ui';
+import { IconButton } from '../ui/LegacyButton';
 import { Icon28ChevronBack } from '@vkontakte/icons';
 
 import './PageHeader.css';

@@ -1,4 +1,5 @@
-import { Avatar, Button, CellHeader, IconButton, Input, Panel, Typography } from '@maxhub/max-ui';
+import { Avatar, CellHeader, Input, Panel, Typography } from '@maxhub/max-ui';
+import { Button, IconButton } from '../components/ui/LegacyButton';
 import { Icon16CopyOutline, Icon16Done, Icon20Cancel, Icon20UserAddOutline, Icon24ChevronDown, Icon24ChevronUpSmall, Icon24Filter } from '@vkontakte/icons';
 import { useMemo, useState } from 'react';
 
@@ -6,25 +7,23 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { SearchInput } from '../components/ui/SearchInput';
 
 const ROLES = [
-  { value: 'resident', label: 'Житель', tone: 'user' },
-  { value: 'council-member', label: 'Член совета МКД', tone: 'cafeteria' },
-  { value: 'council-member-2', label: 'Член совета МКД', tone: 'council' },
-  { value: 'contractor', label: 'Представитель УО', tone: 'contractor' },
+  { value: 'council-member', label: 'Член совета', tone: 'council' },
+  { value: 'resident', label: 'Житель', tone: 'resident' },
+  { value: 'chairman', label: 'Председатель', tone: 'chairman' },
   { value: 'admin', label: 'Администратор', tone: 'admin' },
 ];
 const INITIAL_USERS = [
   { id: 1, firstName: 'Человек', lastName: 'Человеков', maxUserId: '214748', role: 'admin', photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80' },
   { id: 2, firstName: 'Анна', lastName: 'Воронова', maxUserId: '214749', role: 'resident' },
   { id: 3, firstName: 'Илья', lastName: 'Сергеев', maxUserId: '214750', role: 'council-member' },
-  { id: 4, firstName: 'Мария', lastName: 'Лебедева', maxUserId: '214751', role: 'council-member-2' },
-  { id: 5, firstName: 'Дмитрий', lastName: 'Орлов', maxUserId: '214752', role: 'contractor' },
+  { id: 4, firstName: 'Мария', lastName: 'Лебедева', maxUserId: '214751', role: 'chairman' },
 ];
 const ALL_ROLES = { value: 'all', label: 'Все роли' };
 const roleByValue = (value) => ROLES.find((item) => item.value === value) ?? ROLES[0];
 const fullName = (user) => [user.firstName, user.lastName].filter(Boolean).join(' ') || `Пользователь ${user.maxUserId}`;
 const userInitial = (user) => fullName(user).split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'П';
 
-export function AdminPage() {
+export function AdminPage({ onCurrentUserRoleChange }) {
   const [users, setUsers] = useState(INITIAL_USERS);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -36,7 +35,11 @@ export function AdminPage() {
   const visibleUsers = useMemo(() => users.filter((user) => `${fullName(user)} ${user.maxUserId}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || user.role === filter)), [users, query, filter]);
   const copy = async (id) => { try { await navigator.clipboard?.writeText(id); } finally { setCopiedId(id); window.setTimeout(() => setCopiedId((current) => current === id ? null : current), 1000); } };
   const openFilter = () => { setFilterDraft(filter); setFilterOpen(true); };
-  const saveRole = () => { setUsers((items) => items.map((user) => user.id === roleDraft.user.id ? { ...user, role: roleDraft.role } : user)); setRoleDraft(null); };
+  const saveRole = () => {
+    setUsers((items) => items.map((user) => user.id === roleDraft.user.id ? { ...user, role: roleDraft.role } : user));
+    if (roleDraft.user.id === 1) onCurrentUserRoleChange?.(roleDraft.role);
+    setRoleDraft(null);
+  };
   const addUser = () => { if (!createDraft.firstName.trim() || !createDraft.maxUserId.trim()) return; setUsers((items) => [{ id: Date.now(), firstName: createDraft.firstName.trim(), lastName: createDraft.lastName.trim(), maxUserId: createDraft.maxUserId.trim(), role: createDraft.role }, ...items]); setCreateDraft(null); };
 
   return <Panel mode="primary" className="admin-panel"><PageHeader title="Админка" />
