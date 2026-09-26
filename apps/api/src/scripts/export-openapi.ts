@@ -5,7 +5,7 @@ import { createApp } from "../app.js";
 
 const app = await createApp({
   config: { botToken: "openapi-export-placeholder", maxInitDataMaxAgeSeconds: 3600 },
-  userRepository: { isReady: async () => false, upsertFromMax: async () => undefined },
+  userRepository: { isReady: async () => false, upsertFromMax: async () => ({ id: 1, isAdmin: false }) },
   logger: false,
 });
 try {

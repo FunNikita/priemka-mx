@@ -7,16 +7,481 @@ datasource db {
   provider = "mysql"
 }
 
+enum HouseMembershipRole {
+  RESIDENT
+  CHAIRMAN
+  COUNCIL_MEMBER
+  EXECUTOR
+}
+
+enum MembershipJoinSource {
+  CHAT
+  INVITE
+  REQUEST
+  ADMIN
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+enum WorkStatus {
+  NEW
+  IN_REVIEW
+  IN_PROGRESS
+  WAITING
+  ACCEPTED
+}
+
+enum ObservationStatus {
+  NEW
+  IN_REVIEW
+  IN_PROGRESS
+  WAITING
+  ACCEPTED
+}
+
+enum ChecklistMethod {
+  VISUAL
+  DOCUMENTARY
+  COMPARATIVE
+  INSTRUMENTAL
+}
+
+enum ChecklistSourceType {
+  CONTRACT
+  REGULATION
+  RECOMMENDATION
+  INTERNAL
+}
+
+enum InspectionAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum InspectionAnswerResult {
+  PENDING
+  PASS
+  FAIL
+  UNABLE_TO_CHECK
+}
+
+enum IssueStatus {
+  OPEN
+  REMEDIATION_SUBMITTED
+  RESOLVED
+}
+
+enum ReinspectionStatus {
+  ASSIGNED
+  COMPLETED
+}
+
+enum ReinspectionResult {
+  RESOLVED
+  NOT_RESOLVED
+}
+
+enum DocumentType {
+  INSPECTION_REPORT
+  REINSPECTION_REPORT
+  REASONED_REFUSAL
+  ACCEPTANCE_ACT
+}
+
+enum DocumentStatus {
+  DRAFT
+  FINAL
+  CONFIRMED
+  SUPERSEDED
+}
+
 model User {
-  id           String   @id @default(cuid()) @db.VarChar(30)
-  maxUserId    String   @unique @db.VarChar(32)
-  firstName    String   @db.VarChar(255)
-  lastName     String   @db.VarChar(255)
-  username     String?  @db.VarChar(255)
-  languageCode String   @db.VarChar(32)
-  photoUrl     String?  @db.VarChar(2048)
-  lastAuthDate DateTime
-  lastSeenAt   DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             Int                @id @default(autoincrement())
+  maxUserId      String             @unique @db.VarChar(32)
+  isAdmin        Boolean            @default(false)
+  lastHouseId    Int?
+  firstName      String             @db.VarChar(255)
+  lastName       String             @db.VarChar(255)
+  username       String?            @db.VarChar(255)
+  languageCode   String             @db.VarChar(32)
+  photoUrl       String?            @db.VarChar(2048)
+  lastAuthDate   DateTime
+  lastSeenAt     DateTime
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  memberships    HouseMembership[]
+  subscriptions  WorkSubscription[]
+  observations   Observation[]
+  comments       Comment[]
+  media          Media[]
+  assignedWorks  Work[]
+  lastHouse      House?             @relation("LastOpenedHouse", fields: [lastHouseId], references: [id], onDelete: SetNull)
+  createdInspections Inspection[]   @relation("InspectionCreator")
+  inspectionAssignments InspectionAssignment[]
+  assignedReinspections Reinspection[]
+  createdDocuments DocumentVersion[] @relation("DocumentCreator")
+  documentConfirmations DocumentConfirmation[]
+}
+
+model House {
+  id           Int               @id @default(autoincrement())
+  address      String            @db.VarChar(512)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  memberships  HouseMembership[]
+  chat         HouseChat?
+  objects      HouseObject[]
+  works        Work[]
+  observations Observation[]
+  lastOpenedBy User[] @relation("LastOpenedHouse")
+}
+
+model HouseMembership {
+  id        Int              @id @default(autoincrement())
+  houseId   Int
+  userId    Int
+  role      HouseMembershipRole
+  status    MembershipStatus @default(PENDING)
+  joinedVia MembershipJoinSource @default(ADMIN)
+  canSignAcceptanceAct Boolean @default(false)
+  authorityBasis String? @db.VarChar(512)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  house     House            @relation(fields: [houseId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+  @@unique([houseId, userId])
+  @@index([userId, status])
+}
+
+model HouseChat {
+  id        Int      @id @default(autoincrement())
+  houseId   Int      @unique
+  title     String?  @db.VarChar(255)
+  joinUrl   String   @db.VarChar(2048)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  house     House    @relation(fields: [houseId], references: [id])
+}
+
+model HouseObject {
+  id           Int           @id @default(autoincrement())
+  houseId      Int
+  title        String        @db.VarChar(255)
+  house        House         @relation(fields: [houseId], references: [id])
+  works        Work[]
+  observations Observation[]
+}
+
+model Work {
+  id               Int                @id @default(autoincrement())
+  houseId          Int
+  houseObjectId    Int?
+  executorUserId   Int?
+  title            String             @db.VarChar(255)
+  description      String             @db.Text
+  category         String             @db.VarChar(100)
+  status           WorkStatus         @default(NEW)
+  date             DateTime           @default(now())
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  completedAt      DateTime?
+  executorName     String?            @db.VarChar(255)
+  representativeName String?          @db.VarChar(255)
+  house            House              @relation(fields: [houseId], references: [id])
+  houseObject      HouseObject?       @relation(fields: [houseObjectId], references: [id])
+  executor         User?              @relation(fields: [executorUserId], references: [id])
+  subscriptions    WorkSubscription[]
+  comments         Comment[]
+  history          WorkHistory[]
+  media            Media[]
+  inspections      Inspection[]
+  issues            Issue[]
+  documents         Document[]
+  @@index([houseId, status, date])
+}
+
+model WorkSubscription {
+  id        Int      @id @default(autoincrement())
+  workId    Int
+  userId    Int
+  createdAt DateTime @default(now())
+  work      Work     @relation(fields: [workId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  @@unique([workId, userId])
+}
+
+model WorkHistory {
+  id        Int      @id @default(autoincrement())
+  workId    Int
+  event     String   @db.VarChar(100)
+  details   String?  @db.Text
+  createdAt DateTime @default(now())
+  work      Work     @relation(fields: [workId], references: [id])
+}
+
+model Observation {
+  id            Int               @id @default(autoincrement())
+  houseId       Int
+  houseObjectId Int?
+  authorId      Int
+  title         String            @db.VarChar(255)
+  description   String            @db.Text
+  category      String            @db.VarChar(100)
+  status        ObservationStatus @default(NEW)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  house         House             @relation(fields: [houseId], references: [id])
+  houseObject   HouseObject?      @relation(fields: [houseObjectId], references: [id])
+  author        User              @relation(fields: [authorId], references: [id])
+  media         Media[]
+  @@index([houseId, status, createdAt])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  workId    Int
+  authorId  Int
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  work      Work     @relation(fields: [workId], references: [id])
+  author    User     @relation(fields: [authorId], references: [id])
+  media     Media[]
+  @@index([workId, createdAt])
+}
+
+model MediaBlob {
+  id          Int      @id @default(autoincrement())
+  sha256      String   @unique @db.Char(64)
+  mimeType    String   @db.VarChar(32)
+  size        Int
+  width       Int
+  height      Int
+  storagePath String   @db.VarChar(512)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  media       Media[]
+}
+
+model Media {
+  id            Int          @id @default(autoincrement())
+  blobId        Int
+  ownerUserId   Int
+  publicKey     String?      @unique @db.VarChar(16)
+  temporary     Boolean      @default(true)
+  expiresAt     DateTime?
+  observationId Int?
+  commentId     Int?
+  workId        Int?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  blob          MediaBlob    @relation(fields: [blobId], references: [id])
+  owner         User         @relation(fields: [ownerUserId], references: [id])
+  observation   Observation? @relation(fields: [observationId], references: [id])
+  comment       Comment?     @relation(fields: [commentId], references: [id])
+  work          Work?        @relation(fields: [workId], references: [id])
+  inspectionAnswerId Int?
+  remediationId Int?
+  reinspectionId Int?
+  inspectionAnswer InspectionAnswer? @relation(fields: [inspectionAnswerId], references: [id])
+  remediation Remediation? @relation(fields: [remediationId], references: [id])
+  reinspection Reinspection? @relation(fields: [reinspectionId], references: [id])
+  @@index([temporary, expiresAt])
+}
+
+model ChecklistTemplate {
+  id Int @id @default(autoincrement())
+  code String @unique @db.VarChar(100)
+  title String @db.VarChar(255)
+  category String @db.VarChar(100)
+  version Int @default(1)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  items ChecklistTemplateItem[]
+  inspections Inspection[]
+}
+
+model ChecklistTemplateItem {
+  id Int @id @default(autoincrement())
+  templateId Int
+  order Int
+  title String @db.VarChar(512)
+  description String? @db.Text
+  method ChecklistMethod
+  sourceType ChecklistSourceType
+  sourceLabel String? @db.VarChar(512)
+  commentRequiredOnFail Boolean @default(true)
+  photoRequiredOnFail Boolean @default(true)
+  template ChecklistTemplate @relation(fields: [templateId], references: [id])
+  @@unique([templateId, order])
+}
+
+model Inspection {
+  id Int @id @default(autoincrement())
+  workId Int
+  checklistTemplateId Int
+  templateVersion Int
+  createdByUserId Int
+  createdAt DateTime @default(now())
+  work Work @relation(fields: [workId], references: [id])
+  template ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id])
+  createdBy User @relation("InspectionCreator", fields: [createdByUserId], references: [id])
+  items InspectionChecklistItem[]
+  assignments InspectionAssignment[]
+  documents Document[]
+  @@index([workId, createdAt])
+}
+
+model InspectionChecklistItem {
+  id Int @id @default(autoincrement())
+  inspectionId Int
+  order Int
+  title String @db.VarChar(512)
+  description String? @db.Text
+  method ChecklistMethod
+  sourceType ChecklistSourceType
+  sourceLabel String? @db.VarChar(512)
+  commentRequiredOnFail Boolean
+  photoRequiredOnFail Boolean
+  inspection Inspection @relation(fields: [inspectionId], references: [id])
+  answers InspectionAnswer[]
+  @@unique([inspectionId, order])
+}
+
+model InspectionAssignment {
+  id Int @id @default(autoincrement())
+  inspectionId Int
+  assigneeUserId Int
+  status InspectionAssignmentStatus @default(ASSIGNED)
+  startedAt DateTime?
+  completedAt DateTime?
+  inspection Inspection @relation(fields: [inspectionId], references: [id])
+  assignee User @relation(fields: [assigneeUserId], references: [id])
+  answers InspectionAnswer[]
+  @@unique([inspectionId, assigneeUserId])
+  @@index([assigneeUserId, status])
+}
+
+model InspectionAnswer {
+  id Int @id @default(autoincrement())
+  assignmentId Int
+  checklistItemId Int
+  result InspectionAnswerResult @default(PENDING)
+  comment String? @db.Text
+  assignment InspectionAssignment @relation(fields: [assignmentId], references: [id])
+  checklistItem InspectionChecklistItem @relation(fields: [checklistItemId], references: [id])
+  media Media[]
+  issue Issue?
+  @@unique([assignmentId, checklistItemId])
+}
+
+model Issue {
+  id Int @id @default(autoincrement())
+  workId Int
+  inspectionAnswerId Int @unique
+  title String @db.VarChar(512)
+  description String @db.Text
+  status IssueStatus @default(OPEN)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  work Work @relation(fields: [workId], references: [id])
+  answer InspectionAnswer @relation(fields: [inspectionAnswerId], references: [id])
+  remediations Remediation[]
+  reinspections Reinspection[]
+  @@index([workId, status])
+}
+
+model Remediation {
+  id Int @id @default(autoincrement())
+  issueId Int
+  executorUserId Int
+  comment String @db.Text
+  createdAt DateTime @default(now())
+  issue Issue @relation(fields: [issueId], references: [id])
+  media Media[]
+  reinspection Reinspection?
+}
+
+model Reinspection {
+  id Int @id @default(autoincrement())
+  issueId Int
+  remediationId Int @unique
+  assigneeUserId Int
+  status ReinspectionStatus @default(ASSIGNED)
+  result ReinspectionResult?
+  comment String? @db.Text
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  issue Issue @relation(fields: [issueId], references: [id])
+  remediation Remediation @relation(fields: [remediationId], references: [id])
+  assignee User @relation(fields: [assigneeUserId], references: [id])
+  media Media[]
+  documents Document[]
+  @@index([assigneeUserId, status])
+}
+
+model Document {
+  id Int @id @default(autoincrement())
+  workId Int
+  inspectionId Int?
+  reinspectionId Int?
+  type DocumentType
+  title String @db.VarChar(255)
+  createdAt DateTime @default(now())
+  work Work @relation(fields: [workId], references: [id])
+  inspection Inspection? @relation(fields: [inspectionId], references: [id])
+  reinspection Reinspection? @relation(fields: [reinspectionId], references: [id])
+  versions DocumentVersion[]
+  @@unique([inspectionId])
+  @@unique([reinspectionId])
+  @@index([workId, type])
+}
+
+model DocumentVersion {
+  id Int @id @default(autoincrement())
+  documentId Int
+  version Int
+  status DocumentStatus @default(FINAL)
+  payloadJson Json
+  sha256 String @db.Char(64)
+  storagePath String @db.VarChar(512)
+  publicKey String @unique @db.VarChar(64)
+  createdByUserId Int
+  createdAt DateTime @default(now())
+  confirmedAt DateTime?
+  document Document @relation(fields: [documentId], references: [id])
+  createdBy User @relation("DocumentCreator", fields: [createdByUserId], references: [id])
+  confirmations DocumentConfirmation[]
+  @@unique([documentId, version])
+}
+
+model DocumentConfirmation {
+  id Int @id @default(autoincrement())
+  documentVersionId Int
+  userId Int
+  roleSnapshot String @db.VarChar(100)
+  confirmedAt DateTime @default(now())
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  @@unique([documentVersionId, userId])
+}
+
+model BotOutbox {
+  id Int @id @default(autoincrement())
+  eventKey String @unique @db.Char(64)
+  chatId String @db.VarChar(32)
+  publicKey String @db.VarChar(40)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  sentText Boolean @default(false)
+  fileToken String? @db.VarChar(512)
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([completedAt, nextAttemptAt])
 }
