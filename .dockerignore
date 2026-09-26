@@ -9,8 +9,16 @@ coverage/
 *.log
 logs/
 .cache/
+/data/
 /*.pdf
-priemka-review*.zip
+/*.zip
+/[0-9][0-9]_*.md
+/[0-9][0-9]_*.jpg
+/docs/[0-9][0-9]_*.md
+/docs/[0-9][0-9]_*.pdf
+/docs/[0-9][0-9]_*.jpg
+/docs/*.zip
+review/
 .idea/
 .vscode/
 .DS_Store

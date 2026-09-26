@@ -17,8 +17,9 @@ class MemoryUserRepository implements UserRepository {
     return this.ready;
   }
 
-  async upsertFromMax(input: UpsertMaxUserInput): Promise<void> {
+  async upsertFromMax(input: UpsertMaxUserInput): Promise<{ id: number; isAdmin: false }> {
     this.users.set(input.user.id, input);
+    return { id: 1, isAdmin: false };
   }
 }
 
@@ -105,7 +106,9 @@ describe("GET /api/me", () => {
         ip: "203.0.113.9",
         auth_date: expect.any(Number),
         user: {
-          id: "9007199254740993",
+          id: 1,
+          maxUserId: "9007199254740993",
+          isAdmin: false,
           first_name: "Макс",
           last_name: "Пользователь",
           username: null,

@@ -8,9 +8,16 @@ services:
     environment:
       NODE_ENV: production
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-${BOT_TOKEN}}
+      MAX_BOT_NAME: ${MAX_BOT_NAME}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET}
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
       MAX_INIT_DATA_MAX_AGE_SECONDS: ${MAX_INIT_DATA_MAX_AGE_SECONDS:-3600}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      MEDIA_DIR: /app/data/media
+      DOCUMENTS_DIR: /app/data/documents
+    volumes:
+      - media-data:/app/data/media
+      - documents-data:/app/data/documents
     depends_on:
       mysql:
         condition: service_healthy
@@ -36,3 +43,5 @@ services:
 
 volumes:
   mysql-data:
+  media-data:
+  documents-data:

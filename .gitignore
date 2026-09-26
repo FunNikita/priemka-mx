@@ -5,12 +5,21 @@ coverage/
 .env.*
 !.env.example
 apps/api/generated/
+/data/
 *.log
 logs/
 .cache/
 .DS_Store
+# Рабочие материалы проекта и исходные документы хакатона.
 /*.pdf
-priemka-review*.zip
+/*.zip
+/[0-9][0-9]_*.md
+/[0-9][0-9]_*.jpg
+/docs/[0-9][0-9]_*.md
+/docs/[0-9][0-9]_*.pdf
+/docs/[0-9][0-9]_*.jpg
+/docs/*.zip
+review/
 .idea/
 .vscode/
 *.swp

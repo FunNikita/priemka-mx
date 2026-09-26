@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Приёмка — проверка API",
-    "description": "Локальная проверка трёх базовых endpoint. Для синтетического /api/me запустите npm run postman:signer -w @priemka/api. Токен бота хранится только в локальном .env. Для настоящего MAX переключите maxInitDataMode на real и вставьте свежую window.WebApp.initData локально.",
+    "description": "Локальная проверка system и business API. Для synthetic MAX initData запустите npm run postman:signer -w @priemka/api; для реального запуска установите maxInitDataMode=real и вставьте свежую window.WebApp.initData локально. Секреты не нужны в коллекции.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -93,6 +93,632 @@
           }
         }
       ]
+    },
+    {
+      "name": "Business API",
+      "description": "Используйте houseId/workId из demo seed. Для media загрузите файл, затем подставьте полученный id в mediaIds запроса наблюдения или комментария.",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.variables.get('maxInitDataMode') !== 'real') {",
+              "  const keys = ['maxUserId', 'maxFirstName', 'maxLastName', 'maxUsername', 'maxLanguageCode', 'maxPhotoUrl', 'maxChatId', 'maxChatType', 'maxQueryId', 'maxStartParam', 'maxIp', 'maxAuthDate', 'maxAuthDateOffsetSeconds'];",
+              "  const profile = Object.fromEntries(keys.map(key => [key, String(pm.variables.get(key) ?? '')]));",
+              "  const response = await pm.sendRequest({",
+              "    url: 'http://127.0.0.1:36901/sign',",
+              "    method: 'POST',",
+              "    header: { 'Content-Type': 'application/json' },",
+              "    body: { mode: 'raw', raw: JSON.stringify(profile) }",
+              "  });",
+              "  if (response.code !== 200) throw new Error('Local MAX signer failed: ' + response.code);",
+              "  pm.variables.set('maxInitData', response.json().initData);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "GET /api/houses/:houseId/works",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/works"
+          }
+        },
+        {
+          "name": "GET /api/works/:workId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}"
+          }
+        },
+        {
+          "name": "POST /api/works/:workId/watch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/watch"
+          }
+        },
+        {
+          "name": "DELETE /api/works/:workId/watch",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/watch"
+          }
+        },
+        {
+          "name": "GET /api/houses/:houseId/observations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/observations"
+          }
+        },
+        {
+          "name": "POST /api/houses/:houseId/observations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/observations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"category\":\"OTHER\",\"title\":\"Тестовое наблюдение\",\"description\":\"Описание события\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/works/:workId/comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/comments"
+          }
+        },
+        {
+          "name": "POST /api/works/:workId/comments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/comments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text\":\"Тестовый комментарий\",\"mediaIds\":[]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT /api/houses/:houseId/chat",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"joinUrl\":\"{{maxJoinUrl}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/houses/:houseId/chat",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/chat"
+          }
+        },
+        {
+          "name": "POST /api/media",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/media",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/works/:workId/comments (mediaId)",
+          "description": "После POST /api/media скопируйте id ответа в переменную mediaId.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/comments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text\":\"Фото работы\",\"mediaIds\":[{{mediaId}}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow API",
+      "item": [
+        {
+          "name": "GET /api/checklist-templates?category=COMMON_AREAS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/checklist-templates?category=COMMON_AREAS"
+          }
+        },
+        {
+          "name": "GET /api/houses/{{houseId}}/members?role=COUNCIL_MEMBER",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/members?role=COUNCIL_MEMBER"
+          }
+        },
+        {
+          "name": "POST /api/works/{{workId}}/inspections",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/inspections",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"checklistTemplateId\": 1,\n  \"assigneeUserId\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/me/inspection-assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/me/inspection-assignments"
+          }
+        },
+        {
+          "name": "GET /api/inspection-assignments/{{assignmentId}}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/inspection-assignments/{{assignmentId}}"
+          }
+        },
+        {
+          "name": "PUT /api/inspection-assignments/{{assignmentId}}/answers/{{itemId}}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/inspection-assignments/{{assignmentId}}/answers/{{itemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"result\": \"PASS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/inspection-assignments/{{assignmentId}}/complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/inspection-assignments/{{assignmentId}}/complete",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/works/{{workId}}/issues",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/issues"
+          }
+        },
+        {
+          "name": "GET /api/me/issues",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/me/issues"
+          }
+        },
+        {
+          "name": "POST /api/issues/{{issueId}}/remediations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/issues/{{issueId}}/remediations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Демо: дефект устранён\",\n  \"mediaIds\": [\n    1\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/me/reinspections",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/me/reinspections"
+          }
+        },
+        {
+          "name": "GET /api/reinspections/{{reinspectionId}}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/reinspections/{{reinspectionId}}"
+          }
+        },
+        {
+          "name": "POST /api/reinspections/{{reinspectionId}}/complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/reinspections/{{reinspectionId}}/complete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"result\": \"RESOLVED\",\n  \"comment\": \"Демо: устранено\",\n  \"mediaIds\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST мотивированный отказ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/documents",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"REASONED_REFUSAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST акт приёмки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/documents",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ACCEPTANCE_ACT\",\n  \"data\": {\n    \"actNumber\": \"Демо-1\",\n    \"city\": \"Москва\",\n    \"contractNumber\": \"Демо-1\",\n    \"contractDate\": \"01.09.2026\",\n    \"customerName\": \"Никита Демо\",\n    \"customerApartment\": \"1\",\n    \"customerAuthorityBasis\": \"решение собрания собственников №1\",\n    \"executorOrganization\": \"Демо УК\",\n    \"executorRepresentative\": \"Сергей Демо\",\n    \"executorAuthorityBasis\": \"доверенность №1\",\n    \"periodFrom\": \"20.09.2026\",\n    \"periodTo\": \"25.09.2026\",\n    \"frequencyOrQuantity\": \"1\",\n    \"unit\": \"работа\",\n    \"unitPrice\": \"10 000\",\n    \"totalPrice\": \"10 000\",\n    \"totalPriceWords\": \"десять тысяч\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST подтверждение акта приёмки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/documents/{{documentId}}/confirm",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.variables.get('maxInitDataMode') !== 'real') {",
+              "  const keys = ['maxUserId', 'maxFirstName', 'maxLastName', 'maxUsername', 'maxLanguageCode', 'maxPhotoUrl', 'maxChatId', 'maxChatType', 'maxQueryId', 'maxStartParam', 'maxIp', 'maxAuthDate', 'maxAuthDateOffsetSeconds'];",
+              "  const profile = Object.fromEntries(keys.map(key => [key, String(pm.variables.get(key) ?? '')]));",
+              "  const response = await pm.sendRequest({",
+              "    url: 'http://127.0.0.1:36901/sign',",
+              "    method: 'POST',",
+              "    header: { 'Content-Type': 'application/json' },",
+              "    body: { mode: 'raw', raw: JSON.stringify(profile) }",
+              "  });",
+              "  if (response.code !== 200) throw new Error('Local MAX signer failed: ' + response.code);",
+              "  pm.variables.set('maxInitData', response.json().initData);",
+              "}"
+            ]
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -180,6 +806,46 @@
       "key": "maxAuthDateOffsetSeconds",
       "value": "0",
       "type": "string"
+    },
+    {
+      "key": "houseId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "workId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "mediaId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "maxJoinUrl",
+      "value": "https://max.ru/join/demo",
+      "type": "string"
+    },
+    {
+      "key": "assignmentId",
+      "value": "1"
+    },
+    {
+      "key": "itemId",
+      "value": "1"
+    },
+    {
+      "key": "issueId",
+      "value": "1"
+    },
+    {
+      "key": "reinspectionId",
+      "value": "1"
+    },
+    {
+      "key": "documentId",
+      "value": "1"
     }
   ]
 }
