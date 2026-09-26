@@ -13,7 +13,7 @@ async function checkMe(profile: Parameters<typeof createPostmanInitData>[1], ini
     config: { botToken, maxInitDataMaxAgeSeconds: 3600 },
     now: () => now,
     logger: false,
-    userRepository: { isReady: async () => true, upsertFromMax: async () => {} },
+    userRepository: { isReady: async () => true, upsertFromMax: async () => ({ id: 1, isAdmin: false }) },
   });
   try {
     return await app.inject({ method: "GET", url: "/api/me", headers: {
@@ -46,7 +46,9 @@ describe("local Postman MAX signer", () => {
       start_param: "custom-start",
       ip: "198.51.100.4",
       user: {
-        id: "9007199254740993",
+        id: 1,
+        maxUserId: "9007199254740993",
+        isAdmin: false,
         first_name: "Анна",
         last_name: "Тестовая",
         username: "anna_test",
@@ -96,5 +98,61 @@ describe("local Postman MAX signer", () => {
     } finally {
       await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
     }
+  });
+
+  it("includes business requests with MAX signing and reusable IDs", async () => {
+    const collection = JSON.parse(await readFile(resolve(process.cwd(), "../../docs/postman/Priemka.postman_collection.json"), "utf8"));
+    const business = collection.item.find((item: { name: string }) => item.name === "Business API");
+    const me = collection.item.find((item: { name: string }) => item.name === "GET /api/me");
+    expect(business.event.find((event: { listen: string }) => event.listen === "prerequest"))
+      .toEqual(me.event.find((event: { listen: string }) => event.listen === "prerequest"));
+    expect(collection.variable.map((variable: { key: string }) => variable.key)).toEqual(
+      expect.arrayContaining(["houseId", "workId", "mediaId", "maxJoinUrl"]),
+    );
+    const requests = business.item.map((item: { request: { method: string; url: string; header: { key: string; value: string }[] } }) => {
+      expect(item.request.header).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: "X-Max-Init-Data", value: "{{maxInitData}}" }),
+      ]));
+      return `${item.request.method} ${item.request.url}`;
+    });
+    expect(requests).toEqual(expect.arrayContaining([
+      "GET {{baseUrl}}/api/houses/{{houseId}}/works",
+      "GET {{baseUrl}}/api/works/{{workId}}",
+      "POST {{baseUrl}}/api/works/{{workId}}/watch",
+      "DELETE {{baseUrl}}/api/works/{{workId}}/watch",
+      "GET {{baseUrl}}/api/houses/{{houseId}}/observations",
+      "POST {{baseUrl}}/api/houses/{{houseId}}/observations",
+      "GET {{baseUrl}}/api/works/{{workId}}/comments",
+      "POST {{baseUrl}}/api/works/{{workId}}/comments",
+      "PUT {{baseUrl}}/api/houses/{{houseId}}/chat",
+      "DELETE {{baseUrl}}/api/houses/{{houseId}}/chat",
+      "POST {{baseUrl}}/api/media",
+    ]));
+  });
+  it("includes workflow requests with the same MAX signing and no bot secret", async () => {
+    const collection = JSON.parse(await readFile(resolve(process.cwd(), "../../docs/postman/Priemka.postman_collection.json"), "utf8"));
+    const business = collection.item.find((item: { name: string }) => item.name === "Business API");
+    const workflow = collection.item.find((item: { name: string }) => item.name === "Workflow API");
+    expect(workflow.event).toEqual(business.event);
+    const paths = workflow.item.map((item: { request: { method: string; url: string; header: { key: string; value: string }[] } }) => {
+      expect(item.request.header).toEqual(expect.arrayContaining([expect.objectContaining({ key: "X-Max-Init-Data", value: "{{maxInitData}}" })]));
+      return `${item.request.method} ${item.request.url}`;
+    });
+    expect(paths).toEqual(expect.arrayContaining([
+      "GET {{baseUrl}}/api/checklist-templates?category=COMMON_AREAS",
+      "POST {{baseUrl}}/api/works/{{workId}}/inspections",
+      "PUT {{baseUrl}}/api/inspection-assignments/{{assignmentId}}/answers/{{itemId}}",
+      "POST {{baseUrl}}/api/inspection-assignments/{{assignmentId}}/complete",
+      "POST {{baseUrl}}/api/issues/{{issueId}}/remediations",
+      "POST {{baseUrl}}/api/reinspections/{{reinspectionId}}/complete",
+      "POST {{baseUrl}}/api/works/{{workId}}/documents",
+      "POST {{baseUrl}}/api/documents/{{documentId}}/confirm",
+    ]));
+    const inspection = workflow.item.find((item: { request: { url: string; method: string } }) => item.request.url.endsWith("/inspections") && item.request.method === "POST");
+    expect(JSON.parse(inspection.request.body.raw)).toHaveProperty("assigneeUserId");
+    expect(inspection.request.body.raw).not.toContain("assigneeUserIds");
+    const act = workflow.item.find((item: { name: string }) => item.name === "POST акт приёмки");
+    expect(JSON.parse(act.request.body.raw).data).toHaveProperty("totalPriceWords");
+    expect(JSON.stringify(workflow)).not.toContain("MAX_BOT_TOKEN");
   });
 });

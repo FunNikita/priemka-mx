@@ -1,10 +1,10 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../../generated/prisma/client.js";
 
-import type { UserRepository, UpsertMaxUserInput } from "./user-repository.js";
+import type { UserIdentity, UserRepository, UpsertMaxUserInput } from "./user-repository.js";
 
 export class PrismaUserRepository implements UserRepository {
-  private readonly prisma: PrismaClient;
+  readonly prisma: PrismaClient;
 
   constructor() {
     const url = new URL(requiredEnv("DATABASE_URL"));
@@ -29,7 +29,7 @@ export class PrismaUserRepository implements UserRepository {
     }
   }
 
-  async upsertFromMax({ user, authDate, seenAt }: UpsertMaxUserInput): Promise<void> {
+  async upsertFromMax({ user, authDate, seenAt }: UpsertMaxUserInput): Promise<UserIdentity> {
     const data = {
       firstName: user.firstName,
       lastName: user.lastName,
@@ -39,7 +39,7 @@ export class PrismaUserRepository implements UserRepository {
       lastAuthDate: new Date(authDate * 1000),
       lastSeenAt: seenAt,
     };
-    await this.prisma.user.upsert({ where: { maxUserId: user.id }, create: { maxUserId: user.id, ...data }, update: data });
+    return this.prisma.user.upsert({ where: { maxUserId: user.id }, create: { maxUserId: user.id, ...data }, update: data, select: { id: true, isAdmin: true } });
   }
 
   async close(): Promise<void> {
