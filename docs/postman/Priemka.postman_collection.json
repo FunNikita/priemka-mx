@@ -121,6 +121,132 @@
       ],
       "item": [
         {
+          "name": "List/search houses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses?q={{houseSearch}}&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Request house access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/join-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cancel my join request",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/join-requests/me"
+          }
+        },
+        {
+          "name": "List pending join requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/join-requests?status=PENDING&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Approve join request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/join-requests/{{membershipId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"decision\": \"APPROVE\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reject join request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/join-requests/{{membershipId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"decision\": \"REJECT\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "GET /api/houses/:houseId/works",
           "request": {
             "method": "GET",
@@ -805,6 +931,16 @@
     {
       "key": "maxAuthDateOffsetSeconds",
       "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "houseSearch",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "membershipId",
+      "value": "1",
       "type": "string"
     },
     {
