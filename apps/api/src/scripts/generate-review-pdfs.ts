@@ -3,8 +3,7 @@ import { join, resolve } from "node:path";
 
 import { newPublicDocumentKey, renderDocumentPdf, type DocumentPayload } from "../documents.js";
 
-const review = resolve(process.cwd(), "../../review");
-const destination = join(review, "examples");
+const destination = resolve(process.cwd(), "../../examples");
 const fixture = (name: string) => resolve(process.cwd(), "src/test/fixtures/review-pdfs", name);
 const beforeWide = fixture("door-before-landscape.png");
 const beforeTall = fixture("closer-before-portrait.png");
@@ -26,11 +25,11 @@ const examples = [
     checklist: [
       { order: 1, title: "Дверь закрывается полностью", method: "VISUAL", result: "FAIL", comment: "Доводчик не закрывает дверь до конца" },
       { order: 2, title: "Крепления без повреждений", method: "VISUAL", result: "PASS", comment: null },
-      { order: 3, title: "Проверена комплектация по договору", method: "DOCUMENTARY", result: "PASS", comment: null },
+      { order: 3, title: "Проверена комплектация двери", method: "DOCUMENTARY", result: "PASS", comment: null },
     ],
     issues: [{ title: "Дверь закрывается полностью", comment: "Доводчик не закрывает дверь до конца", checkedAt: actor.at }],
     summary: "Выявлено замечаний: 1. Требуется устранение замечаний.",
-    photoGroups: [{ title: "ФОТОМАТЕРИАЛЫ", photos: [beforeTall, beforeWide, afterWide] }],
+    photoGroups: [{ title: "Пункт 1. Дверь закрывается полностью — Доводчик не закрывает дверь до конца", photos: [beforeTall, beforeWide] }, { title: "Пункт 2. Крепления без повреждений", photos: [afterWide] }],
   } },
   { name: "02-reasoned-refusal.pdf", type: "REASONED_REFUSAL" as const, payload: {
     ...common, actor: { name: "Никита Демо", role: "CHAIRMAN", at: "2026-09-25T12:30:00.000Z" },
@@ -40,7 +39,8 @@ const examples = [
   } },
   { name: "03-acceptance-act.pdf", type: "ACCEPTANCE_ACT" as const, payload: {
     ...common,
-    act: { actNumber: "Демо-1", city: "Москва", contractNumber: "Демо-1", contractDate: "01.09.2026", customerName: "Никита Демо", customerApartment: "1", customerAuthorityBasis: "решения собрания собственников №1", executorOrganization: "Демо УК", executorRepresentative: "Сергей Демо", executorAuthorityBasis: "доверенности №1", periodFrom: "20.09.2026", periodTo: "25.09.2026", frequencyOrQuantity: "1", unit: "работа", unitPrice: "10 000", totalPrice: "10 000", totalPriceWords: "десять тысяч" },
+    rows: [{ label: "Категория", value: "Входная группа" }, { label: "Представитель исполнителя", value: "Сергей Демо" }, { label: "Проверено пунктов", value: "3" }, { label: "Замечаний устранено", value: "1" }],
+    summary: "Все 1 замечаний устранены.",
     confirmations: [{ name: "Сергей Демо", role: "EXECUTOR", at: "2026-09-25T12:00:00.000Z" }, { name: "Никита Демо", role: "CHAIRMAN", at: "2026-09-25T12:30:00.000Z" }],
   } },
 ];

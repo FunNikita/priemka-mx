@@ -5,4 +5,5 @@ export type MaxLaunchContext = {
   chat?: { id: string; type: "DIALOG" | "CHAT" | "CHANNEL" };
   startParam?: string;
 };
+/** Public MVP API routes and DTOs. */
 export * from "./api.js";

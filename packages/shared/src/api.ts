@@ -5,7 +5,7 @@ export type MembershipJoinSource = "CHAT" | "INVITE" | "REQUEST" | "ADMIN";
 export type HouseAccessStatus = "NONE" | MembershipStatus;
 export type WorkStatus = "NEW" | "IN_REVIEW" | "IN_PROGRESS" | "WAITING" | "ACCEPTED";
 export type IssueStatus = "OPEN" | "REMEDIATION_SUBMITTED" | "RESOLVED";
-export type InspectionAnswerResult = "PENDING" | "PASS" | "FAIL" | "UNABLE_TO_CHECK";
+export type InspectionAnswerResult = "PENDING" | "PASS" | "FAIL";
 export type ReinspectionResult = "RESOLVED" | "NOT_RESOLVED";
 export type DocumentType = "INSPECTION_REPORT" | "REINSPECTION_REPORT" | "REASONED_REFUSAL" | "ACCEPTANCE_ACT";
 export type DocumentStatus = "DRAFT" | "FINAL" | "CONFIRMED" | "SUPERSEDED";
@@ -18,13 +18,13 @@ export type PageQuery = { page?: number; limit?: number };
 export type Page<T> = { items: T[]; page: number; limit: number; total: number };
 export type Items<T> = { items: T[] };
 export type HouseRef = { id: Id; address: string };
-export type Permissions = { viewWorks: boolean; viewObservations: boolean; viewHouseChat: boolean; createObservation: boolean; commentWork: boolean; watchWork: boolean; manageHouseChat: boolean; assignInspectors: boolean; performInspection: boolean; reportRemediation: boolean; confirmWorkResult: boolean; reviewJoinRequests: boolean };
-export type MeResponse = { query_id?: string; ip?: string; auth_date: number; user: { id: Id; maxUserId: string; isAdmin: boolean; first_name: string; last_name: string; username: string | null; language_code: string; photo_url: string | null }; chat?: { id: string; type: "DIALOG" | "CHAT" | "CHANNEL" }; start_param?: string; houses: (HouseRef & { role: HouseMembershipRole; status: MembershipStatus; joinedVia: MembershipJoinSource; permissions: Permissions })[] };
+export type Permissions = { viewWorks: boolean; viewObservations: boolean; viewHouseChat: boolean; createObservation: boolean; commentWork: boolean; watchWork: boolean; manageHouseChat: boolean; assignInspector: boolean; performInspection: boolean; reviewJoinRequests: boolean };
+export type MeResponse = { query_id?: string; ip?: string; auth_date: number; user: { id: Id; maxUserId: string; isAdmin: boolean; first_name: string; last_name: string; username: string | null; language_code: string; photo_url: string | null }; chat?: { id: string; type: "DIALOG" | "CHAT" | "CHANNEL" }; start_param?: string; houses: (HouseRef & { role: HouseMembershipRole; status: MembershipStatus; joinedVia: MembershipJoinSource; executorCompanyName: string | null; permissions: Permissions })[] };
 
 export type ListHousesQuery = PageQuery & { q?: string };
 export type HouseListItem = HouseRef & { access: { status: HouseAccessStatus; role: HouseMembershipRole | null; joinedVia: MembershipJoinSource | null }; actions: { open: boolean; requestAccess: boolean; cancelRequest: boolean } };
 export type ListHousesResponse = Page<HouseListItem>;
-export type JoinRequest = { id: Id; houseId: Id; role: "RESIDENT"; status: MembershipStatus; joinedVia: "REQUEST"; createdAt: IsoDateTime; updatedAt: IsoDateTime };
+export type JoinRequest = { id: Id; houseId: Id; role: "RESIDENT"; status: MembershipStatus; joinedVia: "REQUEST"; executorCompanyName: string | null; createdAt: IsoDateTime; updatedAt: IsoDateTime };
 export type CreateJoinRequestResponse = JoinRequest;
 export type CancelJoinRequestResponse = void; // HTTP 204
 export type ListJoinRequestsQuery = PageQuery & { status?: MembershipStatus };
@@ -32,13 +32,17 @@ export type JoinRequestWithUser = JoinRequest & { user: { id: Id; firstName: str
 export type ListJoinRequestsResponse = Page<JoinRequestWithUser>;
 export type ReviewJoinRequestBody = { decision: "APPROVE" | "REJECT" };
 export type ReviewJoinRequestResponse = JoinRequest;
+export type Membership = { id: Id; houseId: Id; role: HouseMembershipRole; status: MembershipStatus; joinedVia: MembershipJoinSource; executorCompanyName: string | null; createdAt: IsoDateTime; updatedAt: IsoDateTime };
+export type SelfRoleBody = { role: HouseMembershipRole; executorCompanyName?: string };
+export type AdminMembershipBody = SelfRoleBody & { status: MembershipStatus };
+export type AdminUser = { id: Id; maxUserId: string; firstName: string; lastName: string; username: string | null; photoUrl: string | null; memberships: { id: Id; houseId: Id; houseAddress: string; role: HouseMembershipRole; status: MembershipStatus; joinedVia: MembershipJoinSource; executorCompanyName: string | null }[] };
 
 export type MediaRef = { id: Id; url: string; width: number; height: number; mimeType: string; size: number };
 export type WorkflowMediaRef = { id: Id; url: string };
 export type Author = { id: Id; firstName: string; lastName: string };
 export type WorkCard = { id: Id; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; isWatching: boolean; media: MediaRef[] };
 export type WorkDocument = { id: Id; type: DocumentType; title: string; version: number; status: DocumentStatus; createdAt: IsoDateTime; confirmedAt: IsoDateTime | null; fileUrl: string; actions: { confirm: boolean } };
-export type WorkDetail = { id: Id; house: HouseRef; houseObject: { id: Id; title: string } | null; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; dates: { createdAt: IsoDateTime; updatedAt: IsoDateTime; completedAt: IsoDateTime | null }; history: { id: Id; event: string; details: string | null; createdAt: IsoDateTime }[]; media: MediaRef[]; executor: string | null; representative: { id: Id; name: string; phone: string | null; maxUrl: string | null } | null; isWatching: boolean; actions: { watch: boolean; unwatch: boolean; comment: boolean; reportRemediation: boolean; assignInspectors: boolean; performInspection: boolean; generateReasonedRefusal: boolean; generateAcceptanceAct: boolean; confirmAcceptance: boolean; manageDocuments: boolean }; documents: WorkDocument[] };
+export type WorkDetail = { id: Id; house: HouseRef; houseObject: { id: Id; title: string } | null; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; dates: { createdAt: IsoDateTime; updatedAt: IsoDateTime; completedAt: IsoDateTime | null; submittedForInspectionAt: IsoDateTime | null }; history: { id: Id; event: string; details: string | null; createdAt: IsoDateTime }[]; media: MediaRef[]; executor: string | null; representative: { id: Id; name: string; phone: string | null; maxUrl: string | null } | null; isWatching: boolean; actions: { watch: boolean; unwatch: boolean; comment: boolean; submitForInspection: boolean; reportRemediation: boolean; assignInspector: boolean; performInspection: boolean; generateReasonedRefusal: boolean; generateAcceptanceAct: boolean; confirmAcceptance: boolean; manageDocuments: boolean }; documents: WorkDocument[] };
 export type ListWorksQuery = PageQuery & { status?: WorkStatus };
 export type ListWorksResponse = Page<WorkCard> & { house: HouseRef & { chat: { title: string | null; joinUrl: string } | null }; actions: { manageChat: boolean } };
 export type Observation = { id: Id; title: string; description: string; category: string; status: WorkStatus; createdAt: IsoDateTime; author: Author; media: MediaRef[] };
@@ -49,18 +53,18 @@ export type CreateCommentBody = { text?: string; mediaIds?: Id[] };
 export type ChatResponse = { title: string | null; joinUrl: string };
 export type UploadMediaBody = FormData;
 
-export type ChecklistTemplateItem = { id: Id; order: number; title: string; description: string | null; method: string; sourceType: string; sourceLabel: string | null; commentRequiredOnFail: boolean; photoRequiredOnFail: boolean };
+export type ChecklistRules = { allowedResults: ("PASS" | "FAIL")[]; commentAllowed: boolean; photosAllowed: boolean; maxCommentLength: number; maxPhotos: number; evidenceRequiredOnFail: boolean };
+export type ChecklistTemplateItem = { id: Id; order: number; title: string; description: string | null; method: string; sourceType: string; sourceLabel: string | null; rules: ChecklistRules };
 export type ChecklistTemplate = { id: Id; code: string; title: string; category: string; version: number; active: boolean; items: ChecklistTemplateItem[] };
-export type WorkRef = { id: Id; title: string; houseId: Id };
+export type WorkRef = { id: Id; title: string; houseId: Id; category: string };
 export type InspectionAssignmentSummary = { id: Id; status: InspectionAssignmentStatus; work: WorkRef; inspectionId: Id };
 export type InspectionAssignmentDetail = { id: Id; status: InspectionAssignmentStatus; work: { id: Id; title: string }; inspection: { id: Id; templateVersion: number }; checklist: (ChecklistTemplateItem & { answer: { result: InspectionAnswerResult; comment: string | null; media: WorkflowMediaRef[] } })[]; actions: { save: boolean; complete: boolean } };
-export type SaveInspectionAnswerBody = { result: InspectionAnswerResult; comment?: string | null; mediaIds?: Id[] };
+export type SaveInspectionAnswerBody = { result: "PASS" | "FAIL"; comment?: string | null; mediaIds?: Id[] };
 export type SaveInspectionAnswerResponse = { id: Id; result: InspectionAnswerResult; comment: string | null; mediaIds: Id[] };
-export type Issue = { id: Id; workId: Id; title: string; description: string; status: IssueStatus; createdAt: IsoDateTime; resolvedAt: IsoDateTime | null; before: WorkflowMediaRef[]; remediations: { id: Id; comment: string; createdAt: IsoDateTime; after: WorkflowMediaRef[] }[]; reinspections: { id: Id; status: ReinspectionStatus; result: ReinspectionResult | null; comment: string | null; createdAt: IsoDateTime; completedAt: IsoDateTime | null }[]; work?: WorkRef };
+export type Issue = { id: Id; workId: Id; title: string; description: string; status: IssueStatus; createdAt: IsoDateTime; resolvedAt: IsoDateTime | null; before: WorkflowMediaRef[]; checklistItem: { id: Id; order: number; title: string; description: string | null }; evidence: { comment: string | null; photos: WorkflowMediaRef[] }; actions: { submitRemediation: boolean }; remediations: { id: Id; comment: string; createdAt: IsoDateTime; after: WorkflowMediaRef[] }[]; reinspections: { id: Id; status: ReinspectionStatus; result: ReinspectionResult | null; comment: string | null; createdAt: IsoDateTime; completedAt: IsoDateTime | null }[]; work: WorkRef };
 export type ReinspectionSummary = { id: Id; status: ReinspectionStatus; issueId: Id; work: WorkRef };
 export type ReinspectionDetail = { id: Id; status: ReinspectionStatus; result: ReinspectionResult | null; issue: { id: Id; title: string; description: string; before: WorkflowMediaRef[] }; remediation: { id: Id; comment: string; after: WorkflowMediaRef[] }; actions: { complete: boolean } };
-export type AcceptanceActData = Record<"actNumber" | "city" | "contractNumber" | "contractDate" | "customerName" | "customerApartment" | "customerAuthorityBasis" | "executorOrganization" | "executorRepresentative" | "executorAuthorityBasis" | "periodFrom" | "periodTo" | "frequencyOrQuantity" | "unit" | "unitPrice" | "totalPrice" | "totalPriceWords", string>;
-export type CreateDocumentBody = { type: "REASONED_REFUSAL" } | { type: "ACCEPTANCE_ACT"; data: AcceptanceActData };
+export type CreateDocumentBody = { type: "REASONED_REFUSAL" | "ACCEPTANCE_ACT" };
 export type CreateDocumentResponse = { id: Id; version: number; status: DocumentStatus; fileUrl: string };
 export type ConfirmDocumentResponse = { status: DocumentStatus; confirmations?: number; version?: number; fileUrl?: string };
 
@@ -73,28 +77,33 @@ export interface ApiContract {
   cancelJoinRequest: Route<"DELETE", "/api/houses/:houseId/join-requests/me", { houseId: Id }, never, never, CancelJoinRequestResponse>;
   joinRequests: Route<"GET", "/api/houses/:houseId/join-requests", { houseId: Id }, ListJoinRequestsQuery, never, ListJoinRequestsResponse>;
   reviewJoinRequest: Route<"PATCH", "/api/houses/:houseId/join-requests/:membershipId", { houseId: Id; membershipId: Id }, never, ReviewJoinRequestBody, ReviewJoinRequestResponse>;
+  selfMembership: Route<"PATCH", "/api/me/houses/:houseId/membership", { houseId: Id }, never, SelfRoleBody, Membership>;
+  adminUsers: Route<"GET", "/api/admin/users", never, PageQuery & { q?: string }, never, Page<AdminUser>>;
+  adminMembership: Route<"PUT", "/api/admin/houses/:houseId/members/:userId", { houseId: Id; userId: Id }, never, AdminMembershipBody, Membership>;
+  createWork: Route<"POST", "/api/houses/:houseId/works", { houseId: Id }, never, { executorUserId: Id; title: string; description: string; category: string }, { id: Id }>;
+  submitForInspection: Route<"POST", "/api/works/:workId/submit-for-inspection", { workId: Id }, never, EmptyBody, { submittedForInspectionAt: IsoDateTime }>;
   houseWorks: Route<"GET", "/api/houses/:houseId/works", { houseId: Id }, ListWorksQuery, never, ListWorksResponse>;
   work: Route<"GET", "/api/works/:workId", { workId: Id }, never, never, WorkDetail>;
   watchWork: Route<"POST", "/api/works/:workId/watch", { workId: Id }, never, never, void>;
   unwatchWork: Route<"DELETE", "/api/works/:workId/watch", { workId: Id }, never, never, void>;
   observations: Route<"GET", "/api/houses/:houseId/observations", { houseId: Id }, ListObservationsQuery, never, Page<Observation>>;
   createObservation: Route<"POST", "/api/houses/:houseId/observations", { houseId: Id }, never, CreateObservationBody, { id: Id; status: WorkStatus }>;
-  comments: Route<"GET", "/api/works/:workId/comments", { workId: Id }, never, never, Items<Comment>>;
+  comments: Route<"GET", "/api/works/:workId/comments", { workId: Id }, PageQuery, never, Page<Comment>>;
   createComment: Route<"POST", "/api/works/:workId/comments", { workId: Id }, never, CreateCommentBody, { id: Id }>;
   setHouseChat: Route<"PUT", "/api/houses/:houseId/chat", { houseId: Id }, never, { joinUrl: string }, ChatResponse>;
   deleteHouseChat: Route<"DELETE", "/api/houses/:houseId/chat", { houseId: Id }, never, never, void>;
   uploadMedia: Route<"POST", "/api/media", never, never, UploadMediaBody, { id: Id }>;
   checklistTemplates: Route<"GET", "/api/checklist-templates", never, { category?: string }, never, Items<ChecklistTemplate>>;
-  houseCouncilMembers: Route<"GET", "/api/houses/:houseId/members", { houseId: Id }, { role: "COUNCIL_MEMBER" }, never, Items<{ id: Id; name: string }>>;
+  houseCouncilMembers: Route<"GET", "/api/houses/:houseId/members", { houseId: Id }, { role: "COUNCIL_MEMBER" | "EXECUTOR" }, never, Items<{ id: Id; name: string; executorCompanyName: string | null }>>;
   createInspection: Route<"POST", "/api/works/:workId/inspections", { workId: Id }, never, { checklistTemplateId: Id; assigneeUserId: Id }, { id: Id }>;
-  myInspectionAssignments: Route<"GET", "/api/me/inspection-assignments", never, { houseId?: Id; status?: InspectionAssignmentStatus }, never, Items<InspectionAssignmentSummary>>;
+  myInspectionAssignments: Route<"GET", "/api/me/inspection-assignments", never, PageQuery & { houseId?: Id; status?: InspectionAssignmentStatus }, never, Page<InspectionAssignmentSummary>>;
   inspectionAssignment: Route<"GET", "/api/inspection-assignments/:assignmentId", { assignmentId: Id }, never, never, InspectionAssignmentDetail>;
   saveInspectionAnswer: Route<"PUT", "/api/inspection-assignments/:assignmentId/answers/:itemId", { assignmentId: Id; itemId: Id }, never, SaveInspectionAnswerBody, SaveInspectionAnswerResponse>;
   completeInspection: Route<"POST", "/api/inspection-assignments/:assignmentId/complete", { assignmentId: Id }, never, EmptyBody, { status: "COMPLETED" }>;
-  workIssues: Route<"GET", "/api/works/:workId/issues", { workId: Id }, never, never, Items<Issue>>;
-  myIssues: Route<"GET", "/api/me/issues", never, { houseId?: Id; status?: IssueStatus }, never, Items<Issue>>;
+  workIssues: Route<"GET", "/api/works/:workId/issues", { workId: Id }, PageQuery, never, Page<Issue>>;
+  myIssues: Route<"GET", "/api/me/issues", never, PageQuery & { houseId?: Id; status?: IssueStatus }, never, Page<Issue>>;
   createRemediation: Route<"POST", "/api/issues/:issueId/remediations", { issueId: Id }, never, { comment: string; mediaIds: Id[] }, { id: Id; reinspectionId: Id }>;
-  myReinspections: Route<"GET", "/api/me/reinspections", never, { houseId?: Id; status?: ReinspectionStatus }, never, Items<ReinspectionSummary>>;
+  myReinspections: Route<"GET", "/api/me/reinspections", never, PageQuery & { houseId?: Id; status?: ReinspectionStatus }, never, Page<ReinspectionSummary>>;
   reinspection: Route<"GET", "/api/reinspections/:reinspectionId", { reinspectionId: Id }, never, never, ReinspectionDetail>;
   completeReinspection: Route<"POST", "/api/reinspections/:reinspectionId/complete", { reinspectionId: Id }, never, { result: ReinspectionResult; comment?: string | null; mediaIds?: Id[] }, { status: "COMPLETED"; result: ReinspectionResult }>;
   createDocument: Route<"POST", "/api/works/:workId/documents", { workId: Id }, never, CreateDocumentBody, CreateDocumentResponse>;
@@ -109,6 +118,11 @@ export const apiRoutes = {
   cancelJoinRequest: (houseId: Id) => ({ method: "DELETE", path: `/api/houses/${houseId}/join-requests/me` } as const),
   joinRequests: (houseId: Id) => ({ method: "GET", path: `/api/houses/${houseId}/join-requests` } as const),
   reviewJoinRequest: (houseId: Id, membershipId: Id) => ({ method: "PATCH", path: `/api/houses/${houseId}/join-requests/${membershipId}` } as const),
+  selfMembership: (houseId: Id) => ({ method: "PATCH", path: `/api/me/houses/${houseId}/membership` } as const),
+  adminUsers: { method: "GET", path: "/api/admin/users" },
+  adminMembership: (houseId: Id, userId: Id) => ({ method: "PUT", path: `/api/admin/houses/${houseId}/members/${userId}` } as const),
+  createWork: (houseId: Id) => ({ method: "POST", path: `/api/houses/${houseId}/works` } as const),
+  submitForInspection: (workId: Id) => ({ method: "POST", path: `/api/works/${workId}/submit-for-inspection` } as const),
   houseWorks: (houseId: Id) => ({ method: "GET", path: `/api/houses/${houseId}/works` } as const),
   work: (workId: Id) => ({ method: "GET", path: `/api/works/${workId}` } as const),
   watchWork: (workId: Id) => ({ method: "POST", path: `/api/works/${workId}/watch` } as const),

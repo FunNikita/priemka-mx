@@ -5,20 +5,20 @@ import { createSignedMaxInitData } from "./test/helpers/max-init-data.js";
 
 const token = "test-bot-token";
 const auth = (id: number) => ({ "x-max-init-data": createSignedMaxInitData(token, { user: `{"id":${9007199254740992n + BigInt(id)},"first_name":"Имя","last_name":"Фамилия","username":null,"language_code":"ru","photo_url":null}` }) });
-type Member = { id: number; houseId: number; userId: number; role: "RESIDENT" | "COUNCIL_MEMBER" | "CHAIRMAN" | "EXECUTOR"; status: "PENDING" | "ACTIVE" | "REJECTED"; joinedVia: "CHAT" | "INVITE" | "REQUEST" | "ADMIN"; canSignAcceptanceAct: boolean; authorityBasis: string | null; createdAt: Date; updatedAt: Date };
+type Member = { id: number; houseId: number; userId: number; role: "RESIDENT" | "COUNCIL_MEMBER" | "CHAIRMAN" | "EXECUTOR"; status: "PENDING" | "ACTIVE" | "REJECTED"; joinedVia: "CHAT" | "INVITE" | "REQUEST" | "ADMIN"; executorCompanyName: string | null; canSignAcceptanceAct: boolean; authorityBasis: string | null; createdAt: Date; updatedAt: Date };
 const houses = [{ id: 1, address: "Москва, А" }, { id: 2, address: "Москва, Б" }, { id: 3, address: "Санкт-Петербург, В" }];
 
 function fixture() {
   const members: Member[] = [];
   let nextId = 1;
   const add = (houseId: number, userId: number, role: Member["role"], status: Member["status"], joinedVia: Member["joinedVia"] = "ADMIN") => {
-    const row: Member = { id: nextId++, houseId, userId, role, status, joinedVia, canSignAcceptanceAct: false, authorityBasis: null, createdAt: new Date("2026-09-25T00:00:00Z"), updatedAt: new Date("2026-09-25T00:00:00Z") };
+    const row: Member = { id: nextId++, houseId, userId, role, status, joinedVia, executorCompanyName: null, canSignAcceptanceAct: false, authorityBasis: null, createdAt: new Date("2026-09-25T00:00:00Z"), updatedAt: new Date("2026-09-25T00:00:00Z") };
     members.push(row);
     return row;
   };
   const matches = (m: Member, where: Record<string, unknown>) => Object.entries(where).every(([key, value]) => (m as unknown as Record<string, unknown>)[key] === value);
   const db = {
-    user: { findUnique: async () => ({ lastHouseId: null }) },
+    user: { findUnique: async ({ where }: { where: { id?: number } }) => where.id && where.id > 5 ? null : { id: where.id ?? 1, lastHouseId: null, maxUserId: String(9007199254740992n + BigInt(where.id ?? 1)), firstName: "Имя", lastName: "Фамилия", username: null, photoUrl: null, memberships: members.filter((m) => m.userId === where.id).map((m) => ({ ...m, house: houses.find((h) => h.id === m.houseId)! })) }, count: async () => 5, findMany: async () => Array.from({ length: 5 }, (_, index) => ({ id: index + 1, maxUserId: String(9007199254740993n + BigInt(index)), firstName: "Имя", lastName: "Фамилия", username: null, photoUrl: null, memberships: members.filter((m) => m.userId === index + 1).map((m) => ({ ...m, house: houses.find((h) => h.id === m.houseId)! })) })) },
     house: {
       findUnique: async ({ where }: { where: { id: number } }) => houses.find((h) => h.id === where.id) ?? null,
       count: async ({ where }: { where: { address?: { contains: string } } }) => houses.filter((h) => !where.address || h.address.includes(where.address.contains)).length,
@@ -46,13 +46,72 @@ function fixture() {
         for (let i = members.length - 1; i >= 0; i--) if (matches(members[i], where)) { members.splice(i, 1); count++; }
         return { count };
       },
+      findFirst: async ({ where }: { where: { houseId: number; role: Member["role"]; status: Member["status"]; userId: { not: number } } }) => members.find((m) => m.houseId === where.houseId && m.role === where.role && m.status === where.status && m.userId !== where.userId.not) ?? null,
+      upsert: async ({ where, create, update }: { where: { houseId_userId: { houseId: number; userId: number } }; create: Partial<Member> & Pick<Member, "houseId" | "userId" | "role" | "status" | "joinedVia">; update: Partial<Member> }) => {
+        const existing = members.find((m) => m.houseId === where.houseId_userId.houseId && m.userId === where.houseId_userId.userId);
+        if (existing) { Object.assign(existing, update); return existing; }
+        const row = add(create.houseId, create.userId, create.role, create.status, create.joinedVia);
+        Object.assign(row, create);
+        return row;
+      },
     },
+    $queryRaw: async () => [{ id: 1 }],
+    $transaction: async (fn: (client: unknown) => Promise<unknown>) => fn(db),
   };
-  const app = () => createApp({ config: { botToken: token, maxInitDataMaxAgeSeconds: 3600 }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin: user.id === "9007199254740997" }) }, businessDb: db as unknown as PrismaClient, logger: false, staticRoot: "/nonexistent-priemka-static" });
+  const app = (allowSelfRoleSwitch = false) => createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin: user.id === "9007199254740997" }) }, businessDb: db as unknown as PrismaClient, logger: false, staticRoot: "/nonexistent-priemka-static" });
   return { app, add, members };
 }
 
 describe("houses and join requests", () => {
+  it("switches only active own roles, retains company and enforces one active chairman", async () => {
+    const f = fixture();
+    const blocked = await f.app();
+    f.add(1, 1, "RESIDENT", "ACTIVE");
+    expect((await blocked.inject({ method: "PATCH", url: "/api/me/houses/1/membership", headers: auth(1), payload: { role: "EXECUTOR", executorCompanyName: "Компания" } })).statusCode).toBe(403);
+    await blocked.close();
+    const app = await f.app(true);
+    const patch = (userId: number, payload: object) => app.inject({ method: "PATCH", url: "/api/me/houses/1/membership", headers: auth(userId), payload });
+    try {
+      expect((await patch(2, { role: "CHAIRMAN" })).statusCode).toBe(403);
+      const pending = f.add(2, 2, "RESIDENT", "PENDING");
+      expect((await app.inject({ method: "PATCH", url: "/api/me/houses/2/membership", headers: auth(2), payload: { role: "CHAIRMAN" } })).statusCode).toBe(403);
+      pending.status = "REJECTED";
+      expect((await app.inject({ method: "PATCH", url: "/api/me/houses/2/membership", headers: auth(2), payload: { role: "CHAIRMAN" } })).statusCode).toBe(403);
+      expect((await patch(1, { role: "EXECUTOR" })).statusCode).toBe(400);
+      expect((await patch(1, { role: "EXECUTOR", executorCompanyName: "  Компания  " })).json().executorCompanyName).toBe("Компания");
+      expect((await patch(1, { role: "CHAIRMAN" })).statusCode).toBe(200);
+      f.add(1, 2, "RESIDENT", "ACTIVE");
+      expect((await patch(2, { role: "CHAIRMAN" })).statusCode).toBe(409);
+      expect((await patch(1, { role: "COUNCIL_MEMBER" })).statusCode).toBe(200);
+      expect((await patch(2, { role: "CHAIRMAN" })).statusCode).toBe(200);
+      expect((await patch(2, { role: "EXECUTOR", executorCompanyName: "Исполнитель" })).statusCode).toBe(200);
+      expect((await patch(1, { role: "CHAIRMAN" })).statusCode).toBe(200);
+      expect(f.members.find((m) => m.userId === 1)?.executorCompanyName).toBe("Компания");
+    } finally { await app.close(); }
+  });
+
+  it("restricts admin endpoints and upserts memberships without changing joinedVia", async () => {
+    const f = fixture();
+    const app = await f.app(true);
+    const path = "/api/admin/houses/1/members/2";
+    try {
+      expect((await app.inject({ method: "GET", url: "/api/admin/users", headers: auth(1) })).statusCode).toBe(403);
+      expect((await app.inject({ method: "PUT", url: path, headers: auth(1), payload: { role: "EXECUTOR", status: "ACTIVE", executorCompanyName: "Компания" } })).statusCode).toBe(403);
+      const users = await app.inject({ method: "GET", url: "/api/admin/users", headers: auth(5) });
+      expect(users.statusCode).toBe(200);
+      expect(users.json().items[0]).toEqual(expect.objectContaining({ id: 1, maxUserId: expect.any(String), memberships: [] }));
+      expect((await app.inject({ method: "PUT", url: path, headers: auth(5), payload: { role: "EXECUTOR", status: "ACTIVE" } })).statusCode).toBe(400);
+      const created = await app.inject({ method: "PUT", url: path, headers: auth(5), payload: { role: "EXECUTOR", status: "ACTIVE", executorCompanyName: "  Компания  " } });
+      expect(created.statusCode).toBe(200);
+      expect(created.json()).toEqual(expect.objectContaining({ joinedVia: "ADMIN", executorCompanyName: "Компания" }));
+      const updated = await app.inject({ method: "PUT", url: path, headers: auth(5), payload: { role: "CHAIRMAN", status: "ACTIVE" } });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json().executorCompanyName).toBe("Компания");
+      expect((await app.inject({ method: "PUT", url: "/api/admin/houses/1/members/1", headers: auth(5), payload: { role: "CHAIRMAN", status: "ACTIVE" } })).statusCode).toBe(409);
+      expect((await app.inject({ method: "GET", url: "/api/admin/users", headers: auth(5) })).json().items[1].memberships[0].houseAddress).toBe("Москва, А");
+    } finally { await app.close(); }
+  });
+
   it("lists houses for users without membership, filters and paginates, and exposes access actions", async () => {
     const f = fixture();
     const app = await f.app();
@@ -104,7 +163,7 @@ describe("houses and join requests", () => {
       rejected.canSignAcceptanceAct = true;
       rejected.authorityBasis = "old";
       expect((await post()).statusCode).toBe(200);
-      expect(rejected).toEqual(expect.objectContaining({ status: "PENDING", joinedVia: "REQUEST", canSignAcceptanceAct: false, authorityBasis: null }));
+      expect(rejected).toEqual(expect.objectContaining({ status: "PENDING", joinedVia: "REQUEST", canSignAcceptanceAct: true, authorityBasis: "old" }));
       rejected.status = "ACTIVE";
       expect((await post()).statusCode).toBe(409);
       expect((await del()).statusCode).toBe(204);
@@ -135,7 +194,7 @@ describe("houses and join requests", () => {
     } finally { await app.close(); }
   });
 
-  it("allows only this house's active chairman or admin to review resident requests", async () => {
+  it("allows only this house's active chairman to review resident requests", async () => {
     const f = fixture();
     const request = f.add(1, 1, "RESIDENT", "PENDING", "REQUEST");
     f.add(1, 2, "CHAIRMAN", "ACTIVE");
@@ -154,7 +213,7 @@ describe("houses and join requests", () => {
       expect((await decide(3, request.id, "APPROVE")).statusCode).toBe(403);
       expect((await app.inject({ method: "PATCH", url: `/api/houses/1/join-requests/${request.id}`, headers: auth(2), payload: { decision: "APPROVE", role: "CHAIRMAN" } })).statusCode).toBe(400);
       expect((await list(2)).json()).toEqual(expect.objectContaining({ total: 1, items: [expect.objectContaining({ id: request.id, user: { id: 1, firstName: "Имя", lastName: "Фамилия", photoUrl: null } })] }));
-      expect((await list(5)).statusCode).toBe(200);
+      expect((await list(5)).statusCode).toBe(403);
       expect((await decide(2, elevated.id, "APPROVE")).statusCode).toBe(404);
       expect((await decide(2, other.id, "APPROVE")).statusCode).toBe(404);
       expect((await decide(2, request.id, "APPROVE")).json().status).toBe("ACTIVE");
