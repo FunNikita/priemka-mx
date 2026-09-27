@@ -1,10 +1,9 @@
 const js = require("@eslint/js");
 const globals = require("globals");
 const reactHooks = require("eslint-plugin-react-hooks");
-const reactRefresh = require("eslint-plugin-react-refresh").default;
 const tseslint = require("typescript-eslint");
 
-module.exports = tseslint.config(
+module.exports = import("eslint-plugin-react-refresh").then(({ default: reactRefresh }) => tseslint.config(
   {
     ignores: ["**/dist/**", "**/generated/**", "**/node_modules/**", "coverage/**"],
   },
@@ -35,4 +34,4 @@ module.exports = tseslint.config(
     languageOptions: { globals: globals.node },
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
-);
+));

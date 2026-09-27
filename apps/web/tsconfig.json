@@ -6,10 +6,12 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
+    "types": ["node", "react", "react-dom", "vite/client"],
     "allowJs": true,
     "checkJs": false,
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "vite-dev-max-auth.ts"]
 }

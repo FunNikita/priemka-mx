@@ -5,7 +5,9 @@ export async function councilRequest(path, init) {
   if (!response.ok) {
     let message;
     try { message = (await response.json()).message; } catch { /* The server may return an empty error. */ }
-    throw new Error(message || `Ошибка запроса (${response.status})`);
+    const error = new Error(message || `Ошибка запроса (${response.status})`);
+    error.status = response.status;
+    throw error;
   }
   return response.status === 204 ? null : response.json();
 }
@@ -15,18 +17,34 @@ export function councilJson(method, body) {
 }
 
 export async function uploadCouncilPhoto(file) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Выберите фото JPEG, PNG или WebP.');
+  if (file.size > 10 * 1024 * 1024) throw new Error('Размер фото не должен превышать 10 МБ.');
   const form = new FormData();
   form.append('file', file);
   return councilRequest('/api/media', { method: 'POST', body: form });
 }
 
-export async function loadCouncilTasks() {
+async function loadAll(path, houseId) {
+  const items = [];
+  let page = 1;
+  let result;
+  do {
+    const query = new URLSearchParams({ page: String(page), limit: '100' });
+    if (houseId) query.set('houseId', String(houseId));
+    result = await councilRequest(`${path}?${query}`);
+    items.push(...result.items);
+    page += 1;
+  } while (items.length < result.total);
+  return items;
+}
+
+export async function loadCouncilTasks(houseId) {
   const [assignments, reinspections] = await Promise.all([
-    councilRequest('/api/me/inspection-assignments'),
-    councilRequest('/api/me/reinspections'),
+    loadAll('/api/me/inspection-assignments', houseId),
+    loadAll('/api/me/reinspections', houseId),
   ]);
   return [
-    ...assignments.items.map((item) => ({ kind: 'assignment', id: item.id, work: item.work, status: item.status })),
-    ...reinspections.items.map((item) => ({ kind: 'reinspection', id: item.id, work: item.work, issueId: item.issueId, status: item.status })),
+    ...assignments.map((item) => ({ kind: 'assignment', id: item.id, work: item.work, status: item.status })),
+    ...reinspections.map((item) => ({ kind: 'reinspection', id: item.id, work: item.work, issueId: item.issueId, status: item.status })),
   ];
 }

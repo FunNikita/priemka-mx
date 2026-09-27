@@ -247,3 +247,21 @@ button { -webkit-tap-highlight-color: transparent; }
 .home-quick-links { display: flex; gap: 10px; }
 .home-quick-links button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border: 1px solid var(--app-stroke); border-radius: 14px; background: var(--app-surface); color: var(--app-text-primary); cursor: pointer; font: inherit; }
 .home-quick-links button:hover { background: var(--app-surface-secondary); }
+.panel-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 96px; padding: 8px 4px; text-align: center; }
+.panel-state--spinner { min-height: 96px; }
+.panel-state--error { color: var(--app-text-primary); }
+.panel-state--empty { color: var(--app-text-secondary); }
+.app-root--boot { display: grid; min-height: 100dvh; place-items: center; background: #050505; color: #fff; }
+.app-root--boot .panel-state { max-width: 320px; padding: 20px; color: #fff; }
+.house-picker-group { display: flex; flex-direction: column; gap: 8px; }
+.house-picker-group + .house-picker-group { margin-top: 16px; }
+.house-picker-group > h3 { margin: 0; }
+.house-picker-action { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border: 0; border-radius: 50%; background: var(--app-surface-secondary); color: var(--app-text-primary); cursor: pointer; }
+.house-picker-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.app-center { display: flex; min-height: 100dvh; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; text-align: center; }
+.panel-state--spinner { padding: 20px 4px; }
+.panel-state__spinner { display: block; color: #b0b1b6; transform-origin: center; animation: panel-spinner-rotate .7s linear infinite; }
+@keyframes panel-spinner-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.panel-state__text { margin: 0; color: var(--app-text-secondary); }
+.panel-state__actions { display: flex; width: 100%; align-items: center; justify-content: center; }
+.app-root--boot .panel-state__text { color: #b0b1b6; }

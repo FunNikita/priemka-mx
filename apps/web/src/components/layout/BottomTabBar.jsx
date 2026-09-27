@@ -9,9 +9,9 @@ const tabs = [
   { id: 'admin', label: 'Админка', icon: Icon28UserCircleOutline },
 ];
 
-export function BottomTabBar({ activeTab, onChange, role = 'resident' }) {
+export function BottomTabBar({ activeTab, onChange, role = 'resident', isAdmin = false }) {
   const visibleTabs = tabs.filter((tab) => {
-    if (tab.id === 'admin') return role === 'admin';
+    if (tab.id === 'admin') return isAdmin;
     if (tab.id === 'inspections') return role === 'council-member';
     return true;
   });

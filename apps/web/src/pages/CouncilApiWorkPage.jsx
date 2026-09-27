@@ -3,9 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon24AddCircle, Icon24ChevronDown } from '@vkontakte/icons';
 
 import { PageHeader } from '../components/layout/PageHeader';
+import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { ErrorState } from '../components/ui/ErrorState';
 import { Button } from '../components/ui/LegacyButton';
 import { ImagePreview } from '../components/ui/ImagePreview';
 import { councilJson, councilRequest, uploadCouncilPhoto } from './councilApi';
+import { allPages } from './residentApi';
 import './HomePage.css';
 import './CouncilApiWorkPage.css';
 
@@ -27,7 +30,7 @@ function PhotoField({ photos, onChange, disabled = false, maxPhotos = 20 }) {
   const urlsRef = useRef([]);
   useEffect(() => () => urlsRef.current.forEach((url) => URL.revokeObjectURL(url)), []);
   const addFiles = (files) => {
-    const added = Array.from(files).slice(0, maxPhotos - photos.length).map((file) => {
+    const added = Array.from(files).filter((file) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 10 * 1024 * 1024).slice(0, maxPhotos - photos.length).map((file) => {
       const url = URL.createObjectURL(file);
       urlsRef.current.push(url);
       return { file, url };
@@ -79,7 +82,7 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
       const [nextDetail, nextWork, issues] = await Promise.all([
         councilRequest(isRepeat ? `/api/reinspections/${task.id}` : `/api/inspection-assignments/${task.id}`),
         councilRequest(`/api/works/${task.work.id}`),
-        isRepeat ? councilRequest(`/api/works/${task.work.id}/issues`) : Promise.resolve(null),
+        isRepeat ? allPages(`/api/works/${task.work.id}/issues`) : Promise.resolve(null),
       ]);
       setDetail(nextDetail);
       setWork(nextWork);
@@ -108,11 +111,9 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
     try {
       const photos = await Promise.all(answer.photos.map(async (photo) => photo.file ? { ...photo, id: (await uploadCouncilPhoto(photo.file)).id, file: undefined } : photo));
       await councilRequest(`/api/inspection-assignments/${task.id}/answers/${item.id}`, councilJson('PUT', { result: answer.result, comment: answer.result === 'FAIL' ? answer.comment.trim() : null, mediaIds: answer.result === 'FAIL' ? photos.map((photo) => photo.id) : [] }));
-      setAnswers((current) => ({ ...current, [item.id]: { ...answer, photos } }));
-      setDirty((current) => current.filter((id) => id !== item.id));
-      setDetail((current) => ({ ...current, status: current.status === 'ASSIGNED' ? 'IN_PROGRESS' : current.status }));
+      await load();
       onUpdated?.();
-    } catch (failure) { setError(failure.message); }
+    } catch (failure) { setError(failure.message); if (failure.status === 409) await load(); }
     finally { setBusy(false); }
   };
   const complete = async () => {
@@ -125,7 +126,7 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
       } else await councilRequest(`/api/inspection-assignments/${task.id}/complete`, councilJson('POST', {}));
       await load();
       onUpdated?.();
-    } catch (failure) { setError(failure.message); }
+    } catch (failure) { setError(failure.message); if (failure.status === 409) await load(); }
     finally { setBusy(false); }
   };
   const confirmAct = async (documentId) => {
@@ -134,19 +135,19 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
     try {
       await councilRequest(`/api/documents/${documentId}/confirm`, councilJson('POST', {}));
       await load();
-    } catch (failure) { setError(failure.message); }
+    } catch (failure) { setError(failure.message); if (failure.status === 409) await load(); }
     finally { setBusy(false); }
   };
 
   const hasAllAnswers = !isRepeat && detail?.checklist.length > 0 && detail.checklist.every((item) => item.rules.allowedResults.includes(answers[item.id]?.result) && hasRequiredEvidence(item, answers[item.id]));
-  const canComplete = isRepeat ? Boolean(review.result && (review.result === 'RESOLVED' || review.comment.trim())) : hasAllAnswers && !dirty.length;
+  const canComplete = isRepeat ? Boolean(detail?.actions.complete && review.result && (review.result === 'RESOLVED' || review.comment.trim())) : Boolean(detail?.actions.complete && hasAllAnswers && !dirty.length);
 
   return <Panel mode="primary" className="home-panel active-work-details-panel council-work-panel">
     <PageHeader title="Работа" onBack={onBack} />
     <main className="panel-content active-work-details-content">
-      {loading && !detail ? <Typography.Body>Загрузка проверки…</Typography.Body> : null}
-      {error ? <div className="council-api__error" role="alert">{error}</div> : null}
-      {!detail && !loading ? <Button mode="secondary" onClick={() => void load()}>Повторить</Button> : null}
+      {loading && !detail ? <LoadingSpinner /> : null}
+      {error && !detail ? <ErrorState message={error} onRetry={() => void load()} /> : null}
+      {error && detail ? <div className="council-api__error" role="alert">{error}</div> : null}
       {detail ? <>
         <header className="active-work-details__head"><div className="active-work-details__title-row"><Typography.Title variant="small-strong" className="council-work__title">{work?.title ?? task.work.title}</Typography.Title><Typography.Label>ID {task.work.id}</Typography.Label></div></header>
         {work ? <section className="active-work-details__card">

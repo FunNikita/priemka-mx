@@ -301,3 +301,8 @@
   :root[data-color-scheme='light'] .house-events-address__button { background: #0D7AFB; }
   :root[data-color-scheme='light'] .house-events-address__button svg { color: #fff; }
 }
+.house-event-card { display: flex; flex-direction: column; }
+.house-event-card__main { width: 100%; }
+.house-event-card__type { width: fit-content; color: #0d7afb !important; font-weight: 600; }
+.house-event-card--observation .house-event-card__type { color: #a78bfa !important; }
+.house-event-card .photo-strip-wrap { width: 100%; }

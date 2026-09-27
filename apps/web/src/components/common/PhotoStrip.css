@@ -1,0 +1,18 @@
+.photo-strip-wrap { position: relative; min-width: 0; }
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x; cursor: grab; }
+.photo-strip:active { cursor: grabbing; }
+.photo-strip::-webkit-scrollbar { display: none; }
+.photo-strip__item { width: 100px; height: 100px; flex: 0 0 100px; overflow: hidden; padding: 0; border: 0; border-radius: 14px; background: var(--app-surface-secondary); cursor: zoom-in; scroll-snap-align: start; }
+.photo-image { position: relative; display: grid; width: 100%; height: 100%; place-items: center; }
+.photo-image > img { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.photo-image > img.photo-image__loaded { opacity: 1; }
+.photo-image__retry { position: relative; z-index: 1; display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 50%; background: var(--app-surface-primary); color: var(--app-text-primary); cursor: pointer; }
+.photo-strip-arrow { position: absolute; z-index: 2; top: 32px; display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 50%; background: rgb(0 0 0 / 65%); color: #fff; opacity: 0; transition: opacity .18s ease; cursor: pointer; }
+.photo-strip-wrap:hover .photo-strip-arrow, .photo-strip-arrow:focus-visible { opacity: 1; }
+.photo-strip-arrow--left { left: 5px; }.photo-strip-arrow--right { right: 5px; }
+.event-photo-gallery.image-modal { width: max-content; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); box-sizing: border-box; }
+.photo-gallery-area { display: grid; width: max-content; max-width: 100%; min-width: 80px; min-height: 80px; place-items: center; cursor: pointer; }
+.photo-gallery-area .photo-image--full { display: grid; width: max-content; max-width: 100%; height: auto; }
+.photo-gallery-area .photo-image > img { position: static; display: block; width: auto; height: auto; max-width: min(692px, calc(100vw - 56px)); max-height: calc(100dvh - 56px); object-fit: contain; }
+@media (pointer: coarse) { .photo-strip-arrow { opacity: 1; } }
+@media (max-width: 380px) { .photo-strip__item { width: 88px; height: 88px; flex-basis: 88px; } }
