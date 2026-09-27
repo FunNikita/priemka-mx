@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -65,14 +65,29 @@ describe("system routes", () => {
     }
   });
 
-  it("serves the SPA and falls back for future frontend routes", async () => {
+  it("serves the SPA only under /app/ and keeps missing assets and other routes as 404", async () => {
     const staticRoot = await mkdtemp(join(tmpdir(), "priemka-web-"));
     await writeFile(join(staticRoot, "index.html"), "<main>Приёмка SPA</main>");
+    await mkdir(join(staticRoot, "assets"));
+    await writeFile(join(staticRoot, "assets", "main.js"), "console.log('app');");
     const { app } = await testApp(new MemoryUserRepository(), { staticRoot });
     try {
-      expect((await app.inject({ method: "GET", url: "/" })).body).toContain("Приёмка SPA");
-      expect((await app.inject({ method: "GET", url: "/admin" })).body).toContain("Приёмка SPA");
+      const index = await app.inject({ method: "GET", url: "/app/" });
+      expect(index.statusCode).toBe(200);
+      expect(index.headers["content-type"]).toContain("text/html");
+      expect(index.body).toContain("Приёмка SPA");
+      const redirect = await app.inject({ method: "GET", url: "/app" });
+      expect(redirect.statusCode).toBe(308);
+      expect(redirect.headers.location).toBe("/app/");
+      expect((await app.inject({ method: "GET", url: "/app/foo" })).body).toContain("Приёмка SPA");
+      expect((await app.inject({ method: "GET", url: "/app/assets/main.js" })).statusCode).toBe(200);
+      const missingAsset = await app.inject({ method: "GET", url: "/app/assets/not-existing.js" });
+      expect(missingAsset.statusCode).toBe(404);
+      expect(missingAsset.headers["content-type"]).not.toContain("text/html");
+      expect((await app.inject({ method: "GET", url: "/" })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/dsfsdf" })).statusCode).toBe(404);
       expect((await app.inject({ method: "GET", url: "/api/unknown" })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/max/nonexistent" })).statusCode).toBe(404);
     } finally {
       await app.close();
       await rm(staticRoot, { recursive: true, force: true });
