@@ -25,18 +25,25 @@ function fixture() {
   let company: string | null = null;
   const createdWorks: Array<Record<string, unknown>> = [];
   const historyEvents: Array<Record<string, unknown>> = [];
+  const activityEvents: Array<Record<string, unknown>> = [];
   const subscriptions = new Set<string>();
   const media = new Map<number, MediaRow>();
   const blobs = new Map<number, BlobRow>();
   const observations: Array<Record<string, unknown>> = [];
+  const observationSubscriptions = new Map<string, { reason: string }>();
+  const outboxJobs = new Map<string, Record<string, unknown>>();
   const comments: Array<Record<string, unknown>> = [];
   let chat: { title: string | null; joinUrl: string } | null = null;
   const house = { id: 1, address: "Тестовая, 1" };
-  const work = { id: 7, houseId: 1, executorUserId: null as number | null, house, houseObject: null, executor: null as { id: number; firstName: string; lastName: string } | null, title: "Лифт", description: "Ремонт", category: "ELEVATOR", status: "NEW" as string, date: new Date("2026-09-24T00:00:00Z"), createdAt: new Date("2026-09-24T00:00:00Z"), updatedAt: new Date("2026-09-24T00:00:00Z"), completedAt: null, submittedForInspectionAt: null as Date | null, executorName: null, representativeName: null, media: [], history: [] };
+  const work = { id: 7, houseId: 1, executorUserId: null as number | null, house, houseObject: null, executor: null as { id: number; firstName: string; lastName: string } | null, title: "Лифт", description: "Ремонт", category: "ELEVATOR", status: "NEW" as string, date: new Date("2026-09-24T00:00:00Z"), createdAt: new Date("2026-09-24T00:00:00Z"), updatedAt: new Date("2026-09-24T00:00:00Z"), completedAt: null, submittedForInspectionAt: null as Date | null, executorName: null as string | null, representativeName: null as string | null, media: [], history: [] };
   const user = { id: 1, firstName: "Макс", lastName: "Пользователь" };
+  const matchesWork = (where: { status?: string; executorUserId?: number; sourceObservationId?: null | { not: null } }) =>
+    (!where.status || where.status === work.status) &&
+    (!where.executorUserId || where.executorUserId === work.executorUserId) &&
+    (where.sourceObservationId === undefined || (where.sourceObservationId === null) !== !!(work as typeof work & { sourceObservationId?: number }).sourceObservationId);
   let lastHouseId: number | null = null;
   const db = {
-    user: { findUniqueOrThrow: async () => ({ id: 1 }), findUnique: async () => ({ lastHouseId }), update: async ({ data }: { data: { lastHouseId: number } }) => { lastHouseId = data.lastHouseId; return { id: 1, lastHouseId }; } },
+    user: { findUniqueOrThrow: async ({ where }: { where: { id: number } }) => ({ id: where.id, maxUserId: String(9007199254740992n + BigInt(where.id)) }), findUnique: async () => ({ lastHouseId, firstName: "Макс", lastName: "Пользователь" }), findMany: async () => [{ id: 1, maxUserId: "9007199254740993" }], update: async ({ data }: { data: { lastHouseId: number } }) => { lastHouseId = data.lastHouseId; return { id: 1, lastHouseId }; } },
     houseMembership: {
       findUnique: async ({ where }: { where: { houseId_userId: { houseId: number } } }) => hasMembership && where.houseId_userId.houseId === 1 ? { userId: 1, role, status, executorCompanyName: company, user: { id: 1, firstName: "Макс", lastName: "Пользователь" }, createdAt: new Date("2026-09-23T00:00:00Z") } : null,
       findFirst: async () => hasMembership && status === "ACTIVE" ? { id: 1 } : null,
@@ -49,11 +56,12 @@ function fixture() {
       findUniqueOrThrow: async ({ where }: { where: { id: number } }) => where.id === 7 ? work : createdWorks.find((item) => item.id === where.id)!,
       create: async ({ data }: { data: Record<string, unknown> }) => { if (data.sourceObservationId && createdWorks.some((item) => item.sourceObservationId === data.sourceObservationId)) throw Object.assign(new Error("Unique constraint"), { code: "P2002" }); const row = { ...data, id: 8 + createdWorks.length, submittedForInspectionAt: null }; createdWorks.push(row); return row; },
       update: async ({ data }: { data: Partial<typeof work> }) => { Object.assign(work, data); return work; },
-      findMany: async ({ where }: { where: { status?: string; executorUserId?: number } }) => where.status && where.status !== work.status || where.executorUserId && where.executorUserId !== work.executorUserId ? [] : [{ ...work, subscriptions: subscriptions.has("7:1") ? [{ id: 1 }] : [] }],
-      count: async ({ where }: { where: { status?: string; executorUserId?: number } }) => where.status && where.status !== work.status || where.executorUserId && where.executorUserId !== work.executorUserId ? 0 : 1,
+      findMany: async ({ where }: { where: Parameters<typeof matchesWork>[0] }) => matchesWork(where) ? [{ ...work, subscriptions: subscriptions.has("7:1") ? [{ id: 1 }] : [] }] : [],
+      count: async ({ where }: { where: Parameters<typeof matchesWork>[0] }) => Number(matchesWork(where)),
     },
     workSubscription: {
       findUnique: async () => subscriptions.has("7:1") ? { id: 1 } : null,
+      createMany: async () => { const inserted = !subscriptions.has("7:1"); subscriptions.add("7:1"); return { count: Number(inserted) }; },
       upsert: async () => { subscriptions.add("7:1"); return { id: 1 }; },
       deleteMany: async () => { subscriptions.delete("7:1"); return { count: 1 }; },
     },
@@ -62,6 +70,16 @@ function fixture() {
     inspectionAssignment: { count: async () => 0 },
     inspection: { count: async () => 0 },
     workHistory: { create: async ({ data }: { data: Record<string, unknown> }) => { historyEvents.push(data); return data; } },
+    activityEvent: { create: async ({ data }: { data: Record<string, unknown> }) => { activityEvents.push(data); return data; } },
+    botOutbox: { upsert: async ({ where, create }: { where: { eventKey: string }; create: Record<string, unknown> }) => { if (!outboxJobs.has(where.eventKey)) outboxJobs.set(where.eventKey, { id: outboxJobs.size + 1, ...create }); return outboxJobs.get(where.eventKey); } },
+    checklistTemplate: { count: async ({ where }: { where: { category: string } }) => where.category === "UNKNOWN" ? 0 : 1 },
+    observationSubscription: {
+      create: async ({ data }: { data: { observationId: number; userId: number; reason: string } }) => { observationSubscriptions.set(`${data.observationId}:${data.userId}`, { reason: data.reason }); return { id: observationSubscriptions.size, ...data }; },
+      findMany: async ({ where }: { where: { observationId: number } }) => [...observationSubscriptions.keys()].filter((key) => key.startsWith(`${where.observationId}:`)).map((key) => ({ userId: Number(key.split(":")[1]) })),
+      createMany: async ({ data }: { data: { observationId: number; userId: number; reason: string }[] }) => { const key = `${data[0].observationId}:${data[0].userId}`; if (observationSubscriptions.has(key)) return { count: 0 }; observationSubscriptions.set(key, { reason: data[0].reason }); return { count: 1 }; },
+      findUnique: async ({ where }: { where: { observationId_userId: { observationId: number; userId: number } } }) => observationSubscriptions.get(`${where.observationId_userId.observationId}:${where.observationId_userId.userId}`) ?? null,
+      deleteMany: async ({ where }: { where: { observationId: number; userId: number; reason: string } }) => { const key = `${where.observationId}:${where.userId}`; if (observationSubscriptions.get(key)?.reason !== where.reason) return { count: 0 }; observationSubscriptions.delete(key); return { count: 1 }; },
+    },
     $queryRaw: async () => [{ id: 7 }],
     houseChat: {
       upsert: async ({ create, update }: { create: { joinUrl: string }; update: { joinUrl: string } }) => { chat = { title: null, joinUrl: chat ? update.joinUrl : create.joinUrl }; return chat; },
@@ -92,9 +110,9 @@ function fixture() {
       count: async ({ where }: { where: { blobId: number } }) => [...media.values()].filter((item) => item.blobId === where.blobId).length,
     },
     observation: {
-      create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: observations.length + 1, status: "NEW", createdAt: new Date() }; observations.push(row); return row; },
+      create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: observations.length + 1, status: "NEW", createdAt: new Date(), updatedAt: new Date() }; observations.push(row); return row; },
       count: async () => observations.length,
-      findUnique: async ({ where }: { where: { id: number } }) => { const item = observations.find((row) => row.id === where.id); return item ? { ...item, linkedWork: createdWorks.find((work) => work.sourceObservationId === item.id) ?? null } : null; },
+      findUnique: async ({ where, include }: { where: { id: number }; include?: { subscriptions?: { where: { userId: number } } } }) => { const item = observations.find((row) => row.id === where.id); const key = `${item?.id}:${include?.subscriptions?.where.userId ?? 1}`; return item ? { ...item, house, author: user, media: [], subscriptions: observationSubscriptions.get(key) ? [observationSubscriptions.get(key)] : [], linkedWork: createdWorks.find((created) => created.sourceObservationId === item.id) ?? ((work as typeof work & { sourceObservationId?: number }).sourceObservationId === item.id ? work : null) } : null; },
       update: async ({ where, data }: { where: { id: number }; data: { status: string } }) => { const item = observations.find((row) => row.id === where.id)!; item.status = data.status; return item; },
       findMany: async ({ where }: { where: { status?: string } }) => observations.filter((item) => !where.status || item.status === where.status).map((item) => ({ ...item, linkedWork: createdWorks.find((work) => work.sourceObservationId === item.id) ?? null, author: user, media: [...media.values()].filter((m) => m.observationId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
     },
@@ -109,7 +127,7 @@ function fixture() {
       try { return await fn(db); } catch (error) { observations.splice(observationCount); comments.splice(commentCount); throw error; }
     },
   };
-  return { db: db as unknown as PrismaClient, media, blobs, subscriptions, observations, comments, createdWorks, historyEvents, setCompany: (value: string | null) => { company = value; }, setRole: (value: string) => { role = value; }, setStatus: (value: string) => { status = value; }, setMembership: (value: boolean) => { hasMembership = value; }, setChat: (value: typeof chat) => { chat = value; }, setWorkStatus: (value: string) => { work.status = value; }, assignExecutor: (value: number | null) => { work.executorUserId = value; work.executor = value ? { id: value, firstName: "Сергей", lastName: "Петров" } : null; }, getChat: () => chat };
+  return { db: db as unknown as PrismaClient, media, blobs, subscriptions, observationSubscriptions, outboxJobs, observations, comments, createdWorks, historyEvents, activityEvents, setCompany: (value: string | null) => { company = value; }, setRole: (value: string) => { role = value; }, setStatus: (value: string) => { status = value; }, setMembership: (value: boolean) => { hasMembership = value; }, setChat: (value: typeof chat) => { chat = value; }, setWorkStatus: (value: string) => { work.status = value; }, linkExistingWork: (observationId: number) => { Object.assign(work, { sourceObservationId: observationId, sourceObservation: { ...observations.find((item) => item.id === observationId), authorId: 1, author: user, media: [] } }); }, assignExecutor: (value: number | null) => { work.executorUserId = value; work.executorName = value ? "ООО Управдом" : null; work.representativeName = value ? "Сергей Петров" : null; work.executor = value ? { id: value, firstName: "Сергей", lastName: "Петров" } : null; }, getChat: () => chat };
 }
 
 async function appFor(db: PrismaClient, isAdmin = false, now?: () => Date) {
@@ -123,6 +141,64 @@ function multipartBody(bytes: Buffer, mimeType = "image/png") {
 }
 
 describe("business API", () => {
+  it("returns the linked work snapshot in observation detail and filters manual works", async () => {
+    const f = fixture();
+    const app = await appFor(f.db);
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Обращение", description: "Описание" } });
+      expect(created.statusCode).toBe(201);
+      f.linkExistingWork(created.json().id);
+      f.assignExecutor(1);
+      const detail = await app.inject({ method: "GET", url: `/api/observations/${created.json().id}`, headers: auth });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().linkedWork).toEqual(expect.objectContaining({ id: 7, title: "Лифт", executor: { userId: 1, companyName: "ООО Управдом", representativeName: "Сергей Петров" }, issues: { total: 0, open: 0, remediationSubmitted: 0, resolved: 0 } }));
+      expect((await app.inject({ method: "GET", url: "/api/works/7", headers: auth })).json().executor).toEqual(detail.json().linkedWork.executor);
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/works?origin=OBSERVATION", headers: auth })).json().total).toBe(1);
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/works?origin=MANUAL", headers: auth })).json().total).toBe(0);
+    } finally { await app.close(); }
+  });
+  it("edits work only before submit and validates its checklist category", async () => {
+    const f = fixture();
+    f.setRole("CHAIRMAN");
+    const app = await appFor(f.db);
+    try {
+      const path = "/api/works/7";
+      expect((await app.inject({ method: "PATCH", url: path, headers: auth, payload: { category: "UNKNOWN" } })).statusCode).toBe(400);
+      const edited = await app.inject({ method: "PATCH", url: path, headers: auth, payload: { title: "Новая работа" } });
+      expect(edited.statusCode).toBe(200);
+      expect(edited.json()).toEqual({ id: 7 });
+      expect(f.activityEvents.find((event) => event.event === "WORK_EDITED")?.metadata).toEqual({ before: { title: "Лифт" }, after: { title: "Новая работа" } });
+      expect((await app.inject({ method: "GET", url: path, headers: auth })).json().actions.edit).toBe(true);
+      f.setWorkStatus("IN_REVIEW");
+      expect((await app.inject({ method: "PATCH", url: path, headers: auth, payload: { title: "Поздняя правка" } })).statusCode).toBe(409);
+    } finally { await app.close(); }
+  });
+  it("keeps the author subscribed and confirms the first manual watch once", async () => {
+    const f = fixture();
+    const app = await appFor(f.db);
+    const otherAuth = { "x-max-init-data": createSignedMaxInitData(botToken, { user: '{"id":9007199254740994,"first_name":"Другой","last_name":"Житель","username":null,"language_code":"ru","photo_url":null}' }) };
+    try {
+      const created = await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Протечка", description: "У подъезда" } });
+      expect(created.statusCode).toBe(201);
+      const id = created.json().id as number;
+      expect(f.observationSubscriptions.get(`${id}:1`)?.reason).toBe("AUTHOR");
+      const detail = await app.inject({ method: "GET", url: `/api/observations/${id}`, headers: auth });
+      expect(detail.json()).toEqual(expect.objectContaining({ isWatching: true, watchReason: "AUTHOR", actions: expect.objectContaining({ unwatch: false }) }));
+      const authorUnwatch = await app.inject({ method: "DELETE", url: `/api/observations/${id}/watch`, headers: auth });
+      expect(authorUnwatch.statusCode).toBe(409);
+      expect(authorUnwatch.json().code).toBe("AUTHOR_WATCH_REQUIRED");
+      f.linkExistingWork(id);
+      const linkedUnwatch = await app.inject({ method: "DELETE", url: "/api/works/7/watch", headers: auth });
+      expect(linkedUnwatch.statusCode).toBe(409);
+      expect(linkedUnwatch.json().code).toBe("AUTHOR_WATCH_REQUIRED");
+      expect((await app.inject({ method: "POST", url: `/api/observations/${id}/watch`, headers: otherAuth })).statusCode).toBe(204);
+      expect((await app.inject({ method: "POST", url: `/api/observations/${id}/watch`, headers: otherAuth })).statusCode).toBe(204);
+      expect(f.observationSubscriptions.get(`${id}:2`)?.reason).toBe("MANUAL");
+      expect(f.outboxJobs.size).toBe(2);
+      expect((await app.inject({ method: "DELETE", url: `/api/observations/${id}/watch`, headers: otherAuth })).statusCode).toBe(204);
+      expect(f.observationSubscriptions.has(`${id}:2`)).toBe(false);
+    } finally { await app.close(); }
+  });
   it("limits media attempts to ten per user per minute after membership", async () => {
     const f = fixture();
     let time = Date.now();
@@ -198,6 +274,9 @@ describe("business API", () => {
       expect(list.json().items[0]).toEqual(expect.objectContaining({ id: 7, status: "NEW", isWatching: false }));
       expect(list.json().items[0]).not.toHaveProperty("isNewForMe");
       expect((await app.inject({ method: "GET", url: "/api/houses/1/works?status=NEW", headers: auth })).json().total).toBe(1);
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/works?origin=MANUAL", headers: auth })).json().total).toBe(1);
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/works?origin=OBSERVATION", headers: auth })).json().total).toBe(0);
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/works?origin=OTHER", headers: auth })).statusCode).toBe(400);
       expect((await app.inject({ method: "GET", url: "/api/houses/1/works?status=WAITING", headers: auth })).json().items).toEqual([]);
       expect((await app.inject({ method: "GET", url: "/api/houses/1/works?status=INVALID", headers: auth })).statusCode).toBe(400);
       const detail = await app.inject({ method: "GET", url: "/api/works/7", headers: auth });
@@ -263,7 +342,7 @@ describe("business API", () => {
     } finally { await app.close(); }
   });
 
-  it("allows system ADMIN to manage a known house without membership", async () => {
+  it("does not give system ADMIN house workflow access without membership", async () => {
     const f = fixture();
     f.setMembership(false);
     const regular = await appFor(f.db);
@@ -276,8 +355,8 @@ describe("business API", () => {
       expect(me.json().user.isAdmin).toBe(true);
       expect(me.json().houses).toEqual([]);
       expect((await admin.inject({ method: "PUT", url: "/api/houses/1/chat", headers: auth, payload: { joinUrl: "https://max.ru/chat/example" } })).statusCode).toBe(403);
-      expect((await admin.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).statusCode).toBe(200);
-      expect((await admin.inject({ method: "GET", url: "/api/houses/1/works", headers: auth })).statusCode).toBe(200);
+      expect((await admin.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).statusCode).toBe(403);
+      expect((await admin.inject({ method: "GET", url: "/api/houses/1/works", headers: auth })).statusCode).toBe(403);
       expect((await admin.inject({ method: "DELETE", url: "/api/houses/1/chat", headers: auth })).statusCode).toBe(403);
     } finally { await admin.close(); }
   });
@@ -363,7 +442,7 @@ describe("business API", () => {
       const original = await app.inject({ method: "GET", url: `/photo/${key}` });
       expect(original.statusCode).toBe(200);
       expect(original.headers["cache-control"]).toBe("private, no-store");
-      expect(original.headers["x-robots-tag"]).toBe("noindex, nofollow, noarchive");
+      expect(original.headers["x-robots-tag"]).toBe("noindex, nofollow, noarchive, nosnippet");
       for (const query of ["?w=200&h=200", "?w=400&h=240&fit=cover", "?w=800&h=800&fit=contain"]) {
         const response = await app.inject({ method: "GET", url: `/photo/${key}${query}` });
         expect(response.statusCode).toBe(200);
@@ -435,7 +514,7 @@ describe("permissions", () => {
   it("keeps remediation away from residents and disables pending memberships", () => {
     expect(permissionsFor("RESIDENT", "ACTIVE").reviewJoinRequests).toBe(false);
     expect(permissionsFor("EXECUTOR", "ACTIVE").reviewJoinRequests).toBe(false);
-    expect(permissionsFor(null, null, true).manageHouseChat).toBe(false);
+    expect(permissionsFor(null, null).manageHouseChat).toBe(false);
     expect(Object.values(permissionsFor("CHAIRMAN", "PENDING")).every((value) => !value)).toBe(true);
     expect(Object.values(permissionsFor("RESIDENT", "REJECTED")).every((value) => !value)).toBe(true);
   });

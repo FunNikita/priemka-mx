@@ -1,13 +1,14 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-
 import type { FastifyInstance } from "fastify";
-
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { AppConfig } from "../config.js";
 import { parseDocumentPayload } from "../documents.js";
 import { publicDocumentStatus } from "../workflow.js";
+import { canDeliverNotification, enqueueText } from "./notifications.js";
 
 const maxApi = "https://platform-api2.max.ru";
 const webhookPath = "/max/webhook";
+const nextTargetSend = new Map<string, number>();
 
 function sameSecret(given: unknown, expected: string) {
   if (typeof given !== "string" || !expected) return false;
@@ -15,16 +16,22 @@ function sameSecret(given: unknown, expected: string) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function parseUpdate(value: string): { chatId: string; payload: string | null } | null {
+type BotUpdate = { type: "bot_started" | "message_created"; chatId: string; userId: string; name: string; payload: string | null; text: string | null; dialog: boolean };
+function parseUpdate(value: string): BotUpdate | null {
   if (value.length > 16384) return null;
-  const chats = [...value.matchAll(/"chat_id"\s*:\s*("-?[0-9]+"|-?[0-9]+)/g)];
-  if (chats.length !== 1) return null;
-  const chatId = chats[0][1].replaceAll('"', "");
-  if (!/^-?[1-9][0-9]{0,31}$/.test(chatId)) return null;
   try {
-    const update = JSON.parse(value) as { update_type?: unknown; payload?: unknown };
-    if (update.update_type !== "bot_started") return null;
-    return { chatId, payload: typeof update.payload === "string" ? update.payload : null };
+    // MAX IDs are int64. Quote them before JSON.parse so JavaScript never rounds them.
+    const safe = value.replace(/("(?:chat_id|user_id)"\s*:\s*)(-?[0-9]{1,32})/g, '$1"$2"');
+    const update = JSON.parse(safe) as Record<string, unknown>;
+    if (update.update_type !== "bot_started" && update.update_type !== "message_created") return null;
+    const message = update.message as Record<string, unknown> | undefined;
+    const sender = (update.update_type === "bot_started" ? update.user : message?.sender) as Record<string, unknown> | undefined;
+    const recipient = message?.recipient as Record<string, unknown> | undefined;
+    const body = message?.body as Record<string, unknown> | undefined;
+    const userId = String(sender?.user_id ?? "");
+    const chatId = String(update.chat_id ?? recipient?.chat_id ?? "");
+    if (!/^[1-9][0-9]{0,31}$/.test(userId) || !/^-?[1-9][0-9]{0,31}$/.test(chatId)) return null;
+    return { type: update.update_type, chatId, userId, name: typeof sender?.first_name === "string" ? sender.first_name.slice(0, 100) : "друг", payload: typeof update.payload === "string" ? update.payload : null, text: typeof body?.text === "string" ? body.text : null, dialog: update.update_type === "bot_started" || recipient?.chat_type === "dialog" };
   } catch { return null; }
 }
 
@@ -54,13 +61,57 @@ async function uploadPdf(token: string, bytes: Buffer) {
   return uploadToken;
 }
 
-export async function deliverBotOutbox(db: PrismaClient, token: string, outboxId: number) {
+async function throttle(target: string) {
+  const now = Date.now();
+  const scheduled = Math.max(now, nextTargetSend.get(target) ?? 0, nextTargetSend.get("*") ?? 0);
+  nextTargetSend.set(target, scheduled + 550);
+  nextTargetSend.set("*", scheduled + 550);
+  const wait = scheduled - now;
+  if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+}
+
+function keyboard(buttonText: string | null, buttonUrl: string | null, botName: string) {
+  if (!buttonText || !buttonUrl) return [];
+  const url = new URL(buttonUrl);
+  const expected = `https://max.ru/${botName}`;
+  if (`${url.origin}${url.pathname}` !== expected) return [];
+  const payload = url.searchParams.get("startapp");
+  const button = { type: "open_app", text: buttonText, web_app: botName, ...(payload && /^[A-Za-z0-9_-]{1,512}$/.test(payload) ? { payload } : {}) };
+  return [{ type: "inline_keyboard", payload: { buttons: [[button]] } }];
+}
+
+export async function deliverBotOutbox(db: PrismaClient, token: string, outboxId: number, botName = process.env.MAX_BOT_NAME ?? "", previewRequired = false) {
   const job = await db.botOutbox.findUnique({ where: { id: outboxId } });
-  if (!job || job.completedAt) return;
+  if (!job || job.completedAt || job.deadAt) return;
+  if (job.targetType !== "USER" || !await canDeliverNotification(db, job, previewRequired)) {
+    await db.botOutbox.update({ where: { id: job.id }, data: { deadAt: new Date() } });
+    return;
+  }
+  const target = `${job.targetType}:${job.chatId}`;
+  const destination = `${job.targetType === "USER" ? "user_id" : "chat_id"}=${encodeURIComponent(job.chatId)}`;
+  if (job.kind === "TEXT") {
+    const attachments: Record<string, unknown>[] = [];
+    if (job.publicKey) {
+      const document = await publicDocumentStatus(db, job.publicKey);
+      if (!document.bytes) throw new Error("Notification PDF unavailable");
+      const fileToken = job.fileToken ?? await uploadPdf(token, document.bytes);
+      if (!job.fileToken) await db.botOutbox.update({ where: { id: job.id }, data: { fileToken } });
+      attachments.push({ type: "file", payload: { token: fileToken } });
+    }
+    attachments.push(...keyboard(job.buttonText, job.buttonUrl, botName));
+    await throttle(target);
+    if (!await canDeliverNotification(db, job, previewRequired)) {
+      await db.botOutbox.update({ where: { id: job.id }, data: { deadAt: new Date() } });
+      return;
+    }
+    await maxRequest(`/messages?${destination}`, token, { text: job.text ?? "", attachments });
+    await db.botOutbox.update({ where: { id: job.id }, data: { completedAt: new Date(), sentText: true } });
+    return;
+  }
   const result = job.publicKey ? await publicDocumentStatus(db, job.publicKey) : { message: "Некорректный код документа", bytes: null };
-  const chat = encodeURIComponent(job.chatId);
   if (!job.sentText) {
-    await maxRequest(`/messages?chat_id=${chat}`, token, { text: result.message });
+    await throttle(target);
+    await maxRequest(`/messages?${destination}`, token, { text: result.message });
     await db.botOutbox.update({ where: { id: job.id }, data: { sentText: true } });
   }
   if (!result.bytes) {
@@ -69,12 +120,21 @@ export async function deliverBotOutbox(db: PrismaClient, token: string, outboxId
   }
   const fileToken = job.fileToken ?? await uploadPdf(token, result.bytes);
   if (!job.fileToken) await db.botOutbox.update({ where: { id: job.id }, data: { fileToken } });
-  await maxRequest(`/messages?chat_id=${chat}`, token, { text: "PDF документа", attachments: [{ type: "file", payload: { token: fileToken } }] });
+  await throttle(target);
+  await maxRequest(`/messages?${destination}`, token, { text: "PDF документа", attachments: [{ type: "file", payload: { token: fileToken } }] });
   await db.botOutbox.update({ where: { id: job.id }, data: { completedAt: new Date() } });
 }
 
-export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | null, token: string) {
+function greeting(name: string, timeZone: string) {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone }).format(new Date()));
+  const salutation = hour >= 5 && hour < 12 ? "Доброе утро" : hour >= 12 && hour < 18 ? "Добрый день" : hour >= 18 && hour < 23 ? "Добрый вечер" : "Доброй ночи";
+  return `${salutation}, ${name}!\n\nЯ чат-бот «Приёмка» — сервис для контроля работ в доме:\nот обращения жителя до проверки результата и приёмки работы.\n\nПока я ещё учусь отвечать на сообщения,\nно основной функционал уже доступен в мини-приложении.\n\nНажмите кнопку ниже, чтобы открыть сервис.`;
+}
+
+export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | null, token: string, config?: AppConfig) {
   const secret = process.env.MAX_WEBHOOK_SECRET ?? "";
+  const botName = config?.botName ?? process.env.MAX_BOT_NAME ?? "";
+  const timeZone = config?.botTimeZone ?? "Europe/Moscow";
   app.register(async (scope) => {
     scope.addContentTypeParser("application/json", { parseAs: "string" }, (_request, body, done) => done(null, body));
     scope.post(webhookPath, { schema: { tags: ["MAX bot"], body: { type: "string" }, response: { 200: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] }, 401: { type: "object", properties: { message: { type: "string" } } }, 503: { type: "object", properties: { message: { type: "string" } } } } } }, async (request, reply) => {
@@ -82,10 +142,27 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
       if (!sameSecret(request.headers["x-max-bot-api-secret"], secret)) return reply.code(401).send({ message: "Unauthorized" });
       const raw = request.body as string;
       const update = parseUpdate(raw);
-      if (!update || !update.payload?.startsWith("doc_")) return { ok: true };
-      const publicKey = parseDocumentPayload(update.payload) ?? "";
+      if (!update) return { ok: true };
+      if (update.type === "bot_started" && update.payload?.startsWith("doc_")) {
+        const publicKey = parseDocumentPayload(update.payload) ?? "";
+        const eventKey = createHash("sha256").update(raw).digest("hex");
+        const job = await db.botOutbox.upsert({ where: { eventKey }, create: { eventKey, chatId: update.userId, publicKey, targetType: "USER" }, update: {} }).catch(async (error: unknown) => {
+          if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "P2002") throw error;
+          return db.botOutbox.findUniqueOrThrow({ where: { eventKey } });
+        });
+        app.log.info({ event: "max_bot_update", updateType: update.type, command: "doc", allowed: true, outboxId: job.id }, "MAX bot update");
+        return { ok: true };
+      }
+      if (!update.dialog) return { ok: true };
+      const allowed = !config?.previewAccessRequired || !!(await db.previewAccess.findUnique({ where: { maxUserId: update.userId } }))?.enabled;
+      const command = update.type === "bot_started" || /^\/start(?:\s|$)/.test(update.text ?? "") ? "start" : "unknown";
+      const text = !allowed
+        ? `Доступ к тестированию «Приёмки» пока не открыт.\n\nВаш MAX ID: ${update.userId}\n\nПередайте этот ID администратору тестирования,\nчтобы он добавил аккаунт в список участников.`
+        : command === "start" ? greeting(update.name, timeZone)
+          : "Такой команды я пока не знаю.\n\nОсновной функционал «Приёмки» уже доступен\nв мини-приложении — откройте его по кнопке ниже.";
       const eventKey = createHash("sha256").update(raw).digest("hex");
-      await db.botOutbox.upsert({ where: { eventKey }, create: { eventKey, chatId: update.chatId, publicKey }, update: {} });
+      const job = await enqueueText(db, { key: `webhook:${eventKey}`, maxUserId: update.userId, text, buttonText: allowed ? "Открыть сервис" : "", buttonUrl: allowed ? `https://max.ru/${botName}?startapp` : "" });
+      app.log.info({ event: "max_bot_update", updateType: update.type, command, allowed, outboxId: job.id }, "MAX bot update");
       return { ok: true };
     });
   });
@@ -95,13 +172,13 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
       if (running) return;
       running = true;
       try {
-        const jobs = await db.botOutbox.findMany({ where: { completedAt: null, nextAttemptAt: { lte: new Date() }, attempts: { lt: 8 } }, orderBy: { id: "asc" }, take: 5 });
+        const jobs = await db.botOutbox.findMany({ where: { completedAt: null, deadAt: null, nextAttemptAt: { lte: new Date() }, attempts: { lt: 8 } }, orderBy: { id: "asc" }, take: 5 });
         for (const job of jobs) {
-          try { await deliverBotOutbox(db, token, job.id); }
+          try { await deliverBotOutbox(db, token, job.id, botName, !!config?.previewAccessRequired); }
           catch {
             const attempts = job.attempts + 1;
-            await db.botOutbox.update({ where: { id: job.id }, data: { attempts, nextAttemptAt: new Date(Date.now() + Math.min(3600000, 5000 * 2 ** attempts)) } });
-            app.log.warn({ outboxId: job.id, attempts }, "MAX document delivery retry scheduled");
+            await db.botOutbox.update({ where: { id: job.id }, data: { attempts, nextAttemptAt: new Date(Date.now() + Math.min(3600000, 5000 * 2 ** attempts)), ...(attempts >= 8 ? { deadAt: new Date() } : {}) } });
+            app.log.warn({ event: "outbox_retry", outboxId: job.id, attempts, dead: attempts >= 8 }, "MAX delivery retry scheduled");
           }
         }
       } catch { app.log.error("MAX outbox polling failed"); }
