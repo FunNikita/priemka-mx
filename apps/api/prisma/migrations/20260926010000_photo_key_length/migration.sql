@@ -1,0 +1,1 @@
+ALTER TABLE `Media` MODIFY `publicKey` VARCHAR(20) NULL;

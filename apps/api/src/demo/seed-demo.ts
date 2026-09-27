@@ -21,6 +21,7 @@ const demoWorks = [
   { title: "Демо: покраска подъезда", status: "IN_PROGRESS", object: 0 },
   { title: "Демо: ремонт кровли", status: "WAITING", object: 1 },
   { title: "Демо: освещение двора", status: "ACCEPTED", object: 1 },
+  { title: "Демо: передана на проверку", status: "NEW", object: 0 },
 ] as const;
 
 const demoTemplates = [
@@ -49,8 +50,8 @@ export async function seedDemo(db: PrismaClient) {
   for (const [index, item] of demoUsers.entries()) {
     await db.houseMembership.upsert({
       where: { houseId_userId: { houseId: house.id, userId: users[index].id } },
-      create: { houseId: house.id, userId: users[index].id, role: item.role, status: "ACTIVE", joinedVia: "ADMIN", canSignAcceptanceAct: item.role === "CHAIRMAN", authorityBasis: item.role === "CHAIRMAN" ? "Демо: решение общего собрания собственников №1" : null },
-      update: item.role === "CHAIRMAN" ? { canSignAcceptanceAct: true, authorityBasis: "Демо: решение общего собрания собственников №1" } : {},
+      create: { houseId: house.id, userId: users[index].id, role: item.role, status: "ACTIVE", joinedVia: "ADMIN", executorCompanyName: item.role === "EXECUTOR" ? "Демо УК" : null },
+      update: item.role === "EXECUTOR" ? { executorCompanyName: "Демо УК" } : {},
     });
   }
 
@@ -67,7 +68,8 @@ export async function seedDemo(db: PrismaClient) {
   }
 
   for (const item of demoWorks) {
-    if (await db.work.findFirst({ where: { houseId: house.id, title: item.title } })) continue;
+    const existingWork = await db.work.findFirst({ where: { houseId: house.id, title: item.title } });
+    if (existingWork) { if ((item.status !== "NEW" || item.title === "Демо: передана на проверку") && !existingWork.submittedForInspectionAt) await db.work.update({ where: { id: existingWork.id }, data: { submittedForInspectionAt: now } }); continue; }
     await db.work.create({ data: {
       houseId: house.id,
       houseObjectId: objects[item.object].id,
@@ -78,6 +80,7 @@ export async function seedDemo(db: PrismaClient) {
       description: `Тестовая работа: ${item.title.toLowerCase()}`,
       category: item.object === 0 ? "COMMON_AREAS" : "OUTDOOR",
       status: item.status,
+      submittedForInspectionAt: item.status === "NEW" && item.title !== "Демо: передана на проверку" ? null : now,
       date: now,
     } });
   }
@@ -119,7 +122,7 @@ export async function seedDemoWorkflow(db: PrismaClient) {
   }
 
   for (const [index, scenario] of demoWorks.entries()) {
-    if (index === 0) continue;
+    if (scenario.status === "NEW") continue;
     const work = await db.work.findFirst({ where: { houseId: house.id, title: scenario.title } });
     if (!work) continue;
     let inspection = await db.inspection.findFirst({ where: { workId: work.id }, include: { items: { orderBy: { order: "asc" } }, assignments: true } });
@@ -154,7 +157,7 @@ export async function seedDemoWorkflow(db: PrismaClient) {
     }
     if (index === 4 && !await db.document.findFirst({ where: { workId: work.id, type: "ACCEPTANCE_ACT" } })) {
       const time = new Date();
-      const version = await createDocumentVersion(db, work.id, "ACCEPTANCE_ACT", executor.id, { house: house.address, work: work.title, description: work.description, executor: work.executorName ?? "Демо УК", createdAt: time.toISOString(), rows: [], summary: "", act: { actNumber: "Демо-1", city: "Москва", contractNumber: "Демо: договор №1", contractDate: "01.09.2026", customerName: `${chairman.firstName} ${chairman.lastName}`, customerApartment: "1", customerAuthorityBasis: "Демо: решение собственников №1", executorOrganization: "Демо УК", executorRepresentative: `${executor.firstName} ${executor.lastName}`, executorAuthorityBasis: "Демо: доверенность №1", periodFrom: "20.09.2026", periodTo: "25.09.2026", frequencyOrQuantity: "1", unit: "работа", unitPrice: "1000", totalPrice: "1000", totalPriceWords: "одна тысяча" }, confirmations: [{ name: `${executor.firstName} ${executor.lastName}`, role: "EXECUTOR", at: time.toISOString() }, { name: `${chairman.firstName} ${chairman.lastName}`, role: "CHAIRMAN", at: time.toISOString() }] }, botName);
+      const version = await createDocumentVersion(db, work.id, "ACCEPTANCE_ACT", executor.id, { house: house.address, work: work.title, description: work.description, executor: work.executorName ?? "Демо УК", createdAt: time.toISOString(), rows: [{ label: "Категория", value: work.category }, { label: "Представитель исполнителя", value: `${executor.firstName} ${executor.lastName}` }, { label: "Проверено пунктов", value: String(inspection.items.length) }, { label: "Замечаний устранено", value: "0" }], summary: "Замечаний нет.", confirmations: [{ name: `${executor.firstName} ${executor.lastName}`, role: "EXECUTOR", at: time.toISOString() }, { name: `${chairman.firstName} ${chairman.lastName}`, role: "CHAIRMAN", at: time.toISOString() }] }, botName);
       await db.documentVersion.update({ where: { id: version.id }, data: { status: "CONFIRMED", confirmedAt: time } });
       for (const [user, roleSnapshot] of [[executor, "EXECUTOR"], [chairman, "CHAIRMAN"]] as const) await db.documentConfirmation.create({ data: { documentVersionId: version.id, userId: user.id, roleSnapshot, confirmedAt: time } });
     }

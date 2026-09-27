@@ -44,7 +44,8 @@ describe("demo seed", () => {
     expect(admin).toBeDefined();
     expect(memory.memberships.some((item) => item.userId === admin?.id)).toBe(false);
     expect(memory.objects).toHaveLength(2);
-    expect(memory.works).toHaveLength(5);
+    expect(memory.works).toHaveLength(6);
+    expect(memory.works.find((item) => item.title === "Демо: передана на проверку")?.submittedForInspectionAt).toBeTruthy();
     expect(memory.observations).toHaveLength(2);
     expect(memory.templates).toHaveLength(5);
     expect(new Set(memory.works.map((work) => work.status))).toEqual(new Set(["NEW", "IN_REVIEW", "IN_PROGRESS", "WAITING", "ACCEPTED"]));

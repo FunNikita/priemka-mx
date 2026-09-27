@@ -247,6 +247,132 @@
           }
         },
         {
+          "name": "PATCH /api/me/houses/:houseId/membership",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/me/houses/{{houseId}}/membership",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"EXECUTOR\",\n  \"executorCompanyName\": \"Демо УК\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users?page=1&limit=20"
+          }
+        },
+        {
+          "name": "PUT /api/admin/houses/:houseId/members/:userId",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/houses/{{houseId}}/members/{{userId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"EXECUTOR\",\n  \"status\": \"ACTIVE\",\n  \"executorCompanyName\": \"Демо УК\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/houses/:houseId/works",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/works",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"executorUserId\": 123,\n  \"title\": \"Демо работа\",\n  \"description\": \"Описание работы\",\n  \"category\": \"COMMON_AREAS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/works/:workId/submit-for-inspection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/works/{{workId}}/submit-for-inspection",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "GET /api/houses/:houseId/works",
           "request": {
             "method": "GET",
@@ -355,7 +481,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/works/{{workId}}/comments"
+            "url": "{{baseUrl}}/api/works/{{workId}}/comments?page=1&limit=20"
           }
         },
         {
@@ -449,7 +575,8 @@
                   "src": ""
                 }
               ]
-            }
+            },
+            "description": "До 10 попыток за 60 секунд на активного пользователя. При превышении: HTTP 429 и Retry-After. JPEG/PNG/WebP нормализуются без EXIF."
           }
         },
         {
@@ -515,6 +642,21 @@
           }
         },
         {
+          "name": "GET /api/houses/{{houseId}}/members?role=EXECUTOR",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/houses/{{houseId}}/members?role=EXECUTOR",
+            "description": "Элементы содержат executorCompanyName (nullable).",
+            "header": [
+              {
+                "key": "X-Max-Init-Data",
+                "value": "{{maxInitData}}",
+                "type": "text"
+              }
+            ]
+          }
+        },
+        {
           "name": "POST /api/works/{{workId}}/inspections",
           "request": {
             "method": "POST",
@@ -553,7 +695,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/me/inspection-assignments"
+            "url": "{{baseUrl}}/api/me/inspection-assignments?page=1&limit=20"
           }
         },
         {
@@ -567,7 +709,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/inspection-assignments/{{assignmentId}}"
+            "url": "{{baseUrl}}/api/inspection-assignments/{{assignmentId}}?page=1&limit=20"
           }
         },
         {
@@ -589,13 +731,14 @@
             "url": "{{baseUrl}}/api/inspection-assignments/{{assignmentId}}/answers/{{itemId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"result\": \"PASS\"\n}",
+              "raw": "{\n  \"result\": \"FAIL\",\n  \"comment\": \"Дефект (не более 512 символов)\",\n  \"mediaIds\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "rules.maxCommentLength=512; FAIL требует непустой комментарий или 1–5 фото."
           }
         },
         {
@@ -637,7 +780,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/works/{{workId}}/issues"
+            "url": "{{baseUrl}}/api/works/{{workId}}/issues?page=1&limit=20"
           }
         },
         {
@@ -651,7 +794,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/me/issues"
+            "url": "{{baseUrl}}/api/me/issues?page=1&limit=20"
           }
         },
         {
@@ -693,7 +836,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/me/reinspections"
+            "url": "{{baseUrl}}/api/me/reinspections?page=1&limit=20"
           }
         },
         {
@@ -707,7 +850,7 @@
                 "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/reinspections/{{reinspectionId}}"
+            "url": "{{baseUrl}}/api/reinspections/{{reinspectionId}}?page=1&limit=20"
           }
         },
         {
@@ -785,7 +928,7 @@
             "url": "{{baseUrl}}/api/works/{{workId}}/documents",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"ACCEPTANCE_ACT\",\n  \"data\": {\n    \"actNumber\": \"Демо-1\",\n    \"city\": \"Москва\",\n    \"contractNumber\": \"Демо-1\",\n    \"contractDate\": \"01.09.2026\",\n    \"customerName\": \"Никита Демо\",\n    \"customerApartment\": \"1\",\n    \"customerAuthorityBasis\": \"решение собрания собственников №1\",\n    \"executorOrganization\": \"Демо УК\",\n    \"executorRepresentative\": \"Сергей Демо\",\n    \"executorAuthorityBasis\": \"доверенность №1\",\n    \"periodFrom\": \"20.09.2026\",\n    \"periodTo\": \"25.09.2026\",\n    \"frequencyOrQuantity\": \"1\",\n    \"unit\": \"работа\",\n    \"unitPrice\": \"10 000\",\n    \"totalPrice\": \"10 000\",\n    \"totalPriceWords\": \"десять тысяч\"\n  }\n}",
+              "raw": "{\n  \"type\": \"ACCEPTANCE_ACT\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

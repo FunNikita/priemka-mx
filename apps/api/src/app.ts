@@ -5,6 +5,7 @@ import swagger from "@fastify/swagger";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyServerOptions } from "fastify";
 
 import { getConfig, type AppConfig } from "./config.js";
+import { isValidMaxBotName } from "./max/bot-name.js";
 import type { MaxInitData } from "./max/init-data.js";
 import { requireMaxAuth } from "./max/require-max-auth.js";
 import { registerDocumentBot } from "./max/document-bot.js";
@@ -28,11 +29,11 @@ const unauthorizedSchema = {
 
 const permissionsSchema = {
   type: "object", additionalProperties: false,
-  required: ["viewWorks", "viewObservations", "viewHouseChat", "createObservation", "commentWork", "watchWork", "manageHouseChat", "assignInspectors", "performInspection", "reportRemediation", "confirmWorkResult", "reviewJoinRequests"],
+  required: ["viewWorks", "viewObservations", "viewHouseChat", "createObservation", "commentWork", "watchWork", "manageHouseChat", "assignInspector", "performInspection", "reviewJoinRequests"],
   properties: {
     viewWorks: { type: "boolean" }, viewObservations: { type: "boolean" }, viewHouseChat: { type: "boolean" }, createObservation: { type: "boolean" }, commentWork: { type: "boolean" }, watchWork: { type: "boolean" },
-    manageHouseChat: { type: "boolean" }, assignInspectors: { type: "boolean" }, performInspection: { type: "boolean" },
-    reportRemediation: { type: "boolean" }, confirmWorkResult: { type: "boolean" }, reviewJoinRequests: { type: "boolean" },
+    manageHouseChat: { type: "boolean" }, assignInspector: { type: "boolean" }, performInspection: { type: "boolean" },
+    reviewJoinRequests: { type: "boolean" },
   },
 } as const;
 
@@ -48,6 +49,7 @@ export type CreateAppOptions = {
 
 export async function createApp(options: CreateAppOptions = {}): Promise<FastifyInstance> {
   const config = options.config ?? getConfig();
+  if (!isValidMaxBotName(config.botName)) throw new Error("MAX_BOT_NAME must be a valid MAX bot name");
   const repository = options.userRepository ?? new PrismaUserRepository();
   const now = options.now ?? (() => new Date());
   const app = Fastify({
@@ -130,7 +132,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
               },
             },
             start_param: { type: "string" },
-            houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "joinedVia", "permissions"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, joinedVia: { type: "string", enum: ["CHAT", "INVITE", "REQUEST", "ADMIN"] }, permissions: permissionsSchema } } },
+            houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "joinedVia", "executorCompanyName", "permissions"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, joinedVia: { type: "string", enum: ["CHAT", "INVITE", "REQUEST", "ADMIN"] }, executorCompanyName: { type: "string", nullable: true }, permissions: permissionsSchema } } },
           },
         },
         401: unauthorizedSchema,
@@ -148,7 +150,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
       const rank = (m: typeof a) => m.status === "ACTIVE" ? (m.houseId === lastHouseId ? 0 : 1) : 2;
       return rank(a) - rank(b) || a.houseId - b.houseId;
     });
-    return { ...toMaxResponse(initData, identity), houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, permissions: permissionsFor(membership.role, membership.status, identity.isAdmin) })) };
+    return { ...toMaxResponse(initData, identity), houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions: permissionsFor(membership.role, membership.status, identity.isAdmin) })) };
   });
 
   await registerHousesApi(app, config, repository, now, options.businessDb);
@@ -158,12 +160,14 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
 
   const staticRoot = options.staticRoot ?? resolve(process.cwd(), "../web/dist");
   if (existsSync(staticRoot)) {
-    await app.register(staticPlugin, { root: staticRoot, wildcard: true });
+    await app.register(staticPlugin, { root: staticRoot, prefix: "/app/", wildcard: true });
+    app.get("/app", async (_request, reply) => reply.code(308).header("location", "/app/").send());
     app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith("/api/") || request.url.startsWith("/max/")) {
-        return reply.code(404).send({ message: "Маршрут не найден" });
+      const pathname = new URL(request.url, "http://localhost").pathname;
+      if ((request.method === "GET" || request.method === "HEAD") && pathname.startsWith("/app/") && !pathname.startsWith("/app/assets/")) {
+        return reply.type("text/html; charset=utf-8").sendFile("index.html");
       }
-      return reply.type("text/html; charset=utf-8").sendFile("index.html");
+      return reply.code(404).send({ message: "Маршрут не найден" });
     });
   }
 

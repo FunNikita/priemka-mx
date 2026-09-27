@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -26,10 +26,23 @@ class MemoryUserRepository implements UserRepository {
 const botToken = "test-bot-token";
 
 async function testApp(repository = new MemoryUserRepository(), options: Omit<Parameters<typeof createApp>[0], "config" | "userRepository" | "logger"> = {}) {
-  return { app: await createApp({ config: { botToken, maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, logger: false, ...options }), repository };
+  return { app: await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, logger: false, ...options }), repository };
 }
 
 describe("system routes", () => {
+  it("documents actual public PDF and photo responses", async () => {
+    const { app } = await testApp();
+    try {
+      await app.ready();
+      const spec = app.swagger() as { paths: Record<string, { get: { responses: Record<string, unknown> } }> };
+      expect(Object.keys(spec.paths["/doc/{key}.pdf"].get.responses).sort()).toEqual(["200", "404", "409", "503"]);
+      expect(Object.keys(spec.paths["/photo/{key}"].get.responses).sort()).toEqual(["200", "400", "404", "503"]);
+      expect((await app.inject({ method: "GET", url: `/doc/${"a".repeat(20)}.pdf` })).statusCode).toBe(503);
+      expect((await app.inject({ method: "GET", url: `/photo/${"a".repeat(20)}` })).statusCode).toBe(503);
+    } finally {
+      await app.close();
+    }
+  });
   it("returns liveness response", async () => {
     const { app } = await testApp();
     try {
@@ -52,14 +65,29 @@ describe("system routes", () => {
     }
   });
 
-  it("serves the SPA and falls back for future frontend routes", async () => {
+  it("serves the SPA only under /app/ and keeps missing assets and other routes as 404", async () => {
     const staticRoot = await mkdtemp(join(tmpdir(), "priemka-web-"));
     await writeFile(join(staticRoot, "index.html"), "<main>Приёмка SPA</main>");
+    await mkdir(join(staticRoot, "assets"));
+    await writeFile(join(staticRoot, "assets", "main.js"), "console.log('app');");
     const { app } = await testApp(new MemoryUserRepository(), { staticRoot });
     try {
-      expect((await app.inject({ method: "GET", url: "/" })).body).toContain("Приёмка SPA");
-      expect((await app.inject({ method: "GET", url: "/admin" })).body).toContain("Приёмка SPA");
+      const index = await app.inject({ method: "GET", url: "/app/" });
+      expect(index.statusCode).toBe(200);
+      expect(index.headers["content-type"]).toContain("text/html");
+      expect(index.body).toContain("Приёмка SPA");
+      const redirect = await app.inject({ method: "GET", url: "/app" });
+      expect(redirect.statusCode).toBe(308);
+      expect(redirect.headers.location).toBe("/app/");
+      expect((await app.inject({ method: "GET", url: "/app/foo" })).body).toContain("Приёмка SPA");
+      expect((await app.inject({ method: "GET", url: "/app/assets/main.js" })).statusCode).toBe(200);
+      const missingAsset = await app.inject({ method: "GET", url: "/app/assets/not-existing.js" });
+      expect(missingAsset.statusCode).toBe(404);
+      expect(missingAsset.headers["content-type"]).not.toContain("text/html");
+      expect((await app.inject({ method: "GET", url: "/" })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/dsfsdf" })).statusCode).toBe(404);
       expect((await app.inject({ method: "GET", url: "/api/unknown" })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/max/nonexistent" })).statusCode).toBe(404);
     } finally {
       await app.close();
       await rm(staticRoot, { recursive: true, force: true });
@@ -164,7 +192,7 @@ describe("GET /api/me", () => {
     const logs: string[] = [];
     const repository = new MemoryUserRepository();
     const loggedApp = await createApp({
-      config: { botToken, maxInitDataMaxAgeSeconds: 3600 },
+      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
       userRepository: repository,
       logStream: new Writable({
         write(chunk, _encoding, callback) {
@@ -204,7 +232,7 @@ describe("GET /api/me", () => {
   it("logs request metadata and an error stack without exposing initData", async () => {
     const logs: string[] = [];
     const loggedApp = await createApp({
-      config: { botToken, maxInitDataMaxAgeSeconds: 3600 },
+      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
       userRepository: {
         isReady: async () => true,
         upsertFromMax: async () => { throw new Error("test repository failure"); },

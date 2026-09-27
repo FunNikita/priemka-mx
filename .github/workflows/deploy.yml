@@ -1,0 +1,118 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - backend
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate -w @priemka/api
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy-dev:
+    needs: verify
+    if: github.ref == 'refs/heads/backend'
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency:
+      group: priemka-deploy-dev
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/priemka_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/priemka_deploy" "$HOME/.ssh/known_hosts"
+      - name: Sync and deploy DEV
+        run: |
+          ssh_args=(ssh -i "$HOME/.ssh/priemka_deploy" -p "$DEPLOY_SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          "${ssh_args[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "test -d '$DEPLOY_DIR'"
+          rsync -az --delete \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='dist/' \
+            --exclude='coverage/' \
+            --exclude='review/' \
+            --exclude='AGENTS.md' \
+            --exclude='docs/DEPLOY.local.md' \
+            --exclude='.DS_Store' \
+            -e "ssh -i $HOME/.ssh/priemka_deploy -p $DEPLOY_SSH_PORT -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
+          "${ssh_args[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_DIR' && test -f .env && test -f compose.yaml && test -f scripts/deploy-compose.sh && bash scripts/deploy-compose.sh"
+
+  deploy-prod:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      group: priemka-deploy-prod
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/priemka_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/priemka_deploy" "$HOME/.ssh/known_hosts"
+      - name: Sync and deploy PROD
+        run: |
+          ssh_args=(ssh -i "$HOME/.ssh/priemka_deploy" -p "$DEPLOY_SSH_PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          "${ssh_args[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "test -d '$DEPLOY_DIR'"
+          rsync -az --delete \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='dist/' \
+            --exclude='coverage/' \
+            --exclude='review/' \
+            --exclude='AGENTS.md' \
+            --exclude='docs/DEPLOY.local.md' \
+            --exclude='.DS_Store' \
+            -e "ssh -i $HOME/.ssh/priemka_deploy -p $DEPLOY_SSH_PORT -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
+          "${ssh_args[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_DIR' && test -f .env && test -f compose.yaml && test -f scripts/deploy-compose.sh && bash scripts/deploy-compose.sh"

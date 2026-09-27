@@ -10,7 +10,7 @@ const now = new Date("2026-09-24T16:00:00.000Z");
 
 async function checkMe(profile: Parameters<typeof createPostmanInitData>[1], initData?: string) {
   const app = await createApp({
-    config: { botToken, maxInitDataMaxAgeSeconds: 3600 },
+    config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
     now: () => now,
     logger: false,
     userRepository: { isReady: async () => true, upsertFromMax: async () => ({ id: 1, isAdmin: false }) },
@@ -122,7 +122,7 @@ describe("local Postman MAX signer", () => {
       "DELETE {{baseUrl}}/api/works/{{workId}}/watch",
       "GET {{baseUrl}}/api/houses/{{houseId}}/observations",
       "POST {{baseUrl}}/api/houses/{{houseId}}/observations",
-      "GET {{baseUrl}}/api/works/{{workId}}/comments",
+      "GET {{baseUrl}}/api/works/{{workId}}/comments?page=1&limit=20",
       "POST {{baseUrl}}/api/works/{{workId}}/comments",
       "PUT {{baseUrl}}/api/houses/{{houseId}}/chat",
       "DELETE {{baseUrl}}/api/houses/{{houseId}}/chat",
@@ -152,7 +152,7 @@ describe("local Postman MAX signer", () => {
     expect(JSON.parse(inspection.request.body.raw)).toHaveProperty("assigneeUserId");
     expect(inspection.request.body.raw).not.toContain("assigneeUserIds");
     const act = workflow.item.find((item: { name: string }) => item.name === "POST акт приёмки");
-    expect(JSON.parse(act.request.body.raw).data).toHaveProperty("totalPriceWords");
+    expect(JSON.parse(act.request.body.raw)).toEqual({ type: "ACCEPTANCE_ACT" });
     expect(JSON.stringify(workflow)).not.toContain("MAX_BOT_TOKEN");
   });
 });
