@@ -160,12 +160,14 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
 
   const staticRoot = options.staticRoot ?? resolve(process.cwd(), "../web/dist");
   if (existsSync(staticRoot)) {
-    await app.register(staticPlugin, { root: staticRoot, wildcard: true });
+    await app.register(staticPlugin, { root: staticRoot, prefix: "/app/", wildcard: true });
+    app.get("/app", async (_request, reply) => reply.code(308).header("location", "/app/").send());
     app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith("/api/") || request.url.startsWith("/max/")) {
-        return reply.code(404).send({ message: "Маршрут не найден" });
+      const pathname = new URL(request.url, "http://localhost").pathname;
+      if ((request.method === "GET" || request.method === "HEAD") && pathname.startsWith("/app/") && !pathname.startsWith("/app/assets/")) {
+        return reply.type("text/html; charset=utf-8").sendFile("index.html");
       }
-      return reply.type("text/html; charset=utf-8").sendFile("index.html");
+      return reply.code(404).send({ message: "Маршрут не найден" });
     });
   }
 
