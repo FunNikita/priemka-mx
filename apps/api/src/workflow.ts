@@ -9,6 +9,7 @@ import { requireMaxAuth } from "./max/require-max-auth.js";
 import { PrismaUserRepository } from "./repositories/prisma-user-repository.js";
 import type { UserRepository } from "./repositories/user-repository.js";
 import { newPublicPhotoKey } from "./photo-keys.js";
+import { syncLinkedObservationStatus } from "./observation-work.js";
 
 type Context = { db: PrismaClient; userId: number; isAdmin: boolean };
 const err = { type: "object", properties: { message: { type: "string" } }, required: ["message"] } as const;
@@ -88,6 +89,7 @@ async function updateWorkStatusFromIssues(tx: Prisma.TransactionClient, workId: 
   const issues = await tx.issue.findMany({ where: { workId }, select: { status: true } });
   const status = workStatusFromIssueStatuses(issues.map((issue) => issue.status));
   await tx.work.update({ where: { id: workId }, data: { status } });
+  await syncLinkedObservationStatus(tx, workId, status);
 }
 
 async function attachNewMedia(db: PrismaClient, userId: number, ids: number[], target: { inspectionAnswerId?: number; remediationId?: number; reinspectionId?: number }) {
@@ -212,6 +214,7 @@ async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number
     await tx.documentVersion.updateMany({ where: { id: original.id, status: { not: "SUPERSEDED" } }, data: { status: "SUPERSEDED" } });
     for (const item of confirmations) await tx.documentConfirmation.upsert({ where: { documentVersionId_roleSnapshot: { documentVersionId: readyVersion.id, roleSnapshot: item.roleSnapshot } }, create: { documentVersionId: readyVersion.id, userId: item.userId, roleSnapshot: item.roleSnapshot, confirmedAt: item.confirmedAt }, update: {} });
     const accepted = await tx.work.updateMany({ where: { id: document.workId, status: { not: "ACCEPTED" } }, data: { status: "ACCEPTED", completedAt: now() } });
+    if (accepted.count) await syncLinkedObservationStatus(tx, document.workId, "ACCEPTED");
     if (accepted.count) await tx.workHistory.create({ data: { workId: document.workId, event: "ACCEPTANCE_CONFIRMED", details: `Документ №${document.id}, версия ${readyVersion.version}` } });
     return true;
   });
@@ -271,6 +274,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       if (current.status !== "NEW" || !current.submittedForInspectionAt || current.category !== template.category || await tx.inspection.count({ where: { workId } })) throw new Error("INSPECTION_CONFLICT");
       const inspection = await tx.inspection.create({ data: { workId, checklistTemplateId: template.id, templateVersion: template.version, createdByUserId: ctx.userId, items: { create: template.items.map((item) => ({ order: item.order, title: item.title, description: item.description, method: item.method, sourceType: item.sourceType, sourceLabel: item.sourceLabel, commentRequiredOnFail: item.commentRequiredOnFail, photoRequiredOnFail: item.photoRequiredOnFail })) }, assignments: { create: { assigneeUserId: input.assigneeUserId } } } });
       await tx.work.update({ where: { id: workId }, data: { status: "IN_REVIEW" } });
+      await syncLinkedObservationStatus(tx, workId, "IN_REVIEW");
       await tx.workHistory.create({ data: { workId, event: "INSPECTION_ASSIGNED", details: `Проверяющий ${input.assigneeUserId}` } });
       return inspection;
     }).catch((cause: unknown) => { if (cause instanceof Error && cause.message === "INSPECTION_CONFLICT") return null; throw cause; });

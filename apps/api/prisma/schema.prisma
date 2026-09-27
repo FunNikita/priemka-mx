@@ -181,6 +181,7 @@ model HouseObject {
 model Work {
   id               Int                @id @default(autoincrement())
   houseId          Int
+  sourceObservationId Int?            @unique
   houseObjectId    Int?
   executorUserId   Int?
   title            String             @db.VarChar(255)
@@ -195,6 +196,7 @@ model Work {
   executorName     String?            @db.VarChar(255)
   representativeName String?          @db.VarChar(255)
   house            House              @relation(fields: [houseId], references: [id])
+  sourceObservation Observation?      @relation("ObservationWork", fields: [sourceObservationId], references: [id])
   houseObject      HouseObject?       @relation(fields: [houseObjectId], references: [id])
   executor         User?              @relation(fields: [executorUserId], references: [id])
   subscriptions    WorkSubscription[]
@@ -241,6 +243,7 @@ model Observation {
   houseObject   HouseObject?      @relation(fields: [houseObjectId], references: [id])
   author        User              @relation(fields: [authorId], references: [id])
   media         Media[]
+  linkedWork    Work?             @relation("ObservationWork")
   @@index([houseId, status, createdAt])
 }
 

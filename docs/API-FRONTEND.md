@@ -92,6 +92,8 @@ MAX User сам по себе не является участником дом�
 
 Frontend использует эти флаги и всё равно обрабатывает ответ endpoint: состояние может измениться после загрузки карточки. `POST /api/works/:workId/watch` и `DELETE` переключают подписку и возвращают `204`.
 
+При создании работы председатель может передать необязательный `sourceObservationId` наблюдения того же дома. Связь хранится в `Work.sourceObservationId` (уникальная); транзакция блокирует наблюдение, проверяет отсутствие связанной работы и возвращает `404` для несуществующего наблюдения, `400` для другого дома, `409` для уже связанного. Ручное создание без этого поля сохраняется. `GET /api/works/:workId` возвращает `sourceObservation: {id,title} | null`. Наблюдение в списке содержит `linkedWork: {id,status} | null` и `actions.createWork` от backend. Связанный статус: создание работы → `IN_PROGRESS`, передача на проверку → `IN_REVIEW`, замечания и устранение → фактический `IN_PROGRESS`/`WAITING`, приёмка → `ACCEPTED`. Фото наблюдения остаются у наблюдения; Issue возникает только после `FAIL` проверки.
+
 `GET /api/houses/:houseId/observations` возвращает наблюдения жителей; `POST` принимает `category`, `title`, `description`, необязательные `houseObjectId` и `mediaIds`. `GET /api/works/:workId/comments` возвращает `{items,page,limit,total}`; `page` по умолчанию 1, `limit` по умолчанию 20 и не более 100. `POST` по тому же пути добавляет комментарии. `PUT /api/houses/:houseId/chat` с `{ "joinUrl": "https://max.ru/..." }` и `DELETE` управляют ссылкой чата по правам backend.
 
 ## Загрузка изображений
