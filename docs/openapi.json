@@ -1923,6 +1923,10 @@
                     "type": "integer",
                     "minimum": 1
                   },
+                  "sourceObservationId": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -2016,6 +2020,24 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -2417,6 +2439,7 @@
                     "id",
                     "house",
                     "houseObject",
+                    "sourceObservation",
                     "title",
                     "description",
                     "category",
@@ -2452,6 +2475,23 @@
                       }
                     },
                     "houseObject": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "required": [
+                        "id",
+                        "title"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "sourceObservation": {
                       "type": "object",
                       "additionalProperties": false,
                       "nullable": true,
@@ -2959,7 +2999,9 @@
                           "status",
                           "createdAt",
                           "author",
-                          "media"
+                          "media",
+                          "linkedWork",
+                          "actions"
                         ],
                         "properties": {
                           "id": {
@@ -3040,6 +3082,42 @@
                                 "size": {
                                   "type": "integer"
                                 }
+                              }
+                            }
+                          },
+                          "linkedWork": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "required": [
+                              "id",
+                              "status"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "NEW",
+                                  "IN_REVIEW",
+                                  "IN_PROGRESS",
+                                  "WAITING",
+                                  "ACCEPTED"
+                                ]
+                              }
+                            }
+                          },
+                          "actions": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "createWork"
+                            ],
+                            "properties": {
+                              "createWork": {
+                                "type": "boolean"
                               }
                             }
                           }
@@ -7265,6 +7343,15 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/app": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }

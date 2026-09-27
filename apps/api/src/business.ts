@@ -11,6 +11,7 @@ import { requireMaxAuth } from "./max/require-max-auth.js";
 import { PrismaUserRepository } from "./repositories/prisma-user-repository.js";
 import type { UserRepository } from "./repositories/user-repository.js";
 import { newPublicPhotoKey } from "./photo-keys.js";
+import { syncLinkedObservationStatus } from "./observation-work.js";
 
 const mediaRoot = () => resolve(process.env.MEDIA_DIR ?? "/app/data/media");
 const maxFileSize = 10 * 1024 * 1024;
@@ -25,7 +26,7 @@ const mediaIdsProperty = { type: "array", uniqueItems: true, maxItems: 20, items
 const mediaRefSchema = { type: "object", additionalProperties: false, required: ["id", "url", "width", "height", "mimeType", "size"], properties: { id: { type: "integer" }, url: { type: "string" }, width: { type: "integer" }, height: { type: "integer" }, mimeType: { type: "string" }, size: { type: "integer" } } } as const;
 const workCardSchema = { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "status", "date", "isWatching", "media"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, date: { type: "string", format: "date-time" }, isWatching: { type: "boolean" }, media: { type: "array", items: mediaRefSchema } } } as const;
 const authorSchema = { type: "object", additionalProperties: false, required: ["id", "firstName", "lastName"], properties: { id: { type: "integer" }, firstName: { type: "string" }, lastName: { type: "string" } } } as const;
-const observationSchema = { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "status", "createdAt", "author", "media"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, createdAt: { type: "string", format: "date-time" }, author: authorSchema, media: { type: "array", items: mediaRefSchema } } } as const;
+const observationSchema = { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "status", "createdAt", "author", "media", "linkedWork", "actions"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, createdAt: { type: "string", format: "date-time" }, author: authorSchema, media: { type: "array", items: mediaRefSchema }, linkedWork: { type: "object", additionalProperties: false, nullable: true, required: ["id", "status"], properties: { id: { type: "integer" }, status: statusSchema } }, actions: { type: "object", additionalProperties: false, required: ["createWork"], properties: { createWork: { type: "boolean" } } } } } as const;
 const commentSchema = { type: "object", additionalProperties: false, required: ["id", "text", "author", "createdAt", "media"], properties: { id: { type: "integer" }, text: { type: "string" }, author: authorSchema, createdAt: { type: "string", format: "date-time" }, media: { type: "array", items: mediaRefSchema } } } as const;
 const houseRefSchema = { type: "object", additionalProperties: false, required: ["id", "address"], properties: { id: { type: "integer" }, address: { type: "string" } } } as const;
 const chatSchema = { type: "object", additionalProperties: false, required: ["title", "joinUrl"], properties: { title: { type: "string", nullable: true }, joinUrl: { type: "string" } } } as const;
@@ -37,10 +38,11 @@ const workActionsSchema = { type: "object", additionalProperties: false, require
 const documentSchema = { type: "object", additionalProperties: false, required: ["id", "type", "title", "version", "status", "createdAt", "confirmedAt", "fileUrl", "actions"], properties: { id: { type: "integer" }, type: { type: "string" }, title: { type: "string" }, version: { type: "integer" }, status: { type: "string" }, createdAt: { type: "string", format: "date-time" }, confirmedAt: { type: "string", format: "date-time", nullable: true }, fileUrl: { type: "string" }, actions: { type: "object", additionalProperties: false, required: ["confirm"], properties: { confirm: { type: "boolean" } } } } } as const;
 const workDetailSchema = {
   type: "object", additionalProperties: false,
-  required: ["id", "house", "houseObject", "title", "description", "category", "status", "date", "dates", "history", "media", "executor", "representative", "isWatching", "actions", "documents"],
+  required: ["id", "house", "houseObject", "sourceObservation", "title", "description", "category", "status", "date", "dates", "history", "media", "executor", "representative", "isWatching", "actions", "documents"],
   properties: {
     id: { type: "integer" }, house: houseRefSchema,
     houseObject: { type: "object", additionalProperties: false, nullable: true, required: ["id", "title"], properties: { id: { type: "integer" }, title: { type: "string" } } },
+    sourceObservation: { type: "object", additionalProperties: false, nullable: true, required: ["id", "title"], properties: { id: { type: "integer" }, title: { type: "string" } } },
     title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, date: { type: "string", format: "date-time" },
     dates: { type: "object", additionalProperties: false, required: ["createdAt", "updatedAt", "completedAt", "submittedForInspectionAt"], properties: { createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, completedAt: { type: "string", format: "date-time", nullable: true }, submittedForInspectionAt: { type: "string", format: "date-time", nullable: true } } },
     history: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "event", "details", "createdAt"], properties: { id: { type: "integer" }, event: { type: "string" }, details: { type: "string", nullable: true }, createdAt: { type: "string", format: "date-time" } } } },
@@ -118,7 +120,7 @@ async function houseAccess(ctx: Context, houseId: number, permission: keyof Retu
 }
 
 async function workAccess(ctx: Context, workId: number) {
-  const work = await ctx.db.work.findUnique({ where: { id: workId }, include: { house: true, houseObject: true, executor: { select: { id: true, firstName: true, lastName: true } }, media: { where: { temporary: false }, include: { blob: true } }, history: { orderBy: { createdAt: "asc" } } } });
+  const work = await ctx.db.work.findUnique({ where: { id: workId }, include: { house: true, houseObject: true, sourceObservation: { select: { id: true, title: true } }, executor: { select: { id: true, firstName: true, lastName: true } }, media: { where: { temporary: false }, include: { blob: true } }, history: { orderBy: { createdAt: "asc" } } } });
   if (!work) return null;
   const m = await houseAccess(ctx, work.houseId, "viewWorks");
   return m && (isSystemAdmin(ctx) || m.membership?.role !== "EXECUTOR" || work.executorUserId === ctx.userId) ? { work, permissions: m.permissions } : null;
@@ -151,9 +153,9 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
   const secured = { preHandler: authenticate };
   const security = [{ maxInitData: [] }];
 
-  app.post("/api/houses/:houseId/works", { ...secured, schema: { tags: ["Works"], security, params: idParams, body: { type: "object", additionalProperties: false, required: ["executorUserId", "title", "description", "category"], properties: { executorUserId: { type: "integer", minimum: 1 }, title: { type: "string", minLength: 1, maxLength: 255 }, description: { type: "string", minLength: 1, maxLength: 10000 }, category: { type: "string", minLength: 1, maxLength: 100 } } }, response: { 201: idResponseSchema, 400: errorResponse, 403: errorResponse, 404: errorResponse } } }, async (request, reply) => {
+  app.post("/api/houses/:houseId/works", { ...secured, schema: { tags: ["Works"], security, params: idParams, body: { type: "object", additionalProperties: false, required: ["executorUserId", "title", "description", "category"], properties: { executorUserId: { type: "integer", minimum: 1 }, sourceObservationId: { type: "integer", minimum: 1 }, title: { type: "string", minLength: 1, maxLength: 255 }, description: { type: "string", minLength: 1, maxLength: 10000 }, category: { type: "string", minLength: 1, maxLength: 100 } } }, response: { 201: idResponseSchema, 400: errorResponse, 403: errorResponse, 404: errorResponse, 409: errorResponse } } }, async (request, reply) => {
     const ctx = request.business!, { houseId } = request.params as { houseId: number };
-    const input = request.body as { executorUserId: number; title: string; description: string; category: string };
+    const input = request.body as { executorUserId: number; sourceObservationId?: number; title: string; description: string; category: string };
     if (!await ctx.db.house.findUnique({ where: { id: houseId }, select: { id: true } })) return bad(reply, 404, "Дом не найден");
     const chair = await membership(ctx, houseId);
     if (chair?.status !== "ACTIVE" || chair.role !== "CHAIRMAN") return bad(reply, 403, "Работу создаёт председатель дома");
@@ -161,10 +163,26 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     if (!candidate || candidate.status !== "ACTIVE" || (candidate.role !== "EXECUTOR" && candidate.userId !== ctx.userId) || !candidate.executorCompanyName?.trim()) return bad(reply, 400, "Нужен активный исполнитель с компанией");
     if (!input.title.trim() || !input.description.trim() || !input.category.trim()) return bad(reply, 400, "Заполните данные работы");
     const created = await ctx.db.$transaction(async (tx) => {
-      const work = await tx.work.create({ data: { houseId, executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), title: input.title.trim(), description: input.description.trim(), category: input.category.trim(), status: "NEW" } });
+      if (input.sourceObservationId) {
+        await tx.$queryRaw`SELECT id FROM Observation WHERE id = ${input.sourceObservationId} FOR UPDATE`;
+        const source = await tx.observation.findUnique({ where: { id: input.sourceObservationId }, include: { linkedWork: { select: { id: true } } } });
+        if (!source) throw new Error("OBSERVATION_MISSING");
+        if (source.houseId !== houseId) throw new Error("OBSERVATION_HOUSE_MISMATCH");
+        if (source.linkedWork) throw new Error("OBSERVATION_LINKED");
+      }
+      const work = await tx.work.create({ data: { houseId, sourceObservationId: input.sourceObservationId ?? null, executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), title: input.title.trim(), description: input.description.trim(), category: input.category.trim(), status: "NEW" } });
+      if (input.sourceObservationId) await syncLinkedObservationStatus(tx, work.id, "IN_PROGRESS");
       await tx.workHistory.create({ data: { workId: work.id, event: "WORK_CREATED", details: `Исполнитель ${candidate.userId}` } });
       return work;
+    }).catch((cause: unknown) => {
+      if (cause instanceof Error && cause.message === "OBSERVATION_MISSING") return "OBSERVATION_MISSING" as const;
+      if (cause instanceof Error && cause.message === "OBSERVATION_HOUSE_MISMATCH") return "OBSERVATION_HOUSE_MISMATCH" as const;
+      if (cause instanceof Error && (cause.message === "OBSERVATION_LINKED" || ("code" in cause && cause.code === "P2002"))) return "OBSERVATION_LINKED" as const;
+      throw cause;
     });
+    if (created === "OBSERVATION_MISSING") return bad(reply, 404, "Наблюдение не найдено");
+    if (created === "OBSERVATION_HOUSE_MISMATCH") return bad(reply, 400, "Наблюдение относится к другому дому");
+    if (created === "OBSERVATION_LINKED") return bad(reply, 409, "По наблюдению уже создана работа");
     return reply.code(201).send({ id: created.id });
   });
 
@@ -184,6 +202,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       if (current.status !== "NEW") return null;
       const at = now();
       await tx.work.update({ where: { id: workId }, data: { submittedForInspectionAt: at } });
+      await syncLinkedObservationStatus(tx, workId, "IN_REVIEW");
       await tx.workHistory.create({ data: { workId, event: "SUBMITTED_FOR_INSPECTION" } });
       return at;
     });
@@ -231,7 +250,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       const version = document.versions[0];
       return version ? [{ id: document.id, type: document.type, title: document.title, version: version.version, status: version.status, createdAt: version.createdAt, confirmedAt: version.confirmedAt, fileUrl: `/doc/${version.publicKey}.pdf`, actions: { confirm: canConfirm(document.type, version.status, version.confirmations) } }] : [];
     });
-    return { id: work.id, house: { id: work.house.id, address: work.house.address }, houseObject: work.houseObject ? { id: work.houseObject.id, title: work.houseObject.title } : null, title: work.title, description: work.description, category: work.category, status: work.status, date: work.date, dates: { createdAt: work.createdAt, updatedAt: work.updatedAt, completedAt: work.completedAt, submittedForInspectionAt: work.submittedForInspectionAt }, history: work.history.map((event) => ({ id: event.id, event: event.event, details: event.details, createdAt: event.createdAt })), media: work.media.map(mediaRef), executor: work.executorName, representative: work.executor ? { id: work.executor.id, name: work.representativeName ?? `${work.executor.firstName} ${work.executor.lastName}`.trim(), phone: null, maxUrl: null } : null, isWatching: !!watching, documents: documentItems, actions: { watch: permissions.watchWork && !watching, unwatch: permissions.watchWork && !!watching, comment: permissions.commentWork, reportRemediation: executor && !!openIssues, submitForInspection: executor && work.status === "NEW" && !work.submittedForInspectionAt, assignInspector: chair && work.status === "NEW" && !!work.submittedForInspectionAt && !inspections, performInspection: membership?.status === "ACTIVE" && membership.role === "COUNCIL_MEMBER" && !!myAssignments, generateReasonedRefusal: !!refusalChair && !!activeIssues, generateAcceptanceAct: executor && work.status === "WAITING" && !!completedInspections && !activeIssues && !hasAcceptanceAct, confirmAcceptance: documentItems.some((item) => item.type === "ACCEPTANCE_ACT" && item.actions.confirm), manageDocuments: chair || executor } };
+    return { id: work.id, house: { id: work.house.id, address: work.house.address }, houseObject: work.houseObject ? { id: work.houseObject.id, title: work.houseObject.title } : null, sourceObservation: work.sourceObservation ? { id: work.sourceObservation.id, title: work.sourceObservation.title } : null, title: work.title, description: work.description, category: work.category, status: work.status, date: work.date, dates: { createdAt: work.createdAt, updatedAt: work.updatedAt, completedAt: work.completedAt, submittedForInspectionAt: work.submittedForInspectionAt }, history: work.history.map((event) => ({ id: event.id, event: event.event, details: event.details, createdAt: event.createdAt })), media: work.media.map(mediaRef), executor: work.executorName, representative: work.executor ? { id: work.executor.id, name: work.representativeName ?? `${work.executor.firstName} ${work.executor.lastName}`.trim(), phone: null, maxUrl: null } : null, isWatching: !!watching, documents: documentItems, actions: { watch: permissions.watchWork && !watching, unwatch: permissions.watchWork && !!watching, comment: permissions.commentWork, reportRemediation: executor && !!openIssues, submitForInspection: executor && work.status === "NEW" && !work.submittedForInspectionAt, assignInspector: chair && work.status === "NEW" && !!work.submittedForInspectionAt && !inspections, performInspection: membership?.status === "ACTIVE" && membership.role === "COUNCIL_MEMBER" && !!myAssignments, generateReasonedRefusal: !!refusalChair && !!activeIssues, generateAcceptanceAct: executor && work.status === "WAITING" && !!completedInspections && !activeIssues && !hasAcceptanceAct, confirmAcceptance: documentItems.some((item) => item.type === "ACCEPTANCE_ACT" && item.actions.confirm), manageDocuments: chair || executor } };
   });
 
   for (const method of ["POST", "DELETE"] as const) {
@@ -251,10 +270,12 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const query = typedRequest<{ query: { status?: string; search?: string; page?: number; limit?: number } }>(request).query;
     const ctx = request.business!;
     if (!await houseAccess(ctx, houseId, "viewObservations")) return bad(reply, 403, "Нет доступа к наблюдениям дома");
+    const chair = await membership(ctx, houseId);
+    const canCreateWork = chair?.status === "ACTIVE" && chair.role === "CHAIRMAN";
     const { page, limit, skip } = pageOf(query);
     const where = { houseId, ...(query.status ? { status: query.status as (typeof statusValues)[number] } : {}), ...(query.search ? { OR: [{ title: { contains: query.search } }, { description: { contains: query.search } }] } : {}) };
-    const [total, items] = await Promise.all([ctx.db.observation.count({ where }), ctx.db.observation.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { author: true, media: { include: { blob: true } } } })]);
-    return { items: items.map((item) => ({ id: item.id, title: item.title, description: item.description, category: item.category, status: item.status, createdAt: item.createdAt, author: author(item.author), media: item.media.map(mediaRef) })), page, limit, total };
+    const [total, items] = await Promise.all([ctx.db.observation.count({ where }), ctx.db.observation.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { author: true, linkedWork: { select: { id: true, status: true } }, media: { include: { blob: true } } } })]);
+    return { items: items.map((item) => ({ id: item.id, title: item.title, description: item.description, category: item.category, status: item.status, createdAt: item.createdAt, author: author(item.author), media: item.media.map(mediaRef), linkedWork: item.linkedWork ?? null, actions: { createWork: canCreateWork && !item.linkedWork } })), page, limit, total };
   });
 
   app.post("/api/houses/:houseId/observations", { ...secured, schema: { tags: ["Observations"], security, params: idParams, body: { type: "object", additionalProperties: false, required: ["category", "title", "description"], properties: { category: { type: "string", minLength: 1, maxLength: 100 }, houseObjectId: { type: "integer", minimum: 1, nullable: true }, title: { type: "string", minLength: 1, maxLength: 255 }, description: { type: "string", minLength: 1, maxLength: 10000 }, mediaIds: mediaIdsProperty } }, response: { 201: observationCreatedSchema, 400: errorResponse, 403: errorResponse } } }, async (request, reply) => {

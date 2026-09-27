@@ -35,7 +35,8 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
   await db.houseMembership.create({ data: { houseId: house.id, userId: users[7].id, role: "RESIDENT", status: "ACTIVE" } });
   await db.houseMembership.create({ data: { houseId: house.id, userId: users[8].id, role: "COUNCIL_MEMBER", status: "PENDING" } });
   await db.houseMembership.create({ data: { houseId: house2.id, userId: users[9].id, role: "CHAIRMAN", status: "ACTIVE" } });
-  const work = await db.work.create({ data: { houseId: house.id, executorUserId: users[3].id, title: `Test work ${key}`, description: "Демо работа", category: "COMMON_AREAS", status: "NEW", executorName: "Демо УК" } });
+  const sourceObservation = await db.observation.create({ data: { houseId: house.id, authorId: users[7].id, title: `Linked observation ${key}`, description: "Заявка жителя", category: "COMMON_AREAS", status: "IN_PROGRESS" } });
+  const work = await db.work.create({ data: { houseId: house.id, sourceObservationId: sourceObservation.id, executorUserId: users[3].id, title: `Test work ${key}`, description: "Демо работа", category: "COMMON_AREAS", status: "NEW", executorName: "Демо УК" } });
   const template = await db.checklistTemplate.create({ data: { code: `TEST_${key}`, title: "Test template", category: "COMMON_AREAS", items: { create: [{ order: 1, title: "Пункт один", method: "VISUAL", sourceType: "INTERNAL" }, { order: 2, title: "Пункт два", method: "VISUAL", sourceType: "INTERNAL" }] } } });
   const wrongTemplate = await db.checklistTemplate.create({ data: { code: `WRONG_${key}`, title: "Other category", category: "ROOF", items: { create: [{ order: 1, title: "Кровля", method: "VISUAL", sourceType: "INTERNAL" }] } } });
   const app = await createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch: true }, userRepository: repository, businessDb: db, logger: false, staticRoot: "/nonexistent" });
@@ -63,6 +64,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(0, "GET", `/api/houses/${house.id}/members?role=COUNCIL_MEMBER`)).json().items).toHaveLength(3);
     expect((await call(0, "POST", `/api/works/${work.id}/inspections`, { checklistTemplateId: template.id, assigneeUserId: users[1].id })).statusCode).toBe(409);
     expect((await call(3, "POST", `/api/works/${work.id}/submit-for-inspection`, {})).statusCode).toBe(200);
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("IN_REVIEW");
     expect((await call(0, "POST", `/api/works/${work.id}/inspections`, { checklistTemplateId: wrongTemplate.id, assigneeUserId: users[1].id })).statusCode).toBe(400);
     expect(await db.inspection.count({ where: { workId: work.id } })).toBe(0);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("NEW");
@@ -120,6 +122,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await readFile(join(process.env.DOCUMENTS_DIR!, restoredFirstReport.storagePath))).length).toBeGreaterThan(0);
     expect(await db.documentVersion.count({ where: { documentId: firstReport.id } })).toBe(1);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("IN_PROGRESS");
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("IN_PROGRESS");
     const issues = await call(3, "GET", `/api/works/${work.id}/issues`);
     expect(issues.json().items).toHaveLength(1);
     expect(issues.json()).toEqual(expect.objectContaining({ page: 1, limit: 20, total: 1 }));
@@ -152,6 +155,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(1, "GET", `/api/me/reinspections?houseId=${house.id}&status=ASSIGNED&page=2&limit=1`)).json()).toEqual({ items: [], page: 2, limit: 1, total: 1 });
     expect((await call(1, "GET", "/api/me/reinspections?limit=101")).statusCode).toBe(400);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("WAITING");
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("WAITING");
     expect((await call(3, "GET", `/api/works/${work.id}`)).json().actions.reportRemediation).toBe(false);
     expect((await call(3, "POST", `/api/issues/${issueId}/remediations`, { comment: "Повтор", mediaIds: [after] })).statusCode).toBe(409);
     const cleanWork = await db.work.create({ data: { houseId: house.id, executorUserId: users[3].id, title: `Clean work ${key}`, description: "Без замечаний", category: "COMMON_AREAS", submittedForInspectionAt: new Date() } });
@@ -283,6 +287,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(5, "POST", `/api/documents/${act.json().id}/confirm`, {})).statusCode).toBe(404);
     expect((await call(0, "POST", `/api/documents/${act.json().id}/confirm`, {})).json().status).toBe("CONFIRMED");
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("ACCEPTED");
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("ACCEPTED");
     expect((await call(0, "POST", `/api/documents/${act.json().id}/confirm`, {})).json().status).toBe("CONFIRMED");
     expect((await call(3, "POST", `/api/documents/${act.json().id}/confirm`, {})).json().status).toBe("CONFIRMED");
     expect(await db.documentVersion.count({ where: { documentId: act.json().id } })).toBe(2);
@@ -440,6 +445,21 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     const legacyEvent = `{"update_type":"bot_started","timestamp":2,"chat_id":9007199254740993,"payload":"doc_${legacyKey}"}`;
     expect((await app.inject({ method: "POST", url: "/max/webhook", headers: { "content-type": "application/json", "x-max-bot-api-secret": process.env.MAX_WEBHOOK_SECRET! }, payload: legacyEvent })).statusCode).toBe(200);
     expect((await db.botOutbox.findFirstOrThrow({ orderBy: { id: "desc" } })).publicKey).toBe(legacyKey);
+    expect((await ownRole(3, "EXECUTOR", "Демо УК")).statusCode).toBe(200);
+    expect((await ownRole(0, "CHAIRMAN")).statusCode).toBe(200);
+    const report = await db.observation.create({ data: { houseId: house.id, authorId: users[7].id, title: `Resident report ${key}`, description: "Проблема жителя", category: "COMMON_AREAS" } });
+    const linkedPayload = { sourceObservationId: report.id, executorUserId: users[3].id, title: "Ремонт по наблюдению", description: "Описание", category: "COMMON_AREAS" };
+    expect((await call(7, "POST", `/api/houses/${house.id}/works`, linkedPayload)).statusCode).toBe(403);
+    await db.houseMembership.create({ data: { houseId: house2.id, userId: users[3].id, role: "EXECUTOR", status: "ACTIVE", executorCompanyName: "Демо УК" } });
+    expect((await call(9, "POST", `/api/houses/${house2.id}/works`, linkedPayload)).statusCode).toBe(400);
+    const linkedAttempts = await Promise.all([call(0, "POST", `/api/houses/${house.id}/works`, linkedPayload), call(0, "POST", `/api/houses/${house.id}/works`, linkedPayload)]);
+    expect(linkedAttempts.map((response) => response.statusCode).sort()).toEqual([201, 409]);
+    const linkedId = linkedAttempts.find((response) => response.statusCode === 201)!.json().id as number;
+    expect(await db.work.count({ where: { sourceObservationId: report.id } })).toBe(1);
+    expect((await db.observation.findUniqueOrThrow({ where: { id: report.id } })).status).toBe("IN_PROGRESS");
+    expect((await call(0, "GET", `/api/works/${linkedId}`)).json().sourceObservation).toEqual({ id: report.id, title: report.title });
+    expect((await call(0, "GET", `/api/houses/${house.id}/observations`)).json().items.find((item: { id: number }) => item.id === report.id)).toEqual(expect.objectContaining({ linkedWork: { id: linkedId, status: "NEW" }, actions: { createWork: false } }));
+    expect(await db.issue.count({ where: { workId: linkedId } })).toBe(0);
   } finally {
     await app.close();
     await rm(directory, { recursive: true, force: true });

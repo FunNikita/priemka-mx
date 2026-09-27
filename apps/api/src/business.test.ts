@@ -47,7 +47,7 @@ function fixture() {
     work: {
       findUnique: async ({ where }: { where: { id: number } }) => where.id === 7 ? work : createdWorks.find((item) => item.id === where.id) ?? null,
       findUniqueOrThrow: async ({ where }: { where: { id: number } }) => where.id === 7 ? work : createdWorks.find((item) => item.id === where.id)!,
-      create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: 8 + createdWorks.length, submittedForInspectionAt: null }; createdWorks.push(row); return row; },
+      create: async ({ data }: { data: Record<string, unknown> }) => { if (data.sourceObservationId && createdWorks.some((item) => item.sourceObservationId === data.sourceObservationId)) throw Object.assign(new Error("Unique constraint"), { code: "P2002" }); const row = { ...data, id: 8 + createdWorks.length, submittedForInspectionAt: null }; createdWorks.push(row); return row; },
       update: async ({ data }: { data: Partial<typeof work> }) => { Object.assign(work, data); return work; },
       findMany: async ({ where }: { where: { status?: string; executorUserId?: number } }) => where.status && where.status !== work.status || where.executorUserId && where.executorUserId !== work.executorUserId ? [] : [{ ...work, subscriptions: subscriptions.has("7:1") ? [{ id: 1 }] : [] }],
       count: async ({ where }: { where: { status?: string; executorUserId?: number } }) => where.status && where.status !== work.status || where.executorUserId && where.executorUserId !== work.executorUserId ? 0 : 1,
@@ -94,7 +94,9 @@ function fixture() {
     observation: {
       create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: observations.length + 1, status: "NEW", createdAt: new Date() }; observations.push(row); return row; },
       count: async () => observations.length,
-      findMany: async ({ where }: { where: { status?: string } }) => observations.filter((item) => !where.status || item.status === where.status).map((item) => ({ ...item, author: user, media: [...media.values()].filter((m) => m.observationId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
+      findUnique: async ({ where }: { where: { id: number } }) => { const item = observations.find((row) => row.id === where.id); return item ? { ...item, linkedWork: createdWorks.find((work) => work.sourceObservationId === item.id) ?? null } : null; },
+      update: async ({ where, data }: { where: { id: number }; data: { status: string } }) => { const item = observations.find((row) => row.id === where.id)!; item.status = data.status; return item; },
+      findMany: async ({ where }: { where: { status?: string } }) => observations.filter((item) => !where.status || item.status === where.status).map((item) => ({ ...item, linkedWork: createdWorks.find((work) => work.sourceObservationId === item.id) ?? null, author: user, media: [...media.values()].filter((m) => m.observationId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
     },
     comment: {
       count: async () => comments.length,
@@ -153,6 +155,33 @@ describe("business API", () => {
       expect(first.statusCode).toBe(200);
       expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).json()).toEqual(first.json());
       expect(f.historyEvents.filter((event) => event.event === "SUBMITTED_FOR_INSPECTION")).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
+  it("links a chairman work to one observation and syncs its status", async () => {
+    const f = fixture();
+    const app = await appFor(f.db);
+    const url = "/api/houses/1/works";
+    const payload = { executorUserId: 1, title: "Ремонт", description: "Описание", category: "OTHER", sourceObservationId: 1 };
+    try {
+      expect((await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Заявка", description: "Описание" } })).statusCode).toBe(201);
+      expect((await app.inject({ method: "POST", url, headers: auth, payload })).statusCode).toBe(403);
+      f.setRole("CHAIRMAN"); f.setCompany("Тестовая УК");
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).json().items[0].actions.createWork).toBe(true);
+      expect((await app.inject({ method: "POST", url, headers: auth, payload: { ...payload, sourceObservationId: 999 } })).statusCode).toBe(404);
+      f.observations[0].houseId = 2;
+      expect((await app.inject({ method: "POST", url, headers: auth, payload })).statusCode).toBe(400);
+      f.observations[0].houseId = 1;
+      const raced = await Promise.all([app.inject({ method: "POST", url, headers: auth, payload }), app.inject({ method: "POST", url, headers: auth, payload })]);
+      expect(raced.map((response) => response.statusCode).sort()).toEqual([201, 409]);
+      expect(f.observations[0].status).toBe("IN_PROGRESS");
+      expect(f.createdWorks[0].sourceObservationId).toBe(1);
+      expect((await app.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).json().items[0]).toEqual(expect.objectContaining({ linkedWork: expect.objectContaining({ id: 8 }), actions: { createWork: false } }));
+      expect((await app.inject({ method: "POST", url, headers: auth, payload })).statusCode).toBe(409);
+      expect(f.createdWorks).toHaveLength(1);
+      expect((await app.inject({ method: "POST", url, headers: auth, payload: { ...payload, sourceObservationId: undefined } })).statusCode).toBe(201);
+      expect(f.createdWorks[1].sourceObservationId).toBeNull();
+      expect(f.comments).toHaveLength(0);
     } finally { await app.close(); }
   });
 
