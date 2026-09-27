@@ -248,14 +248,31 @@ export async function ensureDocumentVersionFile(db: PrismaClient, documentId: nu
   return db.documentVersion.update({ where: { id: version.id }, data: stored });
 }
 
+async function createOrFindLinkedDocument(db: PrismaClient, workId: number, type: DocumentType, options: { inspectionId?: number; reinspectionId?: number }) {
+  try {
+    if (options.inspectionId) {
+      return await db.document.upsert({ where: { inspectionId: options.inspectionId }, create: { workId, type, title: documentTitle[type], inspectionId: options.inspectionId }, update: {} });
+    }
+    if (options.reinspectionId) {
+      return await db.document.upsert({ where: { reinspectionId: options.reinspectionId }, create: { workId, type, title: documentTitle[type], reinspectionId: options.reinspectionId }, update: {} });
+    }
+    return db.document.create({ data: { workId, type, title: documentTitle[type] } });
+  } catch (error) {
+    if ((error as { code?: string }).code !== "P2002") throw error;
+    const existing = options.inspectionId
+      ? await db.document.findUnique({ where: { inspectionId: options.inspectionId } })
+      : options.reinspectionId
+        ? await db.document.findUnique({ where: { reinspectionId: options.reinspectionId } })
+        : null;
+    if (!existing) throw error;
+    return existing;
+  }
+}
+
 export async function createDocumentVersion(db: PrismaClient, workId: number, type: DocumentType, userId: number, payload: DocumentPayload, botName: string, options: { documentId?: number; inspectionId?: number; reinspectionId?: number } = {}) {
   const document = options.documentId
     ? await db.document.findUniqueOrThrow({ where: { id: options.documentId } })
-    : options.inspectionId
-      ? await db.document.upsert({ where: { inspectionId: options.inspectionId }, create: { workId, type, title: documentTitle[type], inspectionId: options.inspectionId }, update: {} })
-      : options.reinspectionId
-        ? await db.document.upsert({ where: { reinspectionId: options.reinspectionId }, create: { workId, type, title: documentTitle[type], reinspectionId: options.reinspectionId }, update: {} })
-        : await db.document.create({ data: { workId, type, title: documentTitle[type] } });
+    : await createOrFindLinkedDocument(db, workId, type, options);
   if (document.workId !== workId || document.type !== type) throw new Error("Document mismatch");
   const previous = await db.documentVersion.findFirst({ where: { documentId: document.id }, orderBy: { version: "desc" } });
   if (previous && (options.inspectionId || options.reinspectionId)) return ensureDocumentVersionFile(db, document.id, type, previous, botName);

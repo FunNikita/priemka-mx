@@ -32,20 +32,22 @@ afterEach(() => {
 });
 
 describe("ensureMaxWebhook", () => {
-  it("verifies the bot, posts bot_started and the secret, and confirms the subscription", async () => {
+  it("verifies the bot, preserves update types, and confirms both required types", async () => {
     const mocked = mockFetch(
       json({ is_bot: true, username: botName }),
+      json({ subscriptions: [{ url: webhook, update_types: ["bot_started", "message_callback"] }] }),
       json({ success: true }),
-      json({ subscriptions: [{ url: webhook, update_types: ["bot_started"] }] }),
+      json({ subscriptions: [{ url: webhook, update_types: ["bot_started", "message_created", "message_callback"] }] }),
     );
 
     await ensureMaxWebhook("https://dev.example.com");
 
-    expect(mocked).toHaveBeenCalledTimes(3);
+    expect(mocked).toHaveBeenCalledTimes(4);
     expect(mocked).toHaveBeenNthCalledWith(1, "https://platform-api2.max.ru/me", expect.objectContaining({ method: "GET", headers: { Authorization: token } }));
-    expect(mocked).toHaveBeenNthCalledWith(2, "https://platform-api2.max.ru/subscriptions", expect.objectContaining({ method: "POST", headers: { Authorization: token, "Content-Type": "application/json" } }));
-    expect(JSON.parse(String((mocked.mock.calls[1][1] as RequestInit).body))).toEqual({ url: webhook, update_types: ["bot_started"], secret });
-    expect(mocked).toHaveBeenNthCalledWith(3, "https://platform-api2.max.ru/subscriptions", expect.objectContaining({ method: "GET", headers: { Authorization: token } }));
+    expect(mocked).toHaveBeenNthCalledWith(2, "https://platform-api2.max.ru/subscriptions", expect.objectContaining({ method: "GET", headers: { Authorization: token } }));
+    expect(mocked).toHaveBeenNthCalledWith(3, "https://platform-api2.max.ru/subscriptions", expect.objectContaining({ method: "POST", headers: { Authorization: token, "Content-Type": "application/json" } }));
+    expect(JSON.parse(String((mocked.mock.calls[2][1] as RequestInit).body))).toEqual({ url: webhook, update_types: ["bot_started", "message_callback", "message_created"], secret });
+    expect(mocked).toHaveBeenNthCalledWith(4, "https://platform-api2.max.ru/subscriptions", expect.objectContaining({ method: "GET", headers: { Authorization: token } }));
     expect(console.log).toHaveBeenCalledWith(`MAX bot verified: @${botName}`);
     expect(console.log).toHaveBeenCalledWith(`MAX webhook configured: ${webhook}`);
   });
@@ -66,18 +68,26 @@ describe("ensureMaxWebhook", () => {
   });
 
   it("fails when POST /subscriptions returns success false", async () => {
-    const mocked = mockFetch(json({ is_bot: true, username: botName }), json({ success: false, message: secret }));
+    const mocked = mockFetch(json({ is_bot: true, username: botName }), json({ subscriptions: [] }), json({ success: false, message: secret }));
     await expect(ensureMaxWebhook("https://dev.example.com")).rejects.toThrow("did not report success");
-    expect(mocked).toHaveBeenCalledTimes(2);
+    expect(mocked).toHaveBeenCalledTimes(3);
   });
 
   it("fails when GET /subscriptions does not contain the expected bot_started webhook", async () => {
     mockFetch(
       json({ is_bot: true, username: botName }),
+      json({ subscriptions: [] }),
       json({ success: true }),
       json({ subscriptions: [{ url: webhook, update_types: ["message_created"] }] }),
     );
-    await expect(ensureMaxWebhook("https://dev.example.com")).rejects.toThrow("did not confirm bot_started webhook");
+    await expect(ensureMaxWebhook("https://dev.example.com")).rejects.toThrow("did not confirm required webhook types");
+  });
+
+  it("refreshes the secret even when required update types are already present", async () => {
+    const mocked = mockFetch(json({ is_bot: true, username: botName }), json({ subscriptions: [{ url: webhook, update_types: ["bot_started", "message_created", "message_callback"] }] }), json({ success: true }), json({ subscriptions: [{ url: webhook, update_types: ["bot_started", "message_created", "message_callback"] }] }));
+    await ensureMaxWebhook("https://dev.example.com");
+    expect(mocked).toHaveBeenCalledTimes(4);
+    expect(JSON.parse(String((mocked.mock.calls[2][1] as RequestInit).body))).toEqual({ url: webhook, update_types: ["bot_started", "message_created", "message_callback"], secret });
   });
 
   it("rejects an HTTP base URL before any network request", async () => {

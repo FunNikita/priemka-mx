@@ -116,6 +116,7 @@ model User {
   updatedAt      DateTime           @updatedAt
   memberships    HouseMembership[]
   subscriptions  WorkSubscription[]
+  observationSubscriptions ObservationSubscription[]
   observations   Observation[]
   comments       Comment[]
   media          Media[]
@@ -126,6 +127,7 @@ model User {
   assignedReinspections Reinspection[]
   createdDocuments DocumentVersion[] @relation("DocumentCreator")
   documentConfirmations DocumentConfirmation[]
+  activityEvents ActivityEvent[]
 }
 
 model House {
@@ -139,6 +141,7 @@ model House {
   works        Work[]
   observations Observation[]
   lastOpenedBy User[] @relation("LastOpenedHouse")
+  activityEvents ActivityEvent[]
 }
 
 model HouseMembership {
@@ -151,6 +154,7 @@ model HouseMembership {
   canSignAcceptanceAct Boolean @default(false)
   authorityBasis String? @db.VarChar(512)
   executorCompanyName String? @db.VarChar(255)
+  requestedAt DateTime @default(now())
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   house     House            @relation(fields: [houseId], references: [id])
@@ -202,6 +206,7 @@ model Work {
   subscriptions    WorkSubscription[]
   comments         Comment[]
   history          WorkHistory[]
+  activityEvents ActivityEvent[]
   media            Media[]
   inspections      Inspection[]
   issues            Issue[]
@@ -214,9 +219,49 @@ model WorkSubscription {
   workId    Int
   userId    Int
   createdAt DateTime @default(now())
+  sourceObservationId Int?
   work      Work     @relation(fields: [workId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
   @@unique([workId, userId])
+}
+
+model ObservationSubscription {
+  id Int @id @default(autoincrement())
+  observationId Int
+  userId Int
+  reason String @db.VarChar(16)
+  createdAt DateTime @default(now())
+  observation Observation @relation(fields: [observationId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  @@unique([observationId, userId])
+}
+
+model ActivityEvent {
+  id Int @id @default(autoincrement())
+  event String @db.VarChar(100)
+  subjectType String @db.VarChar(50)
+  subjectId Int?
+  subjectKey String? @db.VarChar(128)
+  houseId Int?
+  workId Int?
+  observationId Int?
+  actorUserId Int?
+  actorName String? @db.VarChar(512)
+  actorRole String? @db.VarChar(32)
+  metadata Json?
+  createdAt DateTime @default(now())
+  house House? @relation(fields: [houseId], references: [id])
+  work Work? @relation(fields: [workId], references: [id])
+  observation Observation? @relation(fields: [observationId], references: [id])
+  actor User? @relation(fields: [actorUserId], references: [id])
+  @@index([subjectType, subjectId, createdAt])
+}
+
+model PreviewAccess {
+  maxUserId String @id @db.VarChar(32)
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WorkHistory {
@@ -244,20 +289,26 @@ model Observation {
   author        User              @relation(fields: [authorId], references: [id])
   media         Media[]
   linkedWork    Work?             @relation("ObservationWork")
+  subscriptions ObservationSubscription[]
+  comments Comment[]
+  activityEvents ActivityEvent[]
   @@index([houseId, status, createdAt])
 }
 
 model Comment {
   id        Int      @id @default(autoincrement())
-  workId    Int
+  workId    Int?
+  observationId Int?
   authorId  Int
   text      String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  work      Work     @relation(fields: [workId], references: [id])
+  work      Work?    @relation(fields: [workId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  observation Observation? @relation(fields: [observationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   author    User     @relation(fields: [authorId], references: [id])
   media     Media[]
   @@index([workId, createdAt])
+  @@index([observationId, createdAt])
 }
 
 model MediaBlob {
@@ -481,11 +532,21 @@ model BotOutbox {
   eventKey String @unique @db.Char(64)
   chatId String @db.VarChar(32)
   publicKey String @db.VarChar(40)
+  kind String @default("DOCUMENT") @db.VarChar(16)
+  targetType String @default("CHAT") @db.VarChar(16)
+  text String? @db.Text
+  buttonText String? @db.VarChar(100)
+  buttonUrl String? @db.VarChar(2048)
+  recipientUserId Int?
+  houseId Int?
+  accessKind String @default("NONE") @db.VarChar(16)
+  subjectId Int?
   attempts Int @default(0)
   nextAttemptAt DateTime @default(now())
   sentText Boolean @default(false)
   fileToken String? @db.VarChar(512)
   completedAt DateTime?
+  deadAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([completedAt, nextAttemptAt])

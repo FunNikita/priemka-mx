@@ -20,7 +20,7 @@ COPY --from=build /app/apps/api/assets ./apps/api/assets
 COPY --from=build /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/web/dist ./apps/web/dist
-RUN mkdir -p /app/data/media /app/data/documents && chown -R node:node /app/data /app/apps/api
+RUN mkdir -p /app/data/media /app/data/documents /app/data/logs && chown -R node:node /app/data /app/apps/api
 USER node
 WORKDIR /app/apps/api
 EXPOSE 3000

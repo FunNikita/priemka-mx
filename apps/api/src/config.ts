@@ -5,6 +5,8 @@ export type AppConfig = {
   botName: string;
   maxInitDataMaxAgeSeconds: number;
   allowSelfRoleSwitch?: boolean;
+  previewAccessRequired?: boolean;
+  botTimeZone?: string;
 };
 
 export function getConfig(): AppConfig {
@@ -20,11 +22,17 @@ export function getConfig(): AppConfig {
   }
   const rawSelfRoleSwitch = process.env.ALLOW_SELF_ROLE_SWITCH ?? "false";
   if (rawSelfRoleSwitch !== "true" && rawSelfRoleSwitch !== "false") throw new Error("ALLOW_SELF_ROLE_SWITCH must be true or false");
+  const preview = process.env.PREVIEW_ACCESS_REQUIRED ?? "false";
+  if (preview !== "true" && preview !== "false") throw new Error("PREVIEW_ACCESS_REQUIRED must be true or false");
+  const botTimeZone = process.env.BOT_TIME_ZONE ?? "Europe/Moscow";
+  try { new Intl.DateTimeFormat("ru-RU", { timeZone: botTimeZone }); } catch { throw new Error("BOT_TIME_ZONE must be a valid time zone"); }
 
   return {
     botToken,
     botName,
     maxInitDataMaxAgeSeconds,
     allowSelfRoleSwitch: rawSelfRoleSwitch === "true",
+    previewAccessRequired: preview === "true",
+    botTimeZone,
   };
 }
