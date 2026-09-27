@@ -8,6 +8,9 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { ImagePreview } from '../components/ui/ImagePreview';
 import { Modal } from '../components/ui/Modal';
 import { CouncilWorkPage } from './CouncilWorkPage';
+import { CouncilHouseChat } from './CouncilHouseChat';
+import { councilRequest } from './councilApi';
+import { useCouncilTasks } from './useCouncilTasks';
 import './HomePage.css';
 
 const HOUSE_CHAT_LINK = 'https://max.ru/join/priemka-house-chat';
@@ -17,11 +20,6 @@ const CHAT_MANAGER_ROLES = new Set(['council-member', 'chairman', 'admin']);
 const ACTIVE_WORKS = [
   { id: '1221312', title: 'Освещение у входа', status: 'Новая', review: 'Ожидает проверки', date: '12 сентября 12:00', description: 'Не работает освещение у входа в подъезд. Нужна проверка и замена лампы.', canObserve: true, photos: ['https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg', 'https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg'] },
   { id: '1221313', title: 'Доводчик входной двери', status: 'В работе', review: null, date: '11 сентября 16:30', description: 'Дверь закрывается не до конца. Заявка передана управляющей компании.', canObserve: true, photos: ['https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg', 'https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg'] },
-];
-
-const COUNCIL_INSPECTIONS = [
-  { id: '1221312', title: 'Освещение у входа', status: 'Назначена', statusTone: 'assigned', date: '12 сентября 12:00', description: 'Не работает освещение у входа в подъезд. Нужна проверка и замена лампы.', canObserve: false, photos: ['https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg', 'https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg'] },
-  { id: '1221313', title: 'Доводчик входной двери', status: 'Повторная', statusTone: 'repeat', date: '11 сентября 16:30', description: 'Дверь закрывалась не до конца. Исполнитель устранил замечание.', canObserve: false, photos: ['https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg', 'https://i.pinimg.com/736x/3a/89/ea/3a89ea9676fb304b1f91fb83914e5c67.jpg'] },
 ];
 
 const SERVICES_BY_ROLE = {
@@ -118,20 +116,35 @@ function HouseChatSection({ canManage = false }) {
 
 function CouncilMemberHome() {
   const [selectedWork, setSelectedWork] = useState(null);
+  const [houses, setHouses] = useState([]);
+  const [selectedHouseId, setSelectedHouseId] = useState(null);
+  const [houseError, setHouseError] = useState('');
+  const { tasks, loading, error, reload } = useCouncilTasks();
+  useEffect(() => {
+    let active = true;
+    councilRequest('/api/me').then((me) => {
+      if (!active) return;
+      const memberships = me.houses.filter((house) => house.status === 'ACTIVE' && house.role === 'COUNCIL_MEMBER');
+      setHouses(memberships);
+      setSelectedHouseId((current) => current ?? memberships[0]?.id ?? null);
+    }).catch((failure) => { if (active) setHouseError(failure.message); });
+    return () => { active = false; };
+  }, []);
+  const house = houses.find((item) => item.id === selectedHouseId);
+  const visibleTasks = tasks.filter((task) => task.status !== 'COMPLETED' && task.work.houseId === selectedHouseId);
 
-  if (selectedWork) return <CouncilWorkPage inspection={selectedWork} onBack={() => setSelectedWork(null)} />;
+  if (selectedWork) return <CouncilWorkPage inspection={{ ...selectedWork, apiKind: true }} onUpdated={reload} onBack={() => { setSelectedWork(null); void reload(); }} />;
 
   return <Panel mode="primary" className="home-panel">
     <PageHeader title="Главная" />
     <main className="panel-content">
       <div className="home-sections">
-        <CellAction before={<Avatar.Container size={40}><Avatar.Icon><Icon28BuildingOutline /></Avatar.Icon></Avatar.Container>} className="home-location-action" height="normal" mode="custom" style={{ '--MaxUi-CellAction_color': 'var(--text-secondary)' }}>
-          <Flex align="center" className="home-location-row"><Flex align="center" gap={5} className="home-location-address-group"><Typography.Body><span>Санкт-Петербург,</span>{' '}<br className="home-location-mobile-break" /><span className="home-location-street">ул. Примерная, д. 12</span></Typography.Body><Icon20ChevronRight className="home-location-chevron" /></Flex></Flex>
-        </CellAction>
-        <HouseChatSection canManage />
+        {houses.length > 1 ? <select className="home-access-dialog__input" aria-label="Выбрать дом" value={selectedHouseId ?? ''} onChange={(event) => setSelectedHouseId(Number(event.target.value))}>{houses.map((item) => <option key={item.id} value={item.id}>{item.address}</option>)}</select> : house ? <CellAction before={<Avatar.Container size={40}><Avatar.Icon><Icon28BuildingOutline /></Avatar.Icon></Avatar.Container>} className="home-location-action" height="normal" mode="custom" style={{ '--MaxUi-CellAction_color': 'var(--text-secondary)' }}><Typography.Body>{house.address}</Typography.Body></CellAction> : null}
+        {houseError ? <Typography.Body role="alert">{houseError}</Typography.Body> : null}
+        {selectedHouseId ? <CouncilHouseChat key={selectedHouseId} houseId={selectedHouseId} /> : null}
         <section className="home-active-works">
           <Typography.Headline className="home-section-title">Активные работы дома</Typography.Headline>
-          <div className="home-active-works__list">{COUNCIL_INSPECTIONS.map((work) => <ActiveWorkCard key={work.id} work={work} isObserved participationLabel="Вы проверяете" participationTone="checking" onOpen={() => setSelectedWork(work)} />)}</div>
+          <div className="home-active-works__list">{loading ? <Typography.Body>Загрузка проверок…</Typography.Body> : error ? <div role="alert"><Typography.Body>{error}</Typography.Body><button type="button" onClick={() => void reload()}>Повторить</button></div> : visibleTasks.length ? visibleTasks.map((task) => <ActiveWorkCard key={`${task.kind}-${task.id}`} work={{ id: task.work.id, title: task.work.title, status: task.kind === 'reinspection' ? 'Повторная' : task.status === 'IN_PROGRESS' ? 'В процессе' : 'Назначена', statusTone: task.kind === 'reinspection' ? 'repeat' : 'assigned', photos: [] }} isObserved participationLabel="Вы проверяете" participationTone="checking" onOpen={() => setSelectedWork(task)} />) : <Typography.Body>Назначенных проверок пока нет.</Typography.Body>}</div>
         </section>
       </div>
     </main>
@@ -142,9 +155,9 @@ function ActiveWorkCard({ work, isObserved, participationLabel = 'Вы набл�
   return <article className="home-active-work" onClick={(event) => { if (!event.target.closest('.media-preview__button')) onOpen(); }}>
     <div className="home-active-work__head"><Typography.Title variant="small-strong" className="work-card-title">{work.title}</Typography.Title><Typography.Label>ID {work.id}</Typography.Label></div>
     <div className="home-active-work__statuses"><span className={work.statusTone ? `home-active-work__status--${work.statusTone}` : undefined}>{work.status}</span>{work.review ? <span>{work.review}</span> : null}{isObserved ? <span className={`home-active-work__status--${participationTone}`}>{participationLabel}</span> : null}</div>
-    <div className="home-active-work__photos">{work.photos.map((photo, index) => <ImagePreview key={`${photo}-${index}`} title={`${work.title}: фото ${index + 1}`} src={photo} />)}</div>
-    <Typography.Label className="home-active-work__date">{work.date}</Typography.Label>
-    <Typography.Body variant="medium" className="home-active-work__description">{work.description}</Typography.Body>
+    {work.photos?.length ? <div className="home-active-work__photos">{work.photos.map((photo, index) => <ImagePreview key={`${photo}-${index}`} title={`${work.title}: фото ${index + 1}`} src={photo} />)}</div> : null}
+    {work.date ? <Typography.Label className="home-active-work__date">{work.date}</Typography.Label> : null}
+    {work.description ? <Typography.Body variant="medium" className="home-active-work__description">{work.description}</Typography.Body> : null}
     {work.canObserve && !isObserved ? <Button className="home-active-work__observe" mode="secondary" appearance="neutral" size="medium" stretched onClick={(event) => { event.stopPropagation(); onObserve?.(); }}>Стать наблюдателем</Button> : null}
   </article>;
 }

@@ -11,6 +11,14 @@ export default defineConfig({
         target: "http://127.0.0.1:3000",
         changeOrigin: true,
       },
+      "/photo": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: true,
+      },
+      "/doc": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: true,
+      },
     },
   },
 });
