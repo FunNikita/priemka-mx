@@ -41,3 +41,6 @@
 :root[data-color-scheme='dark'] .report-problem-field input, :root[data-color-scheme='dark'] .report-problem-field textarea, :root[data-color-scheme='dark'] .report-problem-field .app-select__trigger, :root[data-color-scheme='dark'] .report-problem-photo-add { background: #2a2b30; }
 :root[data-color-scheme='dark'] .report-problem-field .app-select__menu { background: #2a2b30; }
 :root[data-color-scheme='dark'] .report-problem-panel .report-problem-success { background: transparent; box-shadow: none; }
+.report-problem-photo { display: grid; place-items: center; background: var(--app-surface-secondary); }
+.report-problem-photo__retry { position: static !important; width: 40px !important; height: 40px !important; background: var(--app-surface-primary) !important; }
+.report-problem-photo .panel-state { min-height: 0; }

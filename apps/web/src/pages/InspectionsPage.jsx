@@ -1,11 +1,13 @@
 import { Panel, Typography } from '@maxhub/max-ui';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { PageHeader } from '../components/layout/PageHeader';
+import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { ErrorState } from '../components/ui/ErrorState';
+import { EmptyState } from '../components/ui/EmptyState';
 import { SearchInput } from '../components/ui/SearchInput';
 import { CouncilWorkPage } from './CouncilWorkPage';
 import { useCouncilTasks } from './useCouncilTasks';
-import { councilRequest } from './councilApi';
 import './WorksPage.css';
 
 const FILTERS = [
@@ -15,23 +17,16 @@ const FILTERS = [
   { id: 'completed', label: 'Завершены' },
 ];
 
-export function InspectionsPage() {
+export function InspectionsPage({ houseId }) {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedInspection, setSelectedInspection] = useState(null);
-  const [houses, setHouses] = useState([]);
-  const [houseId, setHouseId] = useState('all');
   const filtersRef = useRef(null);
-  const { tasks, loading, error, reload } = useCouncilTasks();
-  useEffect(() => {
-    let active = true;
-    councilRequest('/api/me').then((me) => { if (active) setHouses(me.houses.filter((house) => house.status === 'ACTIVE' && house.role === 'COUNCIL_MEMBER')); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
+  const { tasks, loading, error, reload } = useCouncilTasks(houseId);
   const inspections = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return tasks.filter((inspection) => (houseId === 'all' || inspection.work.houseId === Number(houseId)) && (filter === 'all' || (filter === 'repeat' ? inspection.kind === 'reinspection' && inspection.status !== 'COMPLETED' : filter === 'completed' ? inspection.status === 'COMPLETED' : inspection.kind === 'assignment' && inspection.status !== 'COMPLETED')) && (!normalizedQuery || inspection.work.title.toLowerCase().includes(normalizedQuery)));
-  }, [filter, houseId, query, tasks]);
+    return tasks.filter((inspection) => (filter === 'all' || (filter === 'repeat' ? inspection.kind === 'reinspection' && inspection.status !== 'COMPLETED' : filter === 'completed' ? inspection.status === 'COMPLETED' : inspection.kind === 'assignment' && inspection.status !== 'COMPLETED')) && (!normalizedQuery || inspection.work.title.toLowerCase().includes(normalizedQuery)));
+  }, [filter, query, tasks]);
 
   if (selectedInspection) return <CouncilWorkPage inspection={{ ...selectedInspection, apiKind: true }} onUpdated={reload} onBack={() => { setSelectedInspection(null); void reload(); }} />;
 
@@ -40,11 +35,10 @@ export function InspectionsPage() {
     <main className="panel-content house-events-content">
       <section className="house-events-layout">
         <SearchInput placeholder="Поиск" value={query} onChange={(event) => setQuery(typeof event === 'string' ? event : event.target.value)} />
-        {houses.length > 1 ? <select className="home-access-dialog__input" aria-label="Фильтр по дому" value={houseId} onChange={(event) => setHouseId(event.target.value)}><option value="all">Все дома</option>{houses.map((house) => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : null}
         <div ref={filtersRef} className="house-events-filters inspections-filters" role="tablist" aria-label="Фильтр проверок">
           {FILTERS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={filter === item.id} className={`house-events-filter${filter === item.id ? ' house-events-filter--active' : ''}`} onClick={(event) => { setFilter(item.id); event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); }}>{item.label}</button>)}
         </div>
-        <div className="house-events-list">{loading ? <div className="house-events-empty"><Typography.Body>Загрузка проверок…</Typography.Body></div> : error ? <div className="house-events-empty" role="alert"><Typography.Body>{error}</Typography.Body><button type="button" onClick={() => void reload()}>Повторить</button></div> : inspections.length ? inspections.map((inspection) => <InspectionCard key={`${inspection.kind}-${inspection.id}`} inspection={inspection} onOpen={() => setSelectedInspection(inspection)} />) : <div className="house-events-empty"><Typography.Body>Проверки не найдены.</Typography.Body></div>}</div>
+        <div className="house-events-list">{loading ? <LoadingSpinner /> : error ? <ErrorState message={error} onRetry={() => void reload()} /> : inspections.length ? inspections.map((inspection) => <InspectionCard key={`${inspection.kind}-${inspection.id}`} inspection={inspection} onOpen={() => setSelectedInspection(inspection)} />) : <EmptyState message="Проверки не найдены." />}</div>
       </section>
     </main>
   </Panel>;
