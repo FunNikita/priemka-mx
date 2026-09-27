@@ -1,6 +1,6 @@
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Button } from '../components/ui/LegacyButton';
-import { Icon24AddCircle, Icon24Dismiss } from '@vkontakte/icons';
+import { Icon24AddCircle, Icon24Dismiss, Icon24PenOutline } from '@vkontakte/icons';
 import { useRef, useState } from 'react';
 
 import { PageHeader } from '../components/layout/PageHeader';
@@ -17,6 +17,7 @@ export function ReportProblemPage({ onBack }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [photos, setPhotos] = useState([]);
+  const [isEditingPhotos, setEditingPhotos] = useState(false);
   const [isSent, setSent] = useState(false);
   const [address, setAddress] = useState(APPROVED_ADDRESSES[0]);
   const fileInputRef = useRef(null);
@@ -41,7 +42,7 @@ export function ReportProblemPage({ onBack }) {
         <label className="report-problem-field"><Typography.Label>Название проблемы</Typography.Label><input value={title} maxLength={80} placeholder="Например, не работает свет у входа" onChange={(event) => setTitle(event.target.value)} /></label>
         <div className="report-problem-description-photos"><label className="report-problem-field report-problem-field--description"><Typography.Label>Описание</Typography.Label><textarea value={description} maxLength={500} rows="3" placeholder="Расскажите подробнее, где и когда возникла проблема" onChange={(event) => setDescription(event.target.value)} /></label>
           <div className="report-problem-photos"><Typography.Title variant="small-strong">Фотографии</Typography.Title><input ref={fileInputRef} className="report-problem-photos__input" type="file" accept="image/*" multiple onChange={addPhotos} />
-            <div className="report-problem-photos__list">{photos.map((photo, index) => <div key={photo.id} className="report-problem-photo"><img src={photo.url} alt={`Фото проблемы ${index + 1}`} /><button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => setPhotos((items) => items.filter((item) => item.id !== photo.id))}><Icon24Dismiss width={16} height={16} /></button></div>)}{photos.length < 6 ? <button type="button" className="report-problem-photo-add" onClick={() => fileInputRef.current?.click()} aria-label="Добавить фотографию"><Icon24AddCircle /></button> : null}</div>
+            <div className={`report-problem-photos__list${photos.length ? ' report-problem-photos__list--with-actions' : ''}`}>{photos.length ? <div className="report-problem-photo-actions"><button type="button" className="report-problem-photo-action" onClick={() => fileInputRef.current?.click()} aria-label="Добавить фотографию"><Icon24AddCircle /></button><button type="button" className={`report-problem-photo-action${isEditingPhotos ? ' report-problem-photo-action--active' : ''}`} onClick={() => setEditingPhotos((value) => !value)} aria-label="Редактировать фотографии" aria-pressed={isEditingPhotos}><Icon24PenOutline /></button></div> : null}{photos.map((photo, index) => <div key={photo.id} className="report-problem-photo"><img src={photo.url} alt={`Фото проблемы ${index + 1}`} />{isEditingPhotos ? <button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => setPhotos((items) => items.filter((item) => item.id !== photo.id))}><Icon24Dismiss width={16} height={16} /></button> : null}</div>)}{!photos.length ? <button type="button" className="report-problem-photo-add" onClick={() => fileInputRef.current?.click()} aria-label="Добавить фотографию"><Icon24AddCircle /></button> : null}</div>
           </div>
         </div>
         <Button mode="primary" appearance="themed" size="medium" stretched disabled={!canSubmit} onClick={() => setSent(true)}>Отправить проблему</Button>
