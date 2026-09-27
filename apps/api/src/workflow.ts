@@ -9,9 +9,12 @@ import { requireMaxAuth } from "./max/require-max-auth.js";
 import { PrismaUserRepository } from "./repositories/prisma-user-repository.js";
 import type { UserRepository } from "./repositories/user-repository.js";
 import { newPublicPhotoKey } from "./photo-keys.js";
+import { syncLinkedObservationStatus } from "./observation-work.js";
+import { recordActivity } from "./activity.js";
+import { notifyWorkWatchers } from "./max/notifications.js";
 
 type Context = { db: PrismaClient; userId: number; isAdmin: boolean };
-const err = { type: "object", properties: { message: { type: "string" } }, required: ["message"] } as const;
+const err = { type: "object", properties: { message: { type: "string" }, code: { type: "string" }, maxUserId: { type: "string" } }, required: ["message"] } as const;
 const id = { type: "integer", minimum: 1 } as const;
 const params = (name: string) => ({ type: "object", required: [name], properties: { [name]: id } });
 const mediaIds = { type: "array", uniqueItems: true, maxItems: 20, items: id } as const;
@@ -24,7 +27,9 @@ const nullableDateTime = { ...dateTime, nullable: true } as const;
 const nullableString = { type: "string", nullable: true } as const;
 const mediaSchema = { type: "object", additionalProperties: false, required: ["id", "url"], properties: { id, url: str } } as const;
 const mediaListSchema = { type: "array", items: mediaSchema } as const;
-const workRefSchema = { type: "object", additionalProperties: false, required: ["id", "title", "houseId", "category"], properties: { id, title: str, houseId: id, category: str } } as const;
+const executorSchema = { type: "object", additionalProperties: false, nullable: true, required: ["userId", "companyName", "representativeName"], properties: { userId: id, companyName: str, representativeName: nullableString } } as const;
+const workRefSchema = { type: "object", additionalProperties: false, required: ["id", "title", "houseId", "category", "executor"], properties: { id, title: str, houseId: id, category: str, executor: executorSchema } } as const;
+function workRef(work: { id: number; title: string; houseId: number; category: string; executorUserId: number | null; executorName: string | null; representativeName: string | null }) { return { id: work.id, title: work.title, houseId: work.houseId, category: work.category, executor: work.executorUserId && work.executorName ? { userId: work.executorUserId, companyName: work.executorName, representativeName: work.representativeName } : null }; }
 const actionsSchema = (names: string[]) => ({ type: "object", additionalProperties: false, required: names, properties: Object.fromEntries(names.map((name) => [name, { type: "boolean" }])) });
 const listSchema = (item: Record<string, unknown>, paginated = false) => ({ type: "object", additionalProperties: false, required: paginated ? ["items", "page", "limit", "total"] : ["items"], properties: { items: { type: "array", items: item }, ...(paginated ? { page: id, limit: id, total: { type: "integer", minimum: 0 } } : {}) } });
 const pageQuery = { page: { type: "integer", minimum: 1, default: 1 }, limit: { type: "integer", minimum: 1, maximum: 100, default: 20 } } as const;
@@ -36,7 +41,7 @@ const templateSchema = { type: "object", additionalProperties: false, required: 
 const assignmentSummarySchema = { type: "object", additionalProperties: false, required: ["id", "status", "work", "inspectionId"], properties: { id, status: str, work: workRefSchema, inspectionId: id } };
 const answerSchema = { type: "object", additionalProperties: false, required: ["result", "comment", "media"], properties: { result: str, comment: nullableString, media: mediaListSchema } };
 const checklistSnapshotSchema = { type: "object", additionalProperties: false, required: ["id", "order", "title", "description", "method", "sourceType", "sourceLabel", "rules", "answer"], properties: { ...templateItemSchema.properties, answer: answerSchema } };
-const assignmentDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "work", "inspection", "checklist", "actions"], properties: { id, status: str, work: { type: "object", additionalProperties: false, required: ["id", "title"], properties: { id, title: str } }, inspection: { type: "object", additionalProperties: false, required: ["id", "templateVersion"], properties: { id, templateVersion: id } }, checklist: { type: "array", items: checklistSnapshotSchema }, actions: actionsSchema(["save", "complete"]) } };
+const assignmentDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "work", "inspection", "checklist", "actions"], properties: { id, status: str, work: { type: "object", additionalProperties: false, required: ["id", "title", "executor"], properties: { id, title: str, executor: executorSchema } }, inspection: { type: "object", additionalProperties: false, required: ["id", "templateVersion"], properties: { id, templateVersion: id } }, checklist: { type: "array", items: checklistSnapshotSchema }, actions: actionsSchema(["save", "complete"]) } };
 const issueSchema = { type: "object", additionalProperties: false, required: ["id", "workId", "title", "description", "status", "createdAt", "resolvedAt", "before", "checklistItem", "evidence", "actions", "work", "remediations", "reinspections"], properties: { id, workId: id, title: str, description: str, status: str, createdAt: dateTime, resolvedAt: nullableDateTime, before: mediaListSchema, checklistItem: { type: "object", additionalProperties: false, required: ["id", "order", "title", "description"], properties: { id, order: id, title: str, description: nullableString } }, evidence: { type: "object", additionalProperties: false, required: ["comment", "photos"], properties: { comment: nullableString, photos: mediaListSchema } }, actions: actionsSchema(["submitRemediation"]), remediations: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "comment", "createdAt", "after"], properties: { id, comment: str, createdAt: dateTime, after: mediaListSchema } } }, reinspections: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "status", "result", "comment", "createdAt", "completedAt"], properties: { id, status: str, result: nullableString, comment: nullableString, createdAt: dateTime, completedAt: nullableDateTime } } }, work: workRefSchema } };
 const reinspectionSummarySchema = { type: "object", additionalProperties: false, required: ["id", "status", "issueId", "work"], properties: { id, status: str, issueId: id, work: workRefSchema } };
 const reinspectionDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "result", "issue", "remediation", "actions"], properties: { id, status: str, result: nullableString, issue: { type: "object", additionalProperties: false, required: ["id", "title", "description", "before"], properties: { id, title: str, description: str, before: mediaListSchema } }, remediation: { type: "object", additionalProperties: false, required: ["id", "comment", "after"], properties: { id, comment: str, after: mediaListSchema } }, actions: actionsSchema(["complete"]) } };
@@ -69,13 +74,13 @@ type IssueViewInput = {
   answer: { comment: string | null; checklistItem: { id: number; order: number; title: string; description: string | null }; media: { id: number; publicKey: string | null }[] };
   remediations: { id: number; comment: string; createdAt: Date; media: { id: number; publicKey: string | null }[] }[];
   reinspections: { id: number; status: string; result: string | null; comment: string | null; createdAt: Date; completedAt: Date | null }[];
-  work?: { id: number; title: string; houseId: number; category: string; executorUserId?: number | null };
+  work?: { id: number; title: string; houseId: number; category: string; executorUserId: number | null; executorName: string | null; representativeName: string | null };
 };
 function issueView(issue: IssueViewInput, canRemediate = false) {
   return { id: issue.id, workId: issue.workId, title: issue.title, description: issue.description, status: issue.status, createdAt: issue.createdAt, resolvedAt: issue.resolvedAt,
     before: issue.answer.media.map(mediaRef), checklistItem: issue.answer.checklistItem, evidence: { comment: issue.answer.comment, photos: issue.answer.media.map(mediaRef) }, actions: { submitRemediation: canRemediate && issue.status === "OPEN" }, remediations: issue.remediations.map((item) => ({ id: item.id, comment: item.comment, createdAt: item.createdAt, after: item.media.map(mediaRef) })),
     reinspections: issue.reinspections.map((item) => ({ id: item.id, status: item.status, result: item.result, comment: item.comment, createdAt: item.createdAt, completedAt: item.completedAt })),
-    ...(issue.work ? { work: { id: issue.work.id, title: issue.work.title, houseId: issue.work.houseId, category: issue.work.category } } : {}) };
+    ...(issue.work ? { work: workRef(issue.work) } : {}) };
 }
 
 export function workStatusFromIssueStatuses(statuses: readonly ("OPEN" | "REMEDIATION_SUBMITTED" | "RESOLVED")[]) {
@@ -88,6 +93,7 @@ async function updateWorkStatusFromIssues(tx: Prisma.TransactionClient, workId: 
   const issues = await tx.issue.findMany({ where: { workId }, select: { status: true } });
   const status = workStatusFromIssueStatuses(issues.map((issue) => issue.status));
   await tx.work.update({ where: { id: workId }, data: { status } });
+  await syncLinkedObservationStatus(tx, workId, status);
 }
 
 async function attachNewMedia(db: PrismaClient, userId: number, ids: number[], target: { inspectionAnswerId?: number; remediationId?: number; reinspectionId?: number }) {
@@ -147,7 +153,10 @@ async function snapshotForWork(db: PrismaClient, workId: number, type: DocumentT
 
 async function generate(db: PrismaClient, workId: number, type: DocumentType, userId: number, botName: string, extra: Record<string, unknown> = {}) {
   const options = { inspectionId: type === "INSPECTION_REPORT" ? Number(extra.inspectionId) : undefined, reinspectionId: type === "REINSPECTION_REPORT" ? Number(extra.reinspectionId) : undefined };
-  return createDocumentVersion(db, workId, type, userId, await snapshotForWork(db, workId, type, userId, extra), botName, options);
+  const created = await createDocumentVersion(db, workId, type, userId, await snapshotForWork(db, workId, type, userId, extra), botName, options);
+  const work = await db.work.findUniqueOrThrow({ where: { id: workId }, select: { houseId: true, sourceObservationId: true } });
+  await recordActivity(db, { event: "DOCUMENT_GENERATED", subjectType: "DOCUMENT", subjectId: created.documentId, houseId: work.houseId, workId, observationId: work.sourceObservationId ?? undefined, actorUserId: userId, metadata: { type, version: created.version } });
+  return created;
 }
 
 async function ensureInspectionReport(db: PrismaClient, inspectionId: number, userId: number, botName: string) {
@@ -174,7 +183,7 @@ async function acceptedAcceptanceActId(db: PrismaClient, workId: number) {
   return confirmed.length === 1 ? confirmed[0].id : null;
 }
 
-async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number, now: () => Date, botName: string) {
+async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number, now: () => Date, botName: string, previewRequired = false) {
   const document = await db.document.findUniqueOrThrow({ where: { id: documentId }, include: { work: true, versions: { orderBy: { version: "asc" }, include: { confirmations: { orderBy: { confirmedAt: "asc" } } } } } });
   if (document.type !== "ACCEPTANCE_ACT") throw new Error("Document is not an acceptance act");
   const original = document.versions[0];
@@ -212,7 +221,12 @@ async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number
     await tx.documentVersion.updateMany({ where: { id: original.id, status: { not: "SUPERSEDED" } }, data: { status: "SUPERSEDED" } });
     for (const item of confirmations) await tx.documentConfirmation.upsert({ where: { documentVersionId_roleSnapshot: { documentVersionId: readyVersion.id, roleSnapshot: item.roleSnapshot } }, create: { documentVersionId: readyVersion.id, userId: item.userId, roleSnapshot: item.roleSnapshot, confirmedAt: item.confirmedAt }, update: {} });
     const accepted = await tx.work.updateMany({ where: { id: document.workId, status: { not: "ACCEPTED" } }, data: { status: "ACCEPTED", completedAt: now() } });
-    if (accepted.count) await tx.workHistory.create({ data: { workId: document.workId, event: "ACCEPTANCE_CONFIRMED", details: `Документ №${document.id}, версия ${readyVersion.version}` } });
+    if (accepted.count) await syncLinkedObservationStatus(tx, document.workId, "ACCEPTED");
+    if (accepted.count) {
+      await tx.workHistory.create({ data: { workId: document.workId, event: "ACCEPTANCE_CONFIRMED", details: `Документ №${document.id}, версия ${readyVersion.version}` } });
+      await recordActivity(tx, { event: "WORK_ACCEPTED", subjectType: "WORK", subjectId: document.workId, houseId: currentWork.houseId, workId: document.workId, observationId: currentWork.sourceObservationId ?? undefined, actorUserId: representative.userId, metadata: { documentId } });
+      await notifyWorkWatchers(tx, botName, document.workId, "accepted", `Работа №${document.workId} принята. Акт приёмки приложен.`, { previewRequired, pdfPublicKey: readyVersion.publicKey });
+    }
     return true;
   });
   if (!finalized) return { status: "CONFLICT" };
@@ -221,7 +235,7 @@ async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number
 
 export async function registerWorkflowApi(app: FastifyInstance, config: AppConfig, users: UserRepository, now: () => Date, businessDb?: PrismaClient) {
   const db = businessDb ?? (users instanceof PrismaUserRepository ? users.prisma : null);
-  const auth = requireMaxAuth(config.botToken, config.maxInitDataMaxAgeSeconds, now);
+  const auth = requireMaxAuth(config.botToken, config.maxInitDataMaxAgeSeconds, now, { required: !!config.previewAccessRequired, db });
   const authenticate: preHandlerHookHandler = async (request, reply) => {
     await auth.call(app, request, reply, () => undefined);
     if (reply.sent) return;
@@ -271,7 +285,10 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       if (current.status !== "NEW" || !current.submittedForInspectionAt || current.category !== template.category || await tx.inspection.count({ where: { workId } })) throw new Error("INSPECTION_CONFLICT");
       const inspection = await tx.inspection.create({ data: { workId, checklistTemplateId: template.id, templateVersion: template.version, createdByUserId: ctx.userId, items: { create: template.items.map((item) => ({ order: item.order, title: item.title, description: item.description, method: item.method, sourceType: item.sourceType, sourceLabel: item.sourceLabel, commentRequiredOnFail: item.commentRequiredOnFail, photoRequiredOnFail: item.photoRequiredOnFail })) }, assignments: { create: { assigneeUserId: input.assigneeUserId } } } });
       await tx.work.update({ where: { id: workId }, data: { status: "IN_REVIEW" } });
+      await syncLinkedObservationStatus(tx, workId, "IN_REVIEW");
       await tx.workHistory.create({ data: { workId, event: "INSPECTION_ASSIGNED", details: `Проверяющий ${input.assigneeUserId}` } });
+      await recordActivity(tx, { event: "INSPECTION_ASSIGNED", subjectType: "WORK", subjectId: workId, houseId: current.houseId, workId, observationId: current.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { assigneeUserId: input.assigneeUserId, inspectionId: inspection.id } });
+      await notifyWorkWatchers(tx, config.botName, workId, `inspection_assigned:${inspection.id}`, `По работе №${workId} назначена проверка.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: input.assigneeUserId, text: `Вам назначена проверка работы №${workId}. Откройте работу и заполните чек-лист.` }] });
       return inspection;
     }).catch((cause: unknown) => { if (cause instanceof Error && cause.message === "INSPECTION_CONFLICT") return null; throw cause; });
     if (!created) return fail(reply, 409, "Проверка уже назначена");
@@ -282,13 +299,13 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const ctx = context(request), query = request.query as { houseId?: number; status?: "ASSIGNED" | "IN_PROGRESS" | "COMPLETED"; page?: number; limit?: number };
     const { page, limit, skip } = pageOf(query);
     const where: Prisma.InspectionAssignmentWhereInput = { assigneeUserId: ctx.userId, ...(query.status ? { status: query.status } : {}), ...(query.houseId ? { inspection: { work: { houseId: query.houseId } } } : {}) };
-    const [total, items] = await Promise.all([ctx.db.inspectionAssignment.count({ where }), ctx.db.inspectionAssignment.findMany({ where, skip, take: limit, include: { inspection: { include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true } } } } }, orderBy: { id: "desc" } })]);
-    return { items: items.map((item) => ({ id: item.id, status: item.status, work: item.inspection.work, inspectionId: item.inspectionId })), page, limit, total };
+    const [total, items] = await Promise.all([ctx.db.inspectionAssignment.count({ where }), ctx.db.inspectionAssignment.findMany({ where, skip, take: limit, include: { inspection: { include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } } } } }, orderBy: { id: "desc" } })]);
+    return { items: items.map((item) => ({ id: item.id, status: item.status, work: workRef(item.inspection.work), inspectionId: item.inspectionId })), page, limit, total };
   });
 
   const assignment = async (ctx: Context, assignmentId: number, readOnly = false) => {
     const found = await ctx.db.inspectionAssignment.findUnique({ where: { id: assignmentId }, include: { inspection: { include: { work: true, items: { orderBy: { order: "asc" } } } }, answers: { include: { media: true } } } });
-    if (readOnly && ctx.isAdmin) return found;
+    void readOnly;
     if (!found || found.assigneeUserId !== ctx.userId) return null;
     const membership = await houseRole(ctx, found.inspection.work.houseId);
     if (membership?.status !== "ACTIVE" || membership.role !== "COUNCIL_MEMBER") return null;
@@ -301,7 +318,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const role = await houseRole(ctx, found.inspection.work.houseId);
     const canAct = found.assigneeUserId === ctx.userId && role?.status === "ACTIVE" && role.role === "COUNCIL_MEMBER" && found.status !== "COMPLETED";
     const ready = found.inspection.items.every((item) => { const answer = found.answers.find((entry) => entry.checklistItemId === item.id); return answer && (answer.result === "PASS" || (answer.result === "FAIL" && (!!answer.comment?.trim() || !!answer.media.length))); });
-    return { id: found.id, status: found.status, work: { id: found.inspection.work.id, title: found.inspection.work.title }, inspection: { id: found.inspection.id, templateVersion: found.inspection.templateVersion }, checklist: found.inspection.items.map((item) => { const answer = found.answers.find((entry) => entry.checklistItemId === item.id); return { ...item, rules: checklistRules, answer: { result: answer?.result === "UNABLE_TO_CHECK" ? "PENDING" : answer?.result ?? "PENDING", comment: answer?.comment ?? null, media: answer?.media.map(mediaRef) ?? [] } }; }), actions: { save: canAct, complete: canAct && ready } };
+    return { id: found.id, status: found.status, work: { id: found.inspection.work.id, title: found.inspection.work.title, executor: workRef(found.inspection.work).executor }, inspection: { id: found.inspection.id, templateVersion: found.inspection.templateVersion }, checklist: found.inspection.items.map((item) => { const answer = found.answers.find((entry) => entry.checklistItemId === item.id); return { ...item, rules: checklistRules, answer: { result: answer?.result === "UNABLE_TO_CHECK" ? "PENDING" : answer?.result ?? "PENDING", comment: answer?.comment ?? null, media: answer?.media.map(mediaRef) ?? [] } }; }), actions: { save: canAct, complete: canAct && ready } };
   });
 
   app.put("/api/inspection-assignments/:assignmentId/answers/:itemId", { ...guarded, schema: { tags: ["Inspections"], ...secured, params: { type: "object", required: ["assignmentId", "itemId"], properties: { assignmentId: id, itemId: id } }, body: { type: "object", additionalProperties: false, required: ["result"], properties: { result: { type: "string", enum: ["PASS", "FAIL"] }, comment: { type: "string", nullable: true, maxLength: 512 }, mediaIds: { ...answerMediaIds, default: [] } } }, response: { 200: { type: "object", additionalProperties: false, required: ["id", "result", "comment", "mediaIds"], properties: { id, result: str, comment: { type: "string", nullable: true }, mediaIds: answerMediaIds } }, ...response } } }, async (request, reply) => {
@@ -353,13 +370,21 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       const pending = await tx.inspectionAssignment.count({ where: { inspectionId: found.inspectionId, status: { not: "COMPLETED" } } });
       if (pending) return "COMPLETED";
       const answers = await tx.inspectionAnswer.findMany({ where: { assignment: { inspectionId: found.inspectionId }, result: "FAIL" }, include: { checklistItem: true } });
-      for (const answer of answers) await tx.issue.upsert({ where: { inspectionAnswerId: answer.id }, create: { workId: found.inspection.workId, inspectionAnswerId: answer.id, title: answer.checklistItem.title, description: answer.comment ?? "" }, update: {} });
+      for (const answer of answers) {
+        const issue = await tx.issue.upsert({ where: { inspectionAnswerId: answer.id }, create: { workId: found.inspection.workId, inspectionAnswerId: answer.id, title: answer.checklistItem.title, description: answer.comment ?? "" }, update: {} });
+        await recordActivity(tx, { event: "ISSUE_CREATED", subjectType: "ISSUE", subjectId: issue.id, houseId: found.inspection.work.houseId, workId: found.inspection.workId, observationId: found.inspection.work.sourceObservationId ?? undefined, actorUserId: ctx.userId });
+      }
       await updateWorkStatusFromIssues(tx, found.inspection.workId);
       await tx.workHistory.create({ data: { workId: found.inspection.workId, event: "INSPECTION_COMPLETED", details: answers.length ? `${answers.length} замечаний` : "Без замечаний" } });
-      return "COMPLETED";
+      await recordActivity(tx, { event: "INSPECTION_COMPLETED", subjectType: "WORK", subjectId: found.inspection.workId, houseId: found.inspection.work.houseId, workId: found.inspection.workId, observationId: found.inspection.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { inspectionId: found.inspectionId, issueCount: answers.length } });
+      return "FINAL_COMPLETED";
     });
     if (outcome === "INCOMPLETE") return fail(reply, 400, "Заполните все пункты и доказательства");
-    await ensureInspectionReport(ctx.db, found.inspectionId, ctx.userId, config.botName);
+    const report = await ensureInspectionReport(ctx.db, found.inspectionId, ctx.userId, config.botName);
+    if (outcome === "FINAL_COMPLETED" && report) {
+      const issueCount = await ctx.db.issue.count({ where: { workId: found.inspection.workId, status: { not: "RESOLVED" } } });
+      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По работе №${found.inspection.workId} завершена проверка.\n\nОбнаружено замечаний: ${issueCount}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка работы №${found.inspection.workId} завершена. Обнаружено ${issueCount} замечаний.\n\nВам необходимо отправить устранение.` : `Проверка работы №${found.inspection.workId} завершена без замечаний.\n\nМожно оформить и подтвердить акт приёмки.` }] : [] });
+    }
     return { status: "COMPLETED" };
   });
 
@@ -370,7 +395,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const role = await houseRole(ctx, work.houseId);
     if (!ctx.isAdmin && !["CHAIRMAN", "COUNCIL_MEMBER", "EXECUTOR"].includes(role?.role ?? "")) return fail(reply, 403, "Нет доступа к замечаниям");
     const { page, limit, skip } = pageOf(request.query as { page?: number; limit?: number });
-    const [total, items] = await Promise.all([ctx.db.issue.count({ where: { workId } }), ctx.db.issue.findMany({ where: { workId }, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" } } } }, remediations: { include: { media: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } })]);
+    const [total, items] = await Promise.all([ctx.db.issue.count({ where: { workId } }), ctx.db.issue.findMany({ where: { workId }, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" } } } }, remediations: { include: { media: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } })]);
     return { items: items.map((issue) => issueView(issue, role?.status === "ACTIVE" && role.role === "EXECUTOR" && work.executorUserId === ctx.userId)), page, limit, total };
   });
 
@@ -384,7 +409,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         { house: { memberships: { some: { userId: ctx.userId, status: "ACTIVE", role: { in: ["CHAIRMAN", "COUNCIL_MEMBER"] } } } } },
       ] },
     ] } };
-    const [total, items] = await Promise.all([ctx.db.issue.count({ where }), ctx.db.issue.findMany({ where, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" } } } }, remediations: { include: { media: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "desc" } })]);
+    const [total, items] = await Promise.all([ctx.db.issue.count({ where }), ctx.db.issue.findMany({ where, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" } } } }, remediations: { include: { media: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "desc" } })]);
     const roles = await ctx.db.houseMembership.findMany({ where: { userId: ctx.userId, status: "ACTIVE", role: "EXECUTOR" }, select: { houseId: true } });
     const executorHouses = new Set(roles.map((item) => item.houseId));
     return { items: items.map((issue) => issueView(issue, executorHouses.has(issue.work.houseId) && issue.work.executorUserId === ctx.userId)), page, limit, total };
@@ -410,6 +435,8 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         await tx.issue.update({ where: { id: issueId }, data: { status: "REMEDIATION_SUBMITTED" } });
         await updateWorkStatusFromIssues(tx, issue.workId);
         await tx.workHistory.create({ data: { workId: issue.workId, event: "REMEDIATION_SUBMITTED", details: input.comment.trim() } });
+        await recordActivity(tx, { event: "REMEDIATION_SUBMITTED", subjectType: "ISSUE", subjectId: issueId, houseId: issue.work.houseId, workId: issue.workId, observationId: issue.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { remediationId: remediation.id, reinspectionId: reinspection.id } });
+        await notifyWorkWatchers(tx, config.botName, issue.workId, `remediation:${remediation.id}`, `По работе №${issue.workId} отправлено устранение замечания.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: reinspection.assigneeUserId, text: `По работе №${issue.workId} отправлено устранение. Вам назначена повторная проверка.` }] });
         return { remediation, reinspection };
       });
       return reply.code(201).send({ id: created.remediation.id, reinspectionId: created.reinspection.id });
@@ -420,13 +447,13 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const ctx = context(request), query = request.query as { houseId?: number; status?: "ASSIGNED" | "COMPLETED"; page?: number; limit?: number };
     const { page, limit, skip } = pageOf(query);
     const where: Prisma.ReinspectionWhereInput = { assigneeUserId: ctx.userId, ...(query.status ? { status: query.status } : {}), ...(query.houseId ? { issue: { work: { houseId: query.houseId } } } : {}) };
-    const [total, items] = await Promise.all([ctx.db.reinspection.count({ where }), ctx.db.reinspection.findMany({ where, skip, take: limit, include: { issue: { include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true } } } } }, orderBy: { id: "desc" } })]);
-    return { items: items.map((item) => ({ id: item.id, status: item.status, issueId: item.issueId, work: item.issue.work })), page, limit, total };
+    const [total, items] = await Promise.all([ctx.db.reinspection.count({ where }), ctx.db.reinspection.findMany({ where, skip, take: limit, include: { issue: { include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } } } } }, orderBy: { id: "desc" } })]);
+    return { items: items.map((item) => ({ id: item.id, status: item.status, issueId: item.issueId, work: workRef(item.issue.work) })), page, limit, total };
   });
 
   const reinspection = async (ctx: Context, reinspectionId: number, readOnly = false) => {
     const found = await ctx.db.reinspection.findUnique({ where: { id: reinspectionId }, include: { issue: { include: { work: true, answer: { include: { media: true } } } }, remediation: { include: { media: true } }, media: true } });
-    if (readOnly && ctx.isAdmin) return found;
+    void readOnly;
     if (!found || found.assigneeUserId !== ctx.userId) return null;
     const membership = await houseRole(ctx, found.issue.work.houseId);
     if (membership?.status !== "ACTIVE" || membership.role !== "COUNCIL_MEMBER") return null;
@@ -463,9 +490,15 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         await tx.issue.update({ where: { id: found.issueId }, data: { status: input.result === "RESOLVED" ? "RESOLVED" : "OPEN", resolvedAt: input.result === "RESOLVED" ? now() : null } });
         await updateWorkStatusFromIssues(tx, found.issue.workId);
         await tx.workHistory.create({ data: { workId: found.issue.workId, event: "REINSPECTION_COMPLETED", details: input.result } });
+        await recordActivity(tx, { event: "REINSPECTION_COMPLETED", subjectType: "ISSUE", subjectId: found.issueId, houseId: found.issue.work.houseId, workId: found.issue.workId, observationId: found.issue.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { reinspectionId: found.id, result: input.result } });
         return tx.reinspection.findUniqueOrThrow({ where: { id: found.id } });
       });
-      await ensureReinspectionReport(ctx.db, found.id, ctx.userId, config.botName);
+      const report = await ensureReinspectionReport(ctx.db, found.id, ctx.userId, config.botName);
+      if (report) {
+        const remaining = await ctx.db.issue.count({ where: { workId: found.issue.workId, status: { not: "RESOLVED" } } });
+        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка работы №${found.issue.workId} не подтвердила устранение.\n\nВам необходимо отправить новое устранение.` : `Все замечания по работе №${found.issue.workId} устранены.\n\nМожно оформить и подтвердить акт приёмки.` }] : [];
+        await notifyWorkWatchers(ctx.db, config.botName, found.issue.workId, `reinspection:${found.id}`, `По работе №${found.issue.workId} завершена повторная проверка. Результат: ${input.result === "RESOLVED" ? "замечание устранено" : "замечание осталось"}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: action });
+      }
       return { status: persisted.status, result: persisted.result };
     } catch (error) { if (error instanceof Error && error.message === "INVALID_MEDIA") return fail(reply, 400, "Некорректные mediaIds"); throw error; }
   });
@@ -479,6 +512,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       if (!await ctx.db.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) return fail(reply, 409, "Нет активных замечаний");
       const created = await generate(ctx.db, workId, input.type, ctx.userId, config.botName);
       await ctx.db.documentVersion.update({ where: { id: created.id }, data: { status: "CONFIRMED", confirmedAt: now() } });
+      await notifyWorkWatchers(ctx.db, config.botName, workId, `reasoned_refusal:${created.id}`, `По работе №${workId} оформлен мотивированный отказ. PDF приложен.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: work.executorUserId ? [{ userId: work.executorUserId, text: `По работе №${workId} оформлен мотивированный отказ. Ознакомьтесь с PDF и устраните замечания.` }] : [] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: "CONFIRMED", fileUrl: `/doc/${created.publicKey}.pdf` });
     }
     const role = await houseRole(ctx, work.houseId);
@@ -494,6 +528,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         if (current.status !== "WAITING" || await tx.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) throw new Error("WORK_NOT_READY");
         return generate(tx as PrismaClient, workId, "ACCEPTANCE_ACT", ctx.userId, config.botName);
       }, { timeout: 15_000 });
+      await notifyWorkWatchers(ctx.db, config.botName, workId, `acceptance_ready:${created.id}`, `По работе №${workId} оформлен акт приёмки. PDF приложен.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: [{ userId: ctx.userId, text: `Акт приёмки работы №${workId} готов. Подтвердите его, затем председатель сможет завершить приёмку.` }] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: created.status, fileUrl: `/doc/${created.publicKey}.pdf` });
     } catch (error) {
       if (error instanceof Error && error.message === "ACCEPTANCE_ACT_ALREADY_EXISTS") return fail(reply, 409, "Акт приёмки для этой работы уже сформирован");
@@ -514,25 +549,30 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     if (document.work.status === "ACCEPTED") {
       if (await acceptedAcceptanceActId(ctx.db, document.workId) !== documentId) return fail(reply, 409, "Эта работа уже принята по другому акту");
       if (!original.confirmations.some((confirmation) => confirmation.userId === ctx.userId)) return fail(reply, 403, "Вы не подтверждали этот акт");
-      const result = await finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName);
+      const result = await finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName, config.previewAccessRequired);
       return result.status === "CONFLICT" ? fail(reply, 409, "Эта работа уже принята по другому акту") : result;
     }
     if (original.status === "SUPERSEDED" && original.confirmations.some((item) => item.userId === ctx.userId) && original.confirmations.some((item) => item.roleSnapshot === "EXECUTOR") && original.confirmations.some((item) => item.roleSnapshot === "CHAIRMAN")) {
-      return finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName);
+      return finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName, config.previewAccessRequired);
     }
     if (original.status !== "FINAL") return fail(reply, 403, "Подтверждение недоступно");
     const membership = await houseRole(ctx, document.work.houseId);
     const isExecutor = membership?.status === "ACTIVE" && membership.role === "EXECUTOR" && document.work.executorUserId === ctx.userId;
     const isRepresentative = membership?.status === "ACTIVE" && membership.role === "CHAIRMAN";
     if ((isExecutor && original.confirmations.some((item) => item.roleSnapshot === "EXECUTOR" && item.userId === ctx.userId)) || (isRepresentative && original.confirmations.some((item) => item.roleSnapshot === "CHAIRMAN" && item.userId === ctx.userId))) {
-      return finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName);
+      return finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName, config.previewAccessRequired);
     }
     let roleSnapshot: string;
     if (isExecutor && !original.confirmations.length) roleSnapshot = "EXECUTOR";
     else if (isRepresentative && original.confirmations.some((confirmation) => confirmation.roleSnapshot === "EXECUTOR")) roleSnapshot = "CHAIRMAN";
     else return fail(reply, 403, "Ожидается подтверждение исполнителя, затем уполномоченного представителя дома");
     await ctx.db.documentConfirmation.upsert({ where: { documentVersionId_roleSnapshot: { documentVersionId: original.id, roleSnapshot } }, create: { documentVersionId: original.id, userId: ctx.userId, roleSnapshot, confirmedAt: now() }, update: {} });
-    const result = await finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName);
+    await recordActivity(ctx.db, { event: "DOCUMENT_CONFIRMED", subjectType: "DOCUMENT", subjectId: documentId, houseId: document.work.houseId, workId: document.workId, observationId: document.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { role: roleSnapshot, version: original.version } });
+    if (roleSnapshot === "EXECUTOR") {
+      const chairmen = await ctx.db.houseMembership.findMany({ where: { houseId: document.work.houseId, role: "CHAIRMAN", status: "ACTIVE" }, select: { userId: true } });
+      await notifyWorkWatchers(ctx.db, config.botName, document.workId, `acceptance_executor_confirmed:${documentId}`, `Исполнитель подтвердил акт приёмки работы №${document.workId}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: original.publicKey, actionRecipients: chairmen.map((chairman) => ({ userId: chairman.userId, text: `Исполнитель подтвердил акт приёмки работы №${document.workId}.\n\nТеперь вам нужно подтвердить акт. PDF приложен.` })) });
+    }
+    const result = await finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName, config.previewAccessRequired);
     return result.status === "CONFLICT" ? fail(reply, 409, "Эта работа уже принята по другому акту") : result;
   });
 

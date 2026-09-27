@@ -7,6 +7,8 @@ const original = process.env.MAX_INIT_DATA_MAX_AGE_SECONDS;
 const originalBotToken = process.env.MAX_BOT_TOKEN;
 const originalBotName = process.env.MAX_BOT_NAME;
 const originalSelfRoleSwitch = process.env.ALLOW_SELF_ROLE_SWITCH;
+const originalPreview = process.env.PREVIEW_ACCESS_REQUIRED;
+const originalTimeZone = process.env.BOT_TIME_ZONE;
 
 afterEach(() => {
   if (original === undefined) delete process.env.MAX_INIT_DATA_MAX_AGE_SECONDS;
@@ -17,6 +19,27 @@ afterEach(() => {
   else process.env.MAX_BOT_NAME = originalBotName;
   if (originalSelfRoleSwitch === undefined) delete process.env.ALLOW_SELF_ROLE_SWITCH;
   else process.env.ALLOW_SELF_ROLE_SWITCH = originalSelfRoleSwitch;
+  if (originalPreview === undefined) delete process.env.PREVIEW_ACCESS_REQUIRED;
+  else process.env.PREVIEW_ACCESS_REQUIRED = originalPreview;
+  if (originalTimeZone === undefined) delete process.env.BOT_TIME_ZONE;
+  else process.env.BOT_TIME_ZONE = originalTimeZone;
+});
+
+describe("preview and bot time zone", () => {
+  it("defaults preview off and validates explicit settings", () => {
+    process.env.MAX_BOT_TOKEN = "test-token";
+    process.env.MAX_BOT_NAME = "PriemkaDemoBot";
+    delete process.env.PREVIEW_ACCESS_REQUIRED;
+    delete process.env.BOT_TIME_ZONE;
+    expect(getConfig()).toEqual(expect.objectContaining({ previewAccessRequired: false, botTimeZone: "Europe/Moscow" }));
+    process.env.PREVIEW_ACCESS_REQUIRED = "true";
+    expect(getConfig().previewAccessRequired).toBe(true);
+    process.env.PREVIEW_ACCESS_REQUIRED = "yes";
+    expect(() => getConfig()).toThrow("PREVIEW_ACCESS_REQUIRED");
+    process.env.PREVIEW_ACCESS_REQUIRED = "false";
+    process.env.BOT_TIME_ZONE = "Not/AZone";
+    expect(() => getConfig()).toThrow("BOT_TIME_ZONE");
+  });
 });
 
 describe("ALLOW_SELF_ROLE_SWITCH", () => {

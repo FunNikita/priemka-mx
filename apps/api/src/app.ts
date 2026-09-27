@@ -1,8 +1,9 @@
 import staticPlugin from "@fastify/static";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { isIP } from "node:net";
+import { isAbsolute, resolve } from "node:path";
 import swagger from "@fastify/swagger";
-import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyServerOptions } from "fastify";
+import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance, type FastifyServerOptions } from "fastify";
 
 import { getConfig, type AppConfig } from "./config.js";
 import { isValidMaxBotName } from "./max/bot-name.js";
@@ -15,6 +16,7 @@ import { mediaUploadBodySchema, permissionsFor, photoResponseSchema, registerBus
 import { registerWorkflowApi } from "./workflow.js";
 import { registerHousesApi } from "./houses.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { createOperationalLogStream } from "./operational-log.js";
 
 const healthSchema = {
   response: { 200: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", const: "ok" } } } },
@@ -52,11 +54,32 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   if (!isValidMaxBotName(config.botName)) throw new Error("MAX_BOT_NAME must be a valid MAX bot name");
   const repository = options.userRepository ?? new PrismaUserRepository();
   const now = options.now ?? (() => new Date());
+  const retentionDays = Number(process.env.LOG_RETENTION_DAYS ?? "14");
+  if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 365) throw new Error("LOG_RETENTION_DAYS must be 1-365");
+  const trustedProxyIp = process.env.TRUSTED_PROXY_IP || null;
+  if (trustedProxyIp && !isIP(trustedProxyIp)) throw new Error("TRUSTED_PROXY_IP must be one IP address");
+  if (process.env.APP_LOG_DIR && !isAbsolute(process.env.APP_LOG_DIR)) throw new Error("APP_LOG_DIR must be absolute");
+  const operationalLog = !options.logger && !options.logStream && process.env.NODE_ENV === "production" && process.env.APP_LOG_DIR ? createOperationalLogStream(process.env.APP_LOG_DIR, retentionDays) : null;
   const app = Fastify({
-    logger: options.logger ?? createDefaultLogger(options.logStream),
+    logger: options.logger ?? createDefaultLogger(options.logStream ?? operationalLog ?? undefined),
+    logController: new LogController({ disableRequestLogging: true }),
     requestIdHeader: "x-request-id",
     genReqId: () => crypto.randomUUID(),
+    trustProxy: trustedProxyIp ? (address) => address === trustedProxyIp : false,
   });
+
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
+    return payload;
+  });
+  app.addHook("onResponse", async (request, reply) => {
+    const path = new URL(request.url, "http://localhost").pathname;
+    const actor = request.business;
+    app.log.info({ event: "http_request", requestId: request.id, method: request.method, route: request.routeOptions.url ?? path, path, statusCode: reply.statusCode, durationMs: Math.round(reply.elapsedTime), remoteIp: request.ip, userAgent: request.headers["user-agent"] ?? null, actorUserId: actor?.userId ?? null, maxUserId: request.maxInitData?.user.id ?? null }, "HTTP request");
+    if (reply.statusCode === 401 || reply.statusCode === 403) app.log.warn({ event: "security_event", requestId: request.id, statusCode: reply.statusCode, remoteIp: request.ip, path, actorUserId: actor?.userId ?? null }, "Access rejected");
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && reply.statusCode < 400 && path.startsWith("/api/")) app.log.info({ event: "domain_action", action: `${request.method} ${request.routeOptions.url ?? path}`, actorUserId: actor?.userId ?? null, remoteIp: request.ip, houseId: (request.params as { houseId?: number } | undefined)?.houseId ?? null, subjectId: (request.params as { workId?: number; observationId?: number; userId?: number } | undefined)?.workId ?? (request.params as { observationId?: number } | undefined)?.observationId ?? null }, "Domain action");
+  });
+  app.get("/robots.txt", { schema: { tags: ["System"], response: { 200: { type: "string" } } } }, async (_request, reply) => reply.type("text/plain; charset=utf-8").send("User-agent: *\nDisallow: /\n"));
 
   await app.register(swagger, {
     openapi: {
@@ -93,7 +116,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   });
 
   app.get("/api/me", {
-    preHandler: requireMaxAuth(config.botToken, config.maxInitDataMaxAgeSeconds, now),
+    preHandler: requireMaxAuth(config.botToken, config.maxInitDataMaxAgeSeconds, now, { required: !!config.previewAccessRequired, db: options.businessDb ?? (repository instanceof PrismaUserRepository ? repository.prisma : null) }),
     schema: {
       tags: ["Identity"],
       summary: "Текущий пользователь MAX",
@@ -102,7 +125,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
         200: {
           type: "object",
           additionalProperties: false,
-          required: ["user", "auth_date", "houses"],
+          required: ["user", "auth_date", "houses", "lastHouseId"],
           properties: {
             query_id: { type: "string" },
             ip: { type: "string" },
@@ -132,10 +155,12 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
               },
             },
             start_param: { type: "string" },
+            lastHouseId: { type: "integer", nullable: true },
             houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "joinedVia", "executorCompanyName", "permissions"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, joinedVia: { type: "string", enum: ["CHAT", "INVITE", "REQUEST", "ADMIN"] }, executorCompanyName: { type: "string", nullable: true }, permissions: permissionsSchema } } },
           },
         },
         401: unauthorizedSchema,
+        403: { type: "object", additionalProperties: false, required: ["message", "code", "maxUserId"], properties: { message: { type: "string" }, code: { type: "string" }, maxUserId: { type: "string" } } },
       },
     },
   }, async (request) => {
@@ -150,13 +175,13 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
       const rank = (m: typeof a) => m.status === "ACTIVE" ? (m.houseId === lastHouseId ? 0 : 1) : 2;
       return rank(a) - rank(b) || a.houseId - b.houseId;
     });
-    return { ...toMaxResponse(initData, identity), houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions: permissionsFor(membership.role, membership.status, identity.isAdmin) })) };
+    return { ...toMaxResponse(initData, identity), lastHouseId: lastHouseId ?? null, houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions: permissionsFor(membership.role, membership.status) })) };
   });
 
   await registerHousesApi(app, config, repository, now, options.businessDb);
   await registerBusinessApi(app, config, repository, now, options.businessDb);
   await registerWorkflowApi(app, config, repository, now, options.businessDb);
-  registerDocumentBot(app, options.businessDb ?? (repository instanceof PrismaUserRepository ? repository.prisma : null), config.botToken);
+  registerDocumentBot(app, options.businessDb ?? (repository instanceof PrismaUserRepository ? repository.prisma : null), config.botToken, config);
 
   const staticRoot = options.staticRoot ?? resolve(process.cwd(), "../web/dist");
   if (existsSync(staticRoot)) {
@@ -172,6 +197,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   }
 
   app.addHook("onClose", async () => {
+    if (operationalLog) await operationalLog.close();
     if (repository instanceof PrismaUserRepository) await repository.close();
   });
 

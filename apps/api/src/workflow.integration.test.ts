@@ -35,7 +35,8 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
   await db.houseMembership.create({ data: { houseId: house.id, userId: users[7].id, role: "RESIDENT", status: "ACTIVE" } });
   await db.houseMembership.create({ data: { houseId: house.id, userId: users[8].id, role: "COUNCIL_MEMBER", status: "PENDING" } });
   await db.houseMembership.create({ data: { houseId: house2.id, userId: users[9].id, role: "CHAIRMAN", status: "ACTIVE" } });
-  const work = await db.work.create({ data: { houseId: house.id, executorUserId: users[3].id, title: `Test work ${key}`, description: "Демо работа", category: "COMMON_AREAS", status: "NEW", executorName: "Демо УК" } });
+  const sourceObservation = await db.observation.create({ data: { houseId: house.id, authorId: users[7].id, title: `Linked observation ${key}`, description: "Заявка жителя", category: "COMMON_AREAS", status: "IN_PROGRESS" } });
+  const work = await db.work.create({ data: { houseId: house.id, sourceObservationId: sourceObservation.id, executorUserId: users[3].id, title: `Test work ${key}`, description: "Демо работа", category: "COMMON_AREAS", status: "NEW", executorName: "Демо УК" } });
   const template = await db.checklistTemplate.create({ data: { code: `TEST_${key}`, title: "Test template", category: "COMMON_AREAS", items: { create: [{ order: 1, title: "Пункт один", method: "VISUAL", sourceType: "INTERNAL" }, { order: 2, title: "Пункт два", method: "VISUAL", sourceType: "INTERNAL" }] } } });
   const wrongTemplate = await db.checklistTemplate.create({ data: { code: `WRONG_${key}`, title: "Other category", category: "ROOF", items: { create: [{ order: 1, title: "Кровля", method: "VISUAL", sourceType: "INTERNAL" }] } } });
   const app = await createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch: true }, userRepository: repository, businessDb: db, logger: false, staticRoot: "/nonexistent" });
@@ -49,11 +50,13 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     return response.json().id as number;
   };
   try {
-    expect((await call(5, "GET", `/api/houses/${house.id}/works`)).statusCode).toBe(200);
+    expect((await call(5, "GET", `/api/houses/${house.id}/works`)).statusCode).toBe(403);
     expect((await db.user.findUniqueOrThrow({ where: { id: users[5].id } })).lastHouseId).toBeNull();
     expect((await call(0, "GET", `/api/houses/${house.id}/works`)).statusCode).toBe(200);
-    expect((await db.user.findUniqueOrThrow({ where: { id: users[0].id } })).lastHouseId).toBe(house.id);
+    expect((await db.user.findUniqueOrThrow({ where: { id: users[0].id } })).lastHouseId).toBeNull();
+    expect((await call(0, "PUT", "/api/me/last-house", { houseId: house.id })).statusCode).toBe(200);
     expect((await call(0, "GET", `/api/houses/${house2.id}/works`)).statusCode).toBe(200);
+    expect((await call(0, "PUT", "/api/me/last-house", { houseId: house2.id })).statusCode).toBe(200);
     expect((await call(0, "GET", "/api/me")).json().houses[0].id).toBe(house2.id);
     await db.houseMembership.update({ where: { houseId_userId: { houseId: house2.id, userId: users[0].id } }, data: { status: "PENDING" } });
     expect((await call(0, "GET", "/api/me")).json().houses[0].id).toBe(house.id);
@@ -63,6 +66,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(0, "GET", `/api/houses/${house.id}/members?role=COUNCIL_MEMBER`)).json().items).toHaveLength(3);
     expect((await call(0, "POST", `/api/works/${work.id}/inspections`, { checklistTemplateId: template.id, assigneeUserId: users[1].id })).statusCode).toBe(409);
     expect((await call(3, "POST", `/api/works/${work.id}/submit-for-inspection`, {})).statusCode).toBe(200);
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("IN_REVIEW");
     expect((await call(0, "POST", `/api/works/${work.id}/inspections`, { checklistTemplateId: wrongTemplate.id, assigneeUserId: users[1].id })).statusCode).toBe(400);
     expect(await db.inspection.count({ where: { workId: work.id } })).toBe(0);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("NEW");
@@ -76,11 +80,12 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect(inspection.assignments).toHaveLength(1);
     const first = inspection.assignments[0];
     expect((await call(1, "GET", "/api/me/inspection-assignments")).json()).toEqual(expect.objectContaining({ page: 1, limit: 20, total: 1 }));
+    expect((await call(1, "GET", "/api/me/inspection-assignments")).json().items[0].work.executor).toEqual({ userId: users[3].id, companyName: "Демо УК", representativeName: null });
     expect((await call(1, "GET", "/api/me/inspection-assignments?page=2&limit=1")).json()).toEqual({ items: [], page: 2, limit: 1, total: 1 });
     expect((await call(1, "GET", "/api/me/inspection-assignments?page=0")).statusCode).toBe(400);
     expect((await call(1, "GET", "/api/me/inspection-assignments?limit=101")).statusCode).toBe(400);
     expect((await call(1, "GET", `/api/inspection-assignments/${first.id}`)).json().checklist[0].title).toBe("Пункт один");
-    expect((await call(5, "GET", `/api/inspection-assignments/${first.id}`)).json().actions).toEqual({ save: false, complete: false });
+    expect((await call(5, "GET", `/api/inspection-assignments/${first.id}`)).statusCode).toBe(404);
     expect((await call(5, "PUT", `/api/inspection-assignments/${first.id}/answers/${inspection.items[0].id}`, { result: "PASS" })).statusCode).toBe(404);
     expect((await call(5, "POST", `/api/inspection-assignments/${first.id}/complete`, {})).statusCode).toBe(404);
     expect((await call(2, "GET", `/api/inspection-assignments/${first.id}`)).statusCode).toBe(404);
@@ -120,7 +125,9 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await readFile(join(process.env.DOCUMENTS_DIR!, restoredFirstReport.storagePath))).length).toBeGreaterThan(0);
     expect(await db.documentVersion.count({ where: { documentId: firstReport.id } })).toBe(1);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("IN_PROGRESS");
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("IN_PROGRESS");
     const issues = await call(3, "GET", `/api/works/${work.id}/issues`);
+    expect(issues.json().items[0].work.executor).toEqual({ userId: users[3].id, companyName: "Демо УК", representativeName: null });
     expect(issues.json().items).toHaveLength(1);
     expect(issues.json()).toEqual(expect.objectContaining({ page: 1, limit: 20, total: 1 }));
     expect((await call(3, "GET", `/api/works/${work.id}/issues?page=2&limit=1`)).json()).toEqual({ items: [], page: 2, limit: 1, total: 1 });
@@ -134,7 +141,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     for (const index of [1, 7]) expect((await call(index, "POST", `/api/works/${work.id}/documents`, { type: "REASONED_REFUSAL" })).statusCode).toBe(403);
     expect((await call(5, "POST", `/api/works/${work.id}/documents`, { type: "REASONED_REFUSAL" })).statusCode).toBe(404);
     expect((await call(9, "POST", `/api/works/${work.id}/documents`, { type: "REASONED_REFUSAL" })).statusCode).toBe(404);
-    expect((await call(5, "GET", `/api/works/${work.id}`)).json().actions.generateReasonedRefusal).toBe(false);
+    expect((await call(5, "GET", `/api/works/${work.id}`)).statusCode).toBe(404);
     const refusal = await call(0, "POST", `/api/works/${work.id}/documents`, { type: "REASONED_REFUSAL" });
     expect(refusal.statusCode).toBe(201);
     const secondRefusal = await call(0, "POST", `/api/works/${work.id}/documents`, { type: "REASONED_REFUSAL" });
@@ -152,6 +159,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(1, "GET", `/api/me/reinspections?houseId=${house.id}&status=ASSIGNED&page=2&limit=1`)).json()).toEqual({ items: [], page: 2, limit: 1, total: 1 });
     expect((await call(1, "GET", "/api/me/reinspections?limit=101")).statusCode).toBe(400);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("WAITING");
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("WAITING");
     expect((await call(3, "GET", `/api/works/${work.id}`)).json().actions.reportRemediation).toBe(false);
     expect((await call(3, "POST", `/api/issues/${issueId}/remediations`, { comment: "Повтор", mediaIds: [after] })).statusCode).toBe(409);
     const cleanWork = await db.work.create({ data: { houseId: house.id, executorUserId: users[3].id, title: `Clean work ${key}`, description: "Без замечаний", category: "COMMON_AREAS", submittedForInspectionAt: new Date() } });
@@ -228,7 +236,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await db.work.findUniqueOrThrow({ where: { id: multiWork.id } })).status).toBe("WAITING");
     const reinspectionId = remediation.json().reinspectionId as number;
     expect((await db.reinspection.findUniqueOrThrow({ where: { id: reinspectionId } })).assigneeUserId).toBe(users[1].id);
-    expect((await call(5, "GET", `/api/reinspections/${reinspectionId}`)).json().actions).toEqual({ complete: false });
+    expect((await call(5, "GET", `/api/reinspections/${reinspectionId}`)).statusCode).toBe(404);
     expect((await call(5, "POST", `/api/reinspections/${reinspectionId}/complete`, { result: "RESOLVED" })).statusCode).toBe(404);
     await db.reinspection.update({ where: { id: reinspectionId }, data: { status: "COMPLETED", result: "NOT_RESOLVED", comment: "Остался дефект", completedAt: new Date() } });
     await db.issue.update({ where: { id: issueId }, data: { status: "OPEN" } });
@@ -283,6 +291,7 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(5, "POST", `/api/documents/${act.json().id}/confirm`, {})).statusCode).toBe(404);
     expect((await call(0, "POST", `/api/documents/${act.json().id}/confirm`, {})).json().status).toBe("CONFIRMED");
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("ACCEPTED");
+    expect((await db.observation.findUniqueOrThrow({ where: { id: sourceObservation.id } })).status).toBe("ACCEPTED");
     expect((await call(0, "POST", `/api/documents/${act.json().id}/confirm`, {})).json().status).toBe("CONFIRMED");
     expect((await call(3, "POST", `/api/documents/${act.json().id}/confirm`, {})).json().status).toBe("CONFIRMED");
     expect(await db.documentVersion.count({ where: { documentId: act.json().id } })).toBe(2);
@@ -433,18 +442,91 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     if (answerAndComplete[1].statusCode === 400) expect((await call(1, "POST", `/api/inspection-assignments/${raceAssignmentId}/complete`, {})).statusCode).toBe(200);
     expect((await db.inspectionAssignment.findUniqueOrThrow({ where: { id: raceAssignmentId } })).status).toBe("COMPLETED");
     expect((await call(1, "PUT", `/api/inspection-assignments/${raceAssignmentId}/answers/${raceItemId}`, { result: "FAIL", comment: "Поздно" })).statusCode).toBe(409);
-    const event = `{"update_type":"bot_started","timestamp":1,"chat_id":9007199254740993,"payload":"doc_${latest.publicKey}"}`;
+    const event = `{"update_type":"bot_started","timestamp":1,"chat_id":9007199254740993,"user":{"user_id":9007199254740993},"payload":"doc_${latest.publicKey}"}`;
     expect((await app.inject({ method: "POST", url: "/max/webhook", headers: { "content-type": "application/json", "x-max-bot-api-secret": "wrong" }, payload: event })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/max/webhook", headers: { "content-type": "application/json", "x-max-bot-api-secret": process.env.MAX_WEBHOOK_SECRET! }, payload: event })).statusCode).toBe(200);
     expect((await db.botOutbox.findFirstOrThrow({ orderBy: { id: "desc" } })).chatId).toBe("9007199254740993");
-    const legacyEvent = `{"update_type":"bot_started","timestamp":2,"chat_id":9007199254740993,"payload":"doc_${legacyKey}"}`;
+    const legacyEvent = `{"update_type":"bot_started","timestamp":2,"chat_id":9007199254740993,"user":{"user_id":9007199254740993},"payload":"doc_${legacyKey}"}`;
     expect((await app.inject({ method: "POST", url: "/max/webhook", headers: { "content-type": "application/json", "x-max-bot-api-secret": process.env.MAX_WEBHOOK_SECRET! }, payload: legacyEvent })).statusCode).toBe(200);
     expect((await db.botOutbox.findFirstOrThrow({ orderBy: { id: "desc" } })).publicKey).toBe(legacyKey);
+    expect((await ownRole(3, "EXECUTOR", "Демо УК")).statusCode).toBe(200);
+    expect((await ownRole(0, "CHAIRMAN")).statusCode).toBe(200);
+    const report = await db.observation.create({ data: { houseId: house.id, authorId: users[7].id, title: `Resident report ${key}`, description: "Проблема жителя", category: "COMMON_AREAS" } });
+    const linkedPayload = { sourceObservationId: report.id, executorUserId: users[3].id, title: "Ремонт по наблюдению", description: "Описание", category: "COMMON_AREAS" };
+    expect((await call(7, "POST", `/api/houses/${house.id}/works`, linkedPayload)).statusCode).toBe(403);
+    await db.houseMembership.create({ data: { houseId: house2.id, userId: users[3].id, role: "EXECUTOR", status: "ACTIVE", executorCompanyName: "Демо УК" } });
+    expect((await call(9, "POST", `/api/houses/${house2.id}/works`, linkedPayload)).statusCode).toBe(400);
+    const linkedAttempts = await Promise.all([call(0, "POST", `/api/houses/${house.id}/works`, linkedPayload), call(0, "POST", `/api/houses/${house.id}/works`, linkedPayload)]);
+    expect(linkedAttempts.map((response) => response.statusCode).sort()).toEqual([201, 409]);
+    const linkedId = linkedAttempts.find((response) => response.statusCode === 201)!.json().id as number;
+    expect(await db.work.count({ where: { sourceObservationId: report.id } })).toBe(1);
+    expect((await db.observation.findUniqueOrThrow({ where: { id: report.id } })).status).toBe("IN_PROGRESS");
+    expect((await call(0, "GET", `/api/works/${linkedId}`)).json().sourceObservation).toEqual(expect.objectContaining({ id: report.id, title: report.title, description: report.description, category: report.category, author: expect.any(Object), media: expect.any(Array) }));
+    expect((await call(0, "GET", `/api/houses/${house.id}/observations`)).json().items.find((item: { id: number }) => item.id === report.id)).toEqual(expect.objectContaining({ linkedWork: { id: linkedId, status: "NEW" }, actions: { createWork: false } }));
+    expect(await db.issue.count({ where: { workId: linkedId } })).toBe(0);
   } finally {
     await app.close();
     await rm(directory, { recursive: true, force: true });
     delete process.env.MEDIA_DIR;
     delete process.env.DOCUMENTS_DIR;
     delete process.env.MAX_WEBHOOK_SECRET;
+  }
+}, 30_000);
+
+it.skipIf(!enabled)("keeps four remediation attempts after three failed reinspections", async () => {
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  const directory = await mkdtemp(join(tmpdir(), "priemka-reinspection-loop-"));
+  process.env.MEDIA_DIR = join(directory, "media");
+  process.env.DOCUMENTS_DIR = join(directory, "documents");
+  const repository = new PrismaUserRepository();
+  const db = repository.prisma;
+  const key = randomBytes(6).readUIntBE(0, 6).toString().padStart(15, "0");
+  const inspector = await db.user.create({ data: { maxUserId: `8${key}1`, firstName: "Inspector", lastName: "Loop", languageCode: "ru", lastAuthDate: new Date(), lastSeenAt: new Date() } });
+  const executor = await db.user.create({ data: { maxUserId: `8${key}2`, firstName: "Executor", lastName: "Loop", languageCode: "ru", lastAuthDate: new Date(), lastSeenAt: new Date() } });
+  const house = await db.house.create({ data: { address: `Loop test house ${key}` } });
+  await db.houseMembership.createMany({ data: [{ houseId: house.id, userId: inspector.id, role: "COUNCIL_MEMBER", status: "ACTIVE" }, { houseId: house.id, userId: executor.id, role: "EXECUTOR", status: "ACTIVE", executorCompanyName: "Демо УК" }] });
+  const work = await db.work.create({ data: { houseId: house.id, executorUserId: executor.id, executorName: "Демо УК", representativeName: "Executor Loop", title: "Четыре устранения", description: "Проверка истории", category: "COMMON_AREAS", status: "IN_PROGRESS" } });
+  const template = await db.checklistTemplate.create({ data: { code: `LOOP_${key}`, title: "Loop test", category: "COMMON_AREAS", items: { create: { order: 1, title: "Пункт", method: "VISUAL", sourceType: "INTERNAL" } } } });
+  const inspection = await db.inspection.create({ data: { workId: work.id, checklistTemplateId: template.id, templateVersion: template.version, createdByUserId: inspector.id, items: { create: { order: 1, title: "Пункт", method: "VISUAL", sourceType: "INTERNAL", commentRequiredOnFail: false, photoRequiredOnFail: false } }, assignments: { create: { assigneeUserId: inspector.id, status: "COMPLETED", completedAt: new Date() } } }, include: { items: true, assignments: true } });
+  const answer = await db.inspectionAnswer.create({ data: { assignmentId: inspection.assignments[0].id, checklistItemId: inspection.items[0].id, result: "FAIL", comment: "Дефект" } });
+  const issue = await db.issue.create({ data: { workId: work.id, inspectionAnswerId: answer.id, title: "Дефект", description: "Не устранён" } });
+  const app = await createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, businessDb: db, logger: false, staticRoot: "/nonexistent" });
+  const authFor = (user: typeof inspector) => ({ "x-max-init-data": createSignedMaxInitData(token, { user: `{"id":${user.maxUserId},"first_name":"${user.firstName}","last_name":"Loop","username":null,"language_code":"ru","photo_url":null}` }) });
+  const call = (user: typeof inspector, url: string, payload: object) => app.inject({ method: "POST", url, headers: authFor(user), payload });
+  const upload = async () => {
+    const bytes = await sharp({ create: { width: 16, height: 16, channels: 3, background: { r: 20, g: 50, b: 80 } } }).png().toBuffer();
+    const boundary = "loop-test-boundary";
+    const response = await app.inject({ method: "POST", url: "/api/media", headers: { ...authFor(executor), "content-type": `multipart/form-data; boundary=${boundary}` }, payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="proof.png"\r\nContent-Type: image/png\r\n\r\n`), bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]) });
+    expect(response.statusCode).toBe(201);
+    return response.json().id as number;
+  };
+  try {
+    const remediationIds: number[] = [], reinspectionIds: number[] = [];
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const mediaId = await upload();
+      const remediation = await call(executor, `/api/issues/${issue.id}/remediations`, { comment: `Устранение ${attempt}`, mediaIds: [mediaId] });
+      expect(remediation.statusCode).toBe(201);
+      remediationIds.push(remediation.json().id);
+      expect((await db.issue.findUniqueOrThrow({ where: { id: issue.id } })).status).toBe("REMEDIATION_SUBMITTED");
+      const result = attempt === 4 ? "RESOLVED" : "NOT_RESOLVED";
+      const reinspectionId = remediation.json().reinspectionId as number;
+      reinspectionIds.push(reinspectionId);
+      const response = await call(inspector, `/api/reinspections/${reinspectionId}/complete`, { result, comment: `Проверка ${attempt}` });
+      expect(response.statusCode).toBe(200);
+      expect((await db.issue.findUniqueOrThrow({ where: { id: issue.id } })).status).toBe(attempt === 4 ? "RESOLVED" : "OPEN");
+      expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe(attempt === 4 ? "WAITING" : "IN_PROGRESS");
+    }
+    const remediations = await db.remediation.findMany({ where: { issueId: issue.id }, orderBy: { id: "asc" } });
+    const reinspections = await db.reinspection.findMany({ where: { issueId: issue.id }, orderBy: { id: "asc" } });
+    expect(remediations.map((item) => item.id)).toEqual(remediationIds);
+    expect(remediations.map((item) => item.comment)).toEqual(["Устранение 1", "Устранение 2", "Устранение 3", "Устранение 4"]);
+    expect(reinspections.map((item) => item.id)).toEqual(reinspectionIds);
+    expect(reinspections.map((item) => item.result)).toEqual(["NOT_RESOLVED", "NOT_RESOLVED", "NOT_RESOLVED", "RESOLVED"]);
+    expect(reinspections.every((item) => item.status === "COMPLETED")).toBe(true);
+  } finally {
+    await app.close();
+    await rm(directory, { recursive: true, force: true });
+    delete process.env.MEDIA_DIR;
+    delete process.env.DOCUMENTS_DIR;
   }
 }, 30_000);

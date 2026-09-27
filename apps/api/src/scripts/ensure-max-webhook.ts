@@ -64,14 +64,19 @@ export async function ensureMaxWebhook(publicBaseUrl: string): Promise<void> {
   if (!bot || bot.is_bot !== true || bot.username !== botName) throw new WebhookSetupError("MAX bot identity does not match MAX_BOT_NAME");
   console.log(`MAX bot verified: @${botName}`);
 
-  const result = record(await maxJson("/subscriptions", token, "POST", { url, update_types: ["bot_started"], secret }));
+  const before = record(await maxJson("/subscriptions", token, "GET"))?.subscriptions;
+  const current = Array.isArray(before) ? before.map(record).find((item) => item?.url === url) : null;
+  const types = Array.isArray(current?.update_types) ? current.update_types.filter((item): item is string => typeof item === "string") : [];
+  const required = ["bot_started", "message_created"];
+  const updateTypes = [...new Set([...types, ...required])];
+  const result = record(await maxJson("/subscriptions", token, "POST", { url, update_types: updateTypes, secret }));
   if (result?.success !== true) throw new WebhookSetupError("MAX POST /subscriptions did not report success");
-
   const subscriptions = record(await maxJson("/subscriptions", token, "GET"))?.subscriptions;
   if (!Array.isArray(subscriptions) || !subscriptions.some((value: unknown) => {
     const subscription = record(value);
-    return subscription?.url === url && Array.isArray(subscription.update_types) && subscription.update_types.includes("bot_started");
-  })) throw new WebhookSetupError("MAX GET /subscriptions did not confirm bot_started webhook");
+    const confirmedTypes = subscription?.update_types;
+    return subscription?.url === url && Array.isArray(confirmedTypes) && updateTypes.every((type) => confirmedTypes.includes(type));
+  })) throw new WebhookSetupError("MAX GET /subscriptions did not confirm required webhook types");
 
   console.log(`MAX webhook configured: ${url}`);
 }

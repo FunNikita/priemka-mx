@@ -8,6 +8,7 @@ import { createApp } from "./app.js";
 import { requireMaxAuth } from "./max/require-max-auth.js";
 import type { UserRepository, UpsertMaxUserInput } from "./repositories/user-repository.js";
 import { createSignedMaxInitData } from "./test/helpers/max-init-data.js";
+import type { PrismaClient } from "../generated/prisma/client.js";
 
 class MemoryUserRepository implements UserRepository {
   readonly users = new Map<string, UpsertMaxUserInput>();
@@ -30,6 +31,26 @@ async function testApp(repository = new MemoryUserRepository(), options: Omit<Pa
 }
 
 describe("system routes", () => {
+  it("asks robots to avoid every route", async () => {
+    const { app } = await testApp();
+    try {
+      const robots = await app.inject({ method: "GET", url: "/robots.txt" });
+      expect(robots.body).toBe("User-agent: *\nDisallow: /\n");
+      for (const url of ["/api/health", "/missing", "/photo/abcdefghijkl"]) expect((await app.inject({ method: "GET", url })).headers["x-robots-tag"]).toBe("noindex, nofollow, noarchive, nosnippet");
+    } finally { await app.close(); }
+  });
+  it("logs socket IP on 200 and 404 without trusting a spoofed forwarded header", async () => {
+    const logs: string[] = [];
+    const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: new MemoryUserRepository(), logStream: { write: (line: string) => { logs.push(line); } }, staticRoot: "/nonexistent-priemka-static" });
+    try {
+      await app.inject({ method: "GET", url: "/api/health", headers: { "x-forwarded-for": "203.0.113.42" } });
+      await app.inject({ method: "GET", url: "/not-found?secret=hidden", headers: { "x-forwarded-for": "203.0.113.42" } });
+      const records = logs.flatMap((line) => line.trim().split("\n")).filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>).filter((record) => record.event === "http_request");
+      expect(records.map((record) => record.statusCode)).toEqual([200, 404]);
+      expect(records.every((record) => record.remoteIp !== "203.0.113.42" && typeof record.remoteIp === "string")).toBe(true);
+      expect(logs.join("")).not.toContain("secret=hidden");
+    } finally { await app.close(); }
+  });
   it("documents actual public PDF and photo responses", async () => {
     const { app } = await testApp();
     try {
@@ -96,6 +117,19 @@ describe("system routes", () => {
 });
 
 describe("GET /api/me", () => {
+  it("keeps invalid auth at 401 and returns the signed MAX ID for preview denial", async () => {
+    const db = { previewAccess: { findUnique: async () => null } } as unknown as PrismaClient;
+    const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, previewAccessRequired: true }, userRepository: new MemoryUserRepository(), businessDb: db, logger: false, staticRoot: "/nonexistent" });
+    try {
+      expect((await app.inject({ method: "GET", url: "/api/health" })).statusCode).toBe(200);
+      const invalid = await app.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": "invalid" } });
+      expect(invalid.statusCode).toBe(401);
+      expect(invalid.body).not.toContain("9007199254740993");
+      const denied = await app.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": createSignedMaxInitData(botToken) } });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json()).toEqual({ message: "Доступ к тестированию пока не открыт", code: "PREVIEW_ACCESS_DENIED", maxUserId: "9007199254740993" });
+    } finally { await app.close(); }
+  });
   it("can reuse MAX authorization on another protected route", async () => {
     const { app } = await testApp();
     app.get("/api/protected-test", {
@@ -249,9 +283,7 @@ describe("GET /api/me", () => {
       const response = await loggedApp.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": initData } });
       expect(response.statusCode).toBe(500);
       const records = logs.join("").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
-      expect(records.some((record) => record.reqId && (record.req as { method?: string })?.method === "GET" && (record.req as { url?: string })?.url === "/api/me")).toBe(true);
-      expect(records.some((record) => (record.res as { statusCode?: number })?.statusCode === 500 && typeof record.responseTime === "number")).toBe(true);
-      expect(records.some((record) => JSON.stringify(record).includes("test repository failure") && JSON.stringify(record).includes("stack"))).toBe(true);
+      expect(records.some((record) => record.event === "http_request" && record.requestId && record.method === "GET" && record.path === "/api/me" && record.statusCode === 500 && typeof record.durationMs === "number" && typeof record.remoteIp === "string")).toBe(true);
       expect(logs.join("")).not.toContain(initData);
     } finally {
       await loggedApp.close();

@@ -30,7 +30,7 @@ const requestResponse = await apiFetch(`/api/houses/${houseId}/join-requests`, {
 
 `GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `executorCompanyName`, `permissions`. Компания может быть сохранена и при другой текущей роли. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
 
-MAX User сам по себе не является участником дома. Рабочие права от членства появляются только при `status=ACTIVE`; `PENDING` и `REJECTED` членства их не дают. `user.isAdmin` обозначает отдельного системного администратора, а не домовую роль; его административные полномочия могут действовать без членства. Frontend не передаёт `lastHouseId` как условие доступа и не использует его как механизм безопасности. Backend обновляет его для обычного пользователя при успешном открытии списка работ активного дома.
+MAX User сам по себе не является участником дома. Рабочие права от членства появляются только при `status=ACTIVE`; `PENDING` и `REJECTED` членства их не дают. `user.isAdmin` обозначает отдельного системного администратора, а не домовую роль; его административные полномочия могут действовать без членства. Frontend не передаёт `lastHouseId` как условие доступа и не использует его как механизм безопасности. Backend возвращает `lastHouseId` в `/api/me`; frontend сохраняет выбор явным `PUT /api/me/last-house` с `{ "houseId": 6 }`. Нужен ACTIVE membership, включая администратора с членством.
 
 ## Найти дом и запросить доступ
 
@@ -53,7 +53,7 @@ MAX User сам по себе не является участником дом�
 
 ### Рассмотрение председателем
 
-`GET /api/houses/:houseId/join-requests` по умолчанию показывает ожидающие `RESIDENT REQUEST` заявки; доступны фильтр `status=PENDING|ACTIVE|REJECTED` и `page`/`limit`. Ответ — страница заявок с краткими `user.id`, `firstName`, `lastName`, `photoUrl`. Доступен только активному председателю этого дома; системный администратор управляет членством через отдельный API.
+`GET /api/houses/:houseId/join-requests` по умолчанию показывает ожидающие `RESIDENT REQUEST` заявки; доступны фильтр `status=PENDING|ACTIVE|REJECTED` и `page`/`limit`. Ответ — страница заявок с краткими `user.id`, `firstName`, `lastName`, `photoUrl` и `requestedAt` — датой последней подачи, которая обновляется после повторной заявки. Доступен только активному председателю этого дома; системный администратор управляет членством через отдельный API.
 
 `PATCH /api/houses/:houseId/join-requests/:membershipId` принимает только одно решение:
 
@@ -69,15 +69,15 @@ MAX User сам по себе не является участником дом�
 
 ## Роли и администратор
 
-При `ALLOW_SELF_ROLE_SWITCH=true` активный участник меняет **только свою** роль через `PATCH /api/me/houses/:houseId/membership` с `{ "role": "EXECUTOR", "executorCompanyName": "Демо УК" }`. Доступные роли: `RESIDENT`, `COUNCIL_MEMBER`, `CHAIRMAN`, `EXECUTOR`. Для роли исполнителя нужно непустое название компании до 255 символов. Оно сохраняется при уходе из роли и доступно при возвращении. `PENDING` и `REJECTED` менять роль не могут. В доме одновременно может быть максимум один активный председатель; попытка занять уже занятую роль даёт `409`. Один человек может последовательно переключать роли и проходить весь демо-сценарий.
+По умолчанию `ALLOW_SELF_ROLE_SWITCH=false`; для demo его включают явно. При `ALLOW_SELF_ROLE_SWITCH=true` активный участник меняет **только свою** роль через `PATCH /api/me/houses/:houseId/membership` с `{ "role": "EXECUTOR", "executorCompanyName": "Демо УК" }`. Доступные роли: `RESIDENT`, `COUNCIL_MEMBER`, `CHAIRMAN`, `EXECUTOR`. Для роли исполнителя нужно непустое название компании до 255 символов. Оно сохраняется при уходе из роли и доступно при возвращении. `PENDING` и `REJECTED` менять роль не могут. В доме одновременно может быть максимум один активный председатель; попытка занять уже занятую роль даёт `409`. Один человек может последовательно переключать роли и проходить весь демо-сценарий.
 
-Системный `isAdmin` управляет пользователями через `GET /api/admin/users?q=&page=&limit=` и `PUT /api/admin/houses/:houseId/members/:userId`. Второй метод создаёт или изменяет роль, статус и компанию членства существующего пользователя. В списке есть только публичные данные профиля и членств. Администратор без соответствующей активной домовой роли не создаёт работы, не проверяет и не подтверждает акт.
+Системный `isAdmin` управляет пользователями через `GET /api/admin/users?q=&page=&limit=` и `PUT`/`DELETE /api/admin/houses/:houseId/members/:userId`, создаёт дом через `POST /api/admin/houses` с `{ "address": "..." }`. Активного исполнителя с незавершёнными работами и члена совета с незавершёнными проверками удалить нельзя (`409`); председателя удалить можно. Второй метод создаёт или изменяет роль, статус и компанию членства существующего пользователя. В списке есть только публичные данные профиля и членств. Администратор без соответствующей активной домовой роли не создаёт работы, не проверяет и не подтверждает акт.
 
 ## Работы, наблюдения и комментарии
 
 Активный председатель создаёт работу через `POST /api/houses/:houseId/works`: `{ "executorUserId": 123, "title": "...", "description": "...", "category": "..." }`. Назначенный пользователь должен быть активным исполнителем дома с компанией. Для демо председатель может назначить самого себя, если у него сохранена компания исполнителя. Backend сохраняет название компании и имя представителя как snapshot работы: будущие изменения профиля их не меняют. Новая работа имеет `status=NEW` и `dates.submittedForInspectionAt=null`.
 
-`GET /api/houses/:houseId/works` возвращает работы дома; исполнитель видит только назначенные ему. `GET /api/works/:workId` содержит подробности, историю, документы и флаги `actions`. Исполнитель после фактического завершения вызывает `POST /api/works/:workId/submit-for-inspection` с `{}`. Повторный вызов безопасен. До этого работа остаётся `NEW`, а назначить проверяющего нельзя.
+`GET /api/houses/:houseId/works` возвращает работы дома; исполнитель видит только назначенные ему. `origin=MANUAL` выбирает работы без обращения, `origin=OBSERVATION` — связанные с обращением; без фильтра возвращаются все. Для отдельных карточек житель может загрузить обращения и `works?origin=MANUAL`. `GET /api/works/:workId` содержит подробности, историю, документы и флаги `actions`. Исполнитель после фактического завершения вызывает `POST /api/works/:workId/submit-for-inspection` с `{}`. Повторный вызов безопасен. До этого работа остаётся `NEW`, а назначить проверяющего нельзя.
 
 | Флаг `actions` | Действие |
 | --- | --- |
@@ -88,11 +88,13 @@ MAX User сам по себе не является участником дом�
 | `generateReasonedRefusal` | председатель оформляет отказ при незакрытых замечаниях |
 | `generateAcceptanceAct` | исполнитель формирует акт после устранения всех замечаний |
 | `confirmAcceptance` | текущая сторона подтверждает акт |
-| `watch`, `unwatch`, `comment`, `manageDocuments` | подписка, комментарий и доступные операции с документами |
+| `watch`, `unwatch`, `comment`, `edit`, `manageDocuments` | подписка, комментарий, редактирование Work и документы |
 
-Frontend использует эти флаги и всё равно обрабатывает ответ endpoint: состояние может измениться после загрузки карточки. `POST /api/works/:workId/watch` и `DELETE` переключают подписку и возвращают `204`.
+Frontend использует эти флаги и всё равно обрабатывает ответ endpoint: состояние может измениться после загрузки карточки. `POST /api/works/:workId/watch` и `DELETE` переключают подписку и возвращают `204`; для автора исходного обращения `DELETE` возвращает `409 AUTHOR_WATCH_REQUIRED`. `PATCH /api/works/:workId` разрешён активному председателю только до передачи на проверку и принимает `title`, `description`, `category`, `executorUserId`, `addMediaIds`, `removeMediaIds`. `actions.edit` задаётся backend. Категория Work должна быть категорией активного шаблона из `GET /api/checklist-templates`; категория исходного Observation не копируется автоматически. После передачи PATCH возвращает `409`.
 
-`GET /api/houses/:houseId/observations` возвращает наблюдения жителей; `POST` принимает `category`, `title`, `description`, необязательные `houseObjectId` и `mediaIds`. `GET /api/works/:workId/comments` возвращает `{items,page,limit,total}`; `page` по умолчанию 1, `limit` по умолчанию 20 и не более 100. `POST` по тому же пути добавляет комментарии. `PUT /api/houses/:houseId/chat` с `{ "joinUrl": "https://max.ru/..." }` и `DELETE` управляют ссылкой чата по правам backend.
+`executor` в Work detail и Work-контексте Issue/Inspection — snapshot `{userId,companyName,representativeName}` или `null`, а не текущий профиль. При создании работы председатель может передать необязательный `sourceObservationId` наблюдения того же дома. Связь хранится в `Work.sourceObservationId` (уникальная); транзакция блокирует наблюдение, проверяет отсутствие связанной работы и возвращает `404` для несуществующего наблюдения, `400` для другого дома, `409` для уже связанного. Ручное создание без этого поля сохраняется. `GET /api/works/:workId` возвращает `sourceObservation` с `id`, `title`, `description`, `category`, `createdAt`, `author`, `media` или `null`. Наблюдение в списке содержит `linkedWork: {id,status} | null` и `actions.createWork` от backend. Связанный статус: создание работы → `IN_PROGRESS`, передача на проверку → `IN_REVIEW`, замечания и устранение → фактический `IN_PROGRESS`/`WAITING`, приёмка → `ACCEPTED`. Фото наблюдения остаются у наблюдения; Issue возникает только после `FAIL` проверки.
+
+`GET /api/houses/:houseId/observations` возвращает обращения жителей; `POST` принимает `category`, `title`, `description`, необязательные `houseObjectId` и `mediaIds`. Автор автоматически подписан. `GET /api/observations/:observationId` возвращает detail, `isWatching`, `watchReason` (`AUTHOR`/`MANUAL`/`null`) и `actions.comment/watch/unwatch/createWork`. `linkedWork` здесь содержит компактный snapshot работы, исполнителя, media и счётчики Issues, поэтому второй обязательный GET Work не нужен. `POST`/`DELETE /api/observations/:observationId/watch` управляют ручной подпиской; автор не может отписаться (`409`, `code=AUTHOR_WATCH_REQUIRED`). `GET`/`POST /api/observations/:observationId/comments` работают как комментарии Work. Подписки продолжаются после создания связанной Work; автор не может отписаться и от неё. Бот подтверждает первое наблюдение и сообщает о важных этапах. `GET /api/works/:workId/comments` возвращает `{items,page,limit,total}`; `page` по умолчанию 1, `limit` по умолчанию 20 и не более 100. `POST` по тому же пути добавляет комментарии. `PUT /api/houses/:houseId/chat` с `{ "joinUrl": "https://max.ru/..." }` и `DELETE` управляют ссылкой чата по правам backend.
 
 ## Загрузка изображений
 
@@ -131,3 +133,13 @@ Backend автоматически формирует отчёты о прове
 Поле `message` из ответа backend можно показать как основу пользовательской ошибки. Не стройте бизнес-логику на точном тексте сообщения: ориентируйтесь на HTTP статус, DTO и `actions`.
 
 Пять больших списков (`/api/works/:workId/comments`, `/api/me/inspection-assignments`, `/api/works/:workId/issues`, `/api/me/issues`, `/api/me/reinspections`) принимают `page` и `limit` и возвращают `{items,page,limit,total}`. Фильтры `houseId`/`status` сохраняются при пагинации. Загрузка `POST /api/media` ограничена 10 попытками за 60 секунд на внутренний userId после проверки ACTIVE membership; 11-я возвращает `429` и `Retry-After`. Фото выдаются с `Cache-Control: private, no-store` и `X-Robots-Tag: noindex, nofollow, noarchive`.
+
+## Закрытый тест, deep links и история
+
+При `PREVIEW_ACCESS_REQUIRED=true` любой защищённый API сначала проверяет подписанные данные MAX, затем `PreviewAccess` по строковому MAX ID. Неверная подпись даёт `401`, отсутствие допуска — `403` с `code=PREVIEW_ACCESS_DENIED` и `maxUserId`. System admin тоже проходит gate. Администратор управляет конкретными ID через `GET /api/admin/preview-access?q=&page=&limit=` и `PUT /api/admin/preview-access/:maxUserId` с `{ "enabled": true|false }`; глобальный режим задаётся только deployment env.
+
+Ссылки из бота открывают мини-приложение с `start_param=observation_<id>`, `start_param=work_<id>` или `start_param=join_request_<membershipId>`. Frontend берёт этот параметр из проверенного `/api/me`, а не из неподписанного `initDataUnsafe` для решений о доступе. Авторизация каждого detail endpoint остаётся обязательной. Уведомления об этапах и действиях бот отправляет только в личный диалог. Когда у события есть PDF, файл и кнопка приходят одним сообщением; совпавшие watcher и action recipient получают одно сообщение с действием.
+
+`WorkDetail.history` сохраняет прежнюю форму. `GET /api/works/:workId/activity` и `GET /api/observations/:observationId/history` возвращают страницы persistent `ActivityEvent` (`items,page,limit,total`) со snapshot имени и роли автора действия. Технические IP находятся только в JSONL логах, не в сущностях пользователя/работы/обращения.
+
+Все ответы содержат `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; `/robots.txt` запрещает обход. Это не заменяет авторизацию или PreviewAccess.
