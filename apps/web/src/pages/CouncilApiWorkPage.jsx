@@ -9,19 +9,25 @@ import { councilJson, councilRequest, uploadCouncilPhoto } from './councilApi';
 import './HomePage.css';
 import './CouncilApiWorkPage.css';
 
-const answerLabels = { PENDING: 'Не проверено', PASS: 'Соответствует', FAIL: 'Не соответствует', UNABLE_TO_CHECK: 'Невозможно проверить' };
+const answerLabels = { PENDING: 'Не проверено', PASS: 'Соответствует', FAIL: 'Не соответствует' };
 const reviewLabels = { RESOLVED: 'Устранено', NOT_RESOLVED: 'Не устранено' };
+
+function hasRequiredEvidence(item, answer) {
+  return answer.result !== 'FAIL' || !item.rules.evidenceRequiredOnFail ||
+    (item.rules.commentAllowed && Boolean(answer.comment.trim())) ||
+    (item.rules.photosAllowed && answer.photos.length > 0);
+}
 
 function initialAnswer(item) {
   return { result: item.answer.result, comment: item.answer.comment ?? '', photos: item.answer.media.map((photo) => ({ id: photo.id, url: photo.url })) };
 }
 
-function PhotoField({ photos, onChange, disabled = false }) {
+function PhotoField({ photos, onChange, disabled = false, maxPhotos = 20 }) {
   const inputRef = useRef(null);
   const urlsRef = useRef([]);
   useEffect(() => () => urlsRef.current.forEach((url) => URL.revokeObjectURL(url)), []);
   const addFiles = (files) => {
-    const added = Array.from(files).slice(0, 10 - photos.length).map((file) => {
+    const added = Array.from(files).slice(0, maxPhotos - photos.length).map((file) => {
       const url = URL.createObjectURL(file);
       urlsRef.current.push(url);
       return { file, url };
@@ -32,7 +38,7 @@ function PhotoField({ photos, onChange, disabled = false }) {
     <Typography.Label>Фотографии</Typography.Label>
     <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={disabled} hidden onChange={(event) => { addFiles(event.target.files ?? []); event.target.value = ''; }} />
     <div className="council-api__photo-row">
-      {!disabled && photos.length < 10 ? <button type="button" className="report-problem-photo-add" aria-label="Добавить фотографии" onClick={() => inputRef.current?.click()}><Icon24AddCircle /></button> : null}
+      {!disabled && photos.length < maxPhotos ? <button type="button" className="report-problem-photo-add" aria-label="Добавить фотографии" onClick={() => inputRef.current?.click()}><Icon24AddCircle /></button> : null}
       {photos.map((photo, index) => <div className="council-api__photo" key={photo.id ?? photo.url}><ImagePreview src={photo.url} title={`Фото ${index + 1}`} />{!disabled ? <button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => onChange(photos.filter((value) => value !== photo))}>×</button> : null}</div>)}
     </div>
   </div>;
@@ -42,7 +48,7 @@ function ResultSelect({ value, onChange, options, disabled = false }) {
   const [open, setOpen] = useState(false);
   const tone = value === 'PASS' || value === 'RESOLVED' ? 'pass' : value === 'FAIL' || value === 'NOT_RESOLVED' ? 'fail' : 'pending';
   return <div className="admin-select council-api__select">
-    <button type="button" className={`admin-select__trigger council-work__select--${tone}`} aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span>{options[value]}</span><Icon24ChevronDown width={20} height={20} /></button>
+    <button type="button" className={`admin-select__trigger council-work__select--${tone}`} aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span>{options[value] ?? answerLabels[value]}</span><Icon24ChevronDown width={20} height={20} /></button>
     {open ? <div className="admin-select__menu" role="listbox">{Object.entries(options).map(([result, label]) => <button key={result} type="button" className="admin-select__option" onClick={() => { onChange(result); setOpen(false); }}>{label}</button>)}</div> : null}
   </div>;
 }
@@ -95,13 +101,13 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
   };
   const saveAnswer = async (item) => {
     const answer = answers[item.id];
-    if (answer.result === 'FAIL' && (!answer.comment.trim() || !answer.photos.length)) { setError('Для несоответствия нужны замечание и фотография.'); return; }
-    if (answer.result === 'UNABLE_TO_CHECK' && !answer.comment.trim()) { setError('Укажите причину, по которой пункт невозможно проверить.'); return; }
+    if (!item.rules.allowedResults.includes(answer.result)) { setError('Выберите результат проверки.'); return; }
+    if (!hasRequiredEvidence(item, answer)) { setError('Для несоответствия нужен комментарий или фотография.'); return; }
     setBusy(true);
     setError('');
     try {
       const photos = await Promise.all(answer.photos.map(async (photo) => photo.file ? { ...photo, id: (await uploadCouncilPhoto(photo.file)).id, file: undefined } : photo));
-      await councilRequest(`/api/inspection-assignments/${task.id}/answers/${item.id}`, councilJson('PUT', { result: answer.result, comment: answer.result === 'FAIL' || answer.result === 'UNABLE_TO_CHECK' ? answer.comment.trim() : null, mediaIds: answer.result === 'FAIL' ? photos.map((photo) => photo.id) : [] }));
+      await councilRequest(`/api/inspection-assignments/${task.id}/answers/${item.id}`, councilJson('PUT', { result: answer.result, comment: answer.result === 'FAIL' ? answer.comment.trim() : null, mediaIds: answer.result === 'FAIL' ? photos.map((photo) => photo.id) : [] }));
       setAnswers((current) => ({ ...current, [item.id]: { ...answer, photos } }));
       setDirty((current) => current.filter((id) => id !== item.id));
       setDetail((current) => ({ ...current, status: current.status === 'ASSIGNED' ? 'IN_PROGRESS' : current.status }));
@@ -132,7 +138,7 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
     finally { setBusy(false); }
   };
 
-  const hasAllAnswers = !isRepeat && detail?.checklist.length > 0 && detail.checklist.every((item) => ['PASS', 'FAIL'].includes(answers[item.id]?.result) && (answers[item.id]?.result !== 'FAIL' || (answers[item.id].comment.trim() && answers[item.id].photos.length)));
+  const hasAllAnswers = !isRepeat && detail?.checklist.length > 0 && detail.checklist.every((item) => item.rules.allowedResults.includes(answers[item.id]?.result) && hasRequiredEvidence(item, answers[item.id]));
   const canComplete = isRepeat ? Boolean(review.result && (review.result === 'RESOLVED' || review.comment.trim())) : hasAllAnswers && !dirty.length;
 
   return <Panel mode="primary" className="home-panel active-work-details-panel council-work-panel">
@@ -166,7 +172,18 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
           {detail.actions.complete ? <Button mode="primary" appearance="themed" size="medium" stretched disabled={!canComplete || busy} onClick={() => void complete()}>Завершить повторную проверку</Button> : null}
         </section> : <section className="active-work-details__card council-work__checklist-card">
           <Typography.Title variant="small-strong" className="council-work__section-title">Чек-лист проверки</Typography.Title>
-          <ul className="council-work__checklist">{detail.checklist.map((item) => { const answer = answers[item.id]; return <li key={item.id} className="council-work__checklist-row"><div className="council-work__checklist-main"><span className="council-work__checklist-label">{item.title}</span><ResultSelect value={answer.result} onChange={(result) => updateAnswer(item.id, { result, photos: result === 'FAIL' ? answer.photos : [] })} options={answerLabels} disabled={!detail.actions.save || busy} /></div>{answer.result === 'FAIL' || answer.result === 'UNABLE_TO_CHECK' ? <div className="council-work__checklist-details"><label className="council-api__comment"><Typography.Label>Замечание</Typography.Label><textarea value={answer.comment} disabled={!detail.actions.save || busy} placeholder="Опишите замечание" onChange={(event) => updateAnswer(item.id, { comment: event.target.value })} /></label>{answer.result === 'FAIL' ? <PhotoField photos={answer.photos} disabled={!detail.actions.save || busy} onChange={(photos) => updateAnswer(item.id, { photos })} /> : null}</div> : null}{detail.actions.save && dirty.includes(item.id) ? <Button mode="secondary" appearance="themed" size="medium" disabled={busy} onClick={() => void saveAnswer(item)}>Сохранить пункт</Button> : null}</li>; })}</ul>
+          <ul className="council-work__checklist">{detail.checklist.map((item) => {
+            const answer = answers[item.id];
+            const options = Object.fromEntries(item.rules.allowedResults.map((result) => [result, answerLabels[result]]));
+            return <li key={item.id} className="council-work__checklist-row">
+              <div className="council-work__checklist-main"><span className="council-work__checklist-label">{item.title}</span><ResultSelect value={answer.result} onChange={(result) => updateAnswer(item.id, { result, photos: result === 'FAIL' ? answer.photos : [] })} options={options} disabled={!detail.actions.save || busy} /></div>
+              {answer.result === 'FAIL' ? <div className="council-work__checklist-details">
+                {item.rules.commentAllowed ? <label className="council-api__comment"><Typography.Label>Замечание</Typography.Label><textarea value={answer.comment} maxLength={item.rules.maxCommentLength} disabled={!detail.actions.save || busy} placeholder="Опишите замечание" onChange={(event) => updateAnswer(item.id, { comment: event.target.value })} /></label> : null}
+                {item.rules.photosAllowed ? <PhotoField photos={answer.photos} maxPhotos={item.rules.maxPhotos} disabled={!detail.actions.save || busy} onChange={(photos) => updateAnswer(item.id, { photos })} /> : null}
+              </div> : null}
+              {detail.actions.save && dirty.includes(item.id) ? <Button mode="secondary" appearance="themed" size="medium" disabled={busy} onClick={() => void saveAnswer(item)}>Сохранить пункт</Button> : null}
+            </li>;
+          })}</ul>
           {detail.actions.complete ? <Button mode="primary" appearance="themed" size="medium" stretched disabled={!canComplete || busy} onClick={() => void complete()}>Завершить проверку</Button> : null}
         </section>}
         {work?.representative ? <section className="active-work-details__card active-work-details__related-card"><Typography.Title variant="small-strong" className="council-work__section-title">Связанные люди с работой</Typography.Title><div className="active-work-details__field"><Typography.Label>Представитель исполнителя</Typography.Label><Typography.Body>{work.representative.name}</Typography.Body></div><div className="active-work-details__person-actions">{work.representative.maxUrl ? <Button mode="secondary" appearance="themed" size="medium" onClick={() => window.open(work.representative.maxUrl, '_blank', 'noopener,noreferrer')}>Написать</Button> : null}{work.representative.phone ? <Button mode="primary" appearance="themed" size="medium" onClick={() => { window.location.href = `tel:${work.representative.phone}`; }}>Позвонить</Button> : null}</div></section> : null}
