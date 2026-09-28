@@ -222,7 +222,8 @@
                           "status",
                           "joinedVia",
                           "executorCompanyName",
-                          "permissions"
+                          "permissions",
+                          "chat"
                         ],
                         "properties": {
                           "id": {
@@ -306,6 +307,24 @@
                               },
                               "reviewJoinRequests": {
                                 "type": "boolean"
+                              }
+                            }
+                          },
+                          "chat": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "required": [
+                              "title",
+                              "joinUrl"
+                            ],
+                            "properties": {
+                              "title": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "joinUrl": {
+                                "type": "string"
                               }
                             }
                           }

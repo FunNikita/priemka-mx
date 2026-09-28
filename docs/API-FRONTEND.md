@@ -29,7 +29,7 @@ const requestResponse = await apiFetch(`/api/houses/${houseId}/join-requests`, {
 
 ## Личность и доступ к дому
 
-`GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `executorCompanyName`, `permissions`. Компания может быть сохранена и при другой текущей роли. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
+`GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `executorCompanyName`, `permissions`, `chat`. Поле `chat` содержит `{title,joinUrl}` только при `permissions.viewHouseChat=true` и существующем чате, иначе `null`; отдельный запрос списка Work для ссылки на чат не нужен. Компания может быть сохранена и при другой текущей роли. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
 
 MAX User сам по себе не является участником дома. Рабочие права от членства появляются только при `status=ACTIVE`; `PENDING` и `REJECTED` членства их не дают. `user.isAdmin` обозначает отдельного системного администратора, а не домовую роль; его административные полномочия могут действовать без членства. Frontend не передаёт `lastHouseId` как условие доступа и не использует его как механизм безопасности. Backend возвращает `lastHouseId` в `/api/me`; frontend сохраняет выбор явным `PUT /api/me/last-house` с `{ "houseId": 6 }`. Нужен ACTIVE membership, включая администратора с членством.
 
