@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PrismaClient } from "../../generated/prisma/client.js";
-import { seedDemo } from "./seed-demo.js";
+import { additionalDemoHouseAddresses, seedDemo } from "./seed-demo.js";
 
 type Row = Record<string, unknown> & { id: number };
 
@@ -35,9 +35,12 @@ describe("demo seed", () => {
   it("is repeatable and covers all five product statuses", async () => {
     const memory = memoryDb();
     const first = await seedDemo(memory.db);
+    expect(memory.houses).toHaveLength(6);
+    expect(memory.houses.map((house) => house.address)).toEqual(["Демо: ул. Примерная, д. 12", ...additionalDemoHouseAddresses]);
     const second = await seedDemo(memory.db);
     expect(second).toEqual(first);
-    expect(memory.houses).toHaveLength(1);
+    expect(memory.houses).toHaveLength(6);
+    expect(new Set(memory.houses.map((house) => house.address)).size).toBe(6);
     expect(memory.users).toHaveLength(5);
     expect(memory.memberships).toHaveLength(4);
     const admin = memory.users.find((item) => item.isAdmin === true);

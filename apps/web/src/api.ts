@@ -14,5 +14,10 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   }
 
   const url = path === "/api" || path.startsWith("/api/") ? path : `/api${path}`;
-  return fetch(url, { ...init, headers });
+  try {
+    return await fetch(url, { ...init, headers });
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error("Не удалось связаться с сервером. Проверьте подключение к интернету и повторите попытку.", { cause: error });
+    throw error;
+  }
 }

@@ -17,6 +17,7 @@ import { registerWorkflowApi } from "./workflow.js";
 import { registerHousesApi } from "./houses.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { createOperationalLogStream } from "./operational-log.js";
+import { validationMessage } from "./validation-error.js";
 
 const healthSchema = {
   response: { 200: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", const: "ok" } } } },
@@ -66,6 +67,16 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
     requestIdHeader: "x-request-id",
     genReqId: () => crypto.randomUUID(),
     trustProxy: trustedProxyIp ? (address) => address === trustedProxyIp : false,
+    schemaErrorFormatter: (errors) => new Error(validationMessage(errors[0])),
+  });
+
+  app.setErrorHandler((error, request, reply) => {
+    const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
+    if (statusCode === 500) {
+      request.log.error({ err: error, requestId: request.id }, "Unexpected HTTP error");
+      return reply.code(500).send({ message: "Внутренняя ошибка сервиса. Повторите попытку позже." });
+    }
+    return reply.send(error);
   });
 
   app.addHook("onSend", async (_request, reply, payload) => {

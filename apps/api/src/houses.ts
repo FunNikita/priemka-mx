@@ -39,9 +39,10 @@ export async function registerHousesApi(app: FastifyInstance, config: AppConfig,
   const guarded = { preHandler: authenticate };
   const security = [{ maxInitData: [] }];
   async function notifyChairmenOfRequest(request: { id: number; houseId: number; requestedAt: Date }) {
+    const house = await db!.house.findUnique({ where: { id: request.houseId }, select: { address: true } });
     const chairmen = await db!.houseMembership.findMany({ where: { houseId: request.houseId, role: "CHAIRMAN", status: "ACTIVE" }, select: { userId: true, role: true, status: true } });
     for (const chair of chairmen.filter((member) => member.role === "CHAIRMAN" && member.status === "ACTIVE")) {
-      await enqueueActionForUser(db!, { key: `join_request:${request.id}:${request.requestedAt.getTime()}:chair:${chair.userId}`, userId: chair.userId, houseId: request.houseId, accessKind: "JOIN_REVIEW", subjectId: request.id, previewRequired: !!config.previewAccessRequired, text: "Поступила новая заявка жителя на вступление в дом. Рассмотрите её.", buttonText: "Открыть заявку", buttonUrl: appLink(config.botName, "join_request", request.id) });
+      await enqueueActionForUser(db!, { key: `join_request:${request.id}:${request.requestedAt.getTime()}:chair:${chair.userId}`, userId: chair.userId, houseId: request.houseId, accessKind: "JOIN_REVIEW", subjectId: request.id, previewRequired: !!config.previewAccessRequired, text: `🆕 Поступила новая заявка жителя на вступление в дом по адресу: ${house!.address}. Рассмотрите её.`, buttonText: "Открыть заявку", buttonUrl: appLink(config.botName, "join_request", request.id) });
     }
   }
 
@@ -260,7 +261,8 @@ export async function registerHousesApi(app: FastifyInstance, config: AppConfig,
     const changed = await ctx.db.houseMembership.updateMany({ where: { id: membershipId, houseId, role: "RESIDENT", joinedVia: "REQUEST", status: "PENDING" }, data: { status: target } });
     if (!changed.count) return failure(reply, 409, "Заявка уже изменена");
     const reviewed = await ctx.db.houseMembership.findUniqueOrThrow({ where: { id: membershipId } });
-    await enqueueActionForUser(ctx.db, { key: `join_request:${membershipId}:${reviewed.requestedAt.getTime()}:${target}`, userId: reviewed.userId, houseId, accessKind: "JOIN_RESULT", subjectId: membershipId, previewRequired: !!config.previewAccessRequired, text: target === "ACTIVE" ? "Ваша заявка на вступление в дом одобрена." : "Ваша заявка на вступление в дом отклонена.", buttonText: "Открыть заявку", buttonUrl: appLink(config.botName, "join_request", membershipId) });
+    const house = await ctx.db.house.findUnique({ where: { id: houseId }, select: { address: true } });
+    await enqueueActionForUser(ctx.db, { key: `join_request:${membershipId}:${reviewed.requestedAt.getTime()}:${target}`, userId: reviewed.userId, houseId, accessKind: "JOIN_RESULT", subjectId: membershipId, previewRequired: !!config.previewAccessRequired, text: target === "ACTIVE" ? `Ваша заявка на вступление в дом по адресу: ${house!.address} одобрена.` : `Ваша заявка на вступление в дом по адресу: ${house!.address} была отклонена.`, buttonText: target === "ACTIVE" ? "Открыть сервис" : "", buttonUrl: target === "ACTIVE" ? `https://max.ru/${config.botName}?startapp` : "" });
     return view(reviewed);
   });
 }

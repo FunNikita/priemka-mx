@@ -14,6 +14,7 @@ import { newPublicPhotoKey } from "./photo-keys.js";
 import { syncLinkedObservationStatus } from "./observation-work.js";
 import { recordActivity } from "./activity.js";
 import { appLink, enqueueText, notifyWorkWatchers } from "./max/notifications.js";
+import { createdWorkTexts, workLabel } from "./max/bot-copy.js";
 
 const mediaRoot = () => resolve(process.env.MEDIA_DIR ?? "/app/data/media");
 const maxFileSize = 10 * 1024 * 1024;
@@ -173,12 +174,14 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     if (!input.title.trim() || !input.description.trim() || !input.category.trim()) return bad(reply, 400, "Заполните данные работы");
     if (!await ctx.db.checklistTemplate.count({ where: { active: true, category: input.category.trim() } })) return bad(reply, 400, "Выберите категорию из активных чек-листов");
     const created = await ctx.db.$transaction(async (tx) => {
+      let observationTitle: string | null = null;
       if (input.sourceObservationId) {
         await tx.$queryRaw`SELECT id FROM Observation WHERE id = ${input.sourceObservationId} FOR UPDATE`;
         const source = await tx.observation.findUnique({ where: { id: input.sourceObservationId }, include: { linkedWork: { select: { id: true } } } });
         if (!source) throw new Error("OBSERVATION_MISSING");
         if (source.houseId !== houseId) throw new Error("OBSERVATION_HOUSE_MISMATCH");
         if (source.linkedWork) throw new Error("OBSERVATION_LINKED");
+        observationTitle = source.title;
       }
       const work = await tx.work.create({ data: { houseId, sourceObservationId: input.sourceObservationId ?? null, executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), title: input.title.trim(), description: input.description.trim(), category: input.category.trim(), status: "NEW" } });
       if (input.sourceObservationId) {
@@ -188,7 +191,8 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       if (input.sourceObservationId) await syncLinkedObservationStatus(tx, work.id, "IN_PROGRESS");
       await tx.workHistory.create({ data: { workId: work.id, event: "WORK_CREATED", details: `Исполнитель ${candidate.userId}` } });
       await recordActivity(tx, { event: "WORK_CREATED", subjectType: "WORK", subjectId: work.id, houseId, workId: work.id, observationId: input.sourceObservationId, actorUserId: ctx.userId, metadata: { executorUserId: candidate.userId, category: work.category } });
-      await notifyWorkWatchers(tx, config.botName, work.id, "created", `По ${input.sourceObservationId ? "обращению" : "дому"} создана работа №${work.id}.\n\nИсполнитель: ${candidate.executorCompanyName!.trim()}\nТекущий этап: В работе.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: `Вам назначена работа №${work.id}: «${work.title}».\n\nОткройте работу, чтобы выполнить её и передать на проверку.` }] });
+      const texts = createdWorkTexts(work, candidate.executorCompanyName!.trim(), observationTitle);
+      await notifyWorkWatchers(tx, config.botName, work.id, "created", texts.general, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: texts.executor }] });
       return work;
     }).catch((cause: unknown) => {
       if (cause instanceof Error && cause.message === "OBSERVATION_MISSING") return "OBSERVATION_MISSING" as const;
@@ -222,7 +226,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       await tx.workHistory.create({ data: { workId, event: "SUBMITTED_FOR_INSPECTION" } });
       await recordActivity(tx, { event: "SUBMITTED_FOR_INSPECTION", subjectType: "WORK", subjectId: workId, houseId: current.houseId, workId, observationId: current.sourceObservationId ?? undefined, actorUserId: ctx.userId });
       const chairmen = await tx.houseMembership.findMany({ where: { houseId: current.houseId, role: "CHAIRMAN", status: "ACTIVE" }, select: { userId: true, role: true, status: true } });
-      await notifyWorkWatchers(tx, config.botName, workId, "submitted", `Работа №${workId} передана на проверку.`, { previewRequired: config.previewAccessRequired, actionRecipients: chairmen.filter((member) => member.role === "CHAIRMAN" && member.status === "ACTIVE").map((member) => ({ userId: member.userId, text: `Работа №${workId} передана на проверку.\n\nВам нужно назначить проверяющего.` })) });
+      await notifyWorkWatchers(tx, config.botName, workId, "submitted", `💼 Работа ${workLabel(current)} передана на проверку.`, { previewRequired: config.previewAccessRequired, actionRecipients: chairmen.filter((member) => member.role === "CHAIRMAN" && member.status === "ACTIVE").map((member) => ({ userId: member.userId, text: `💼 Работа ${workLabel(current)} передана на проверку.\n\nВам нужно назначить проверяющего.` })) });
       return at;
     });
     return submitted ? { submittedForInspectionAt: submitted } : bad(reply, 409, "Работа уже находится на проверке");
@@ -398,7 +402,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
           if (item.linkedWork) await tx.workSubscription.upsert({ where: { workId_userId: { workId: item.linkedWork.id, userId: ctx.userId } }, create: { workId: item.linkedWork.id, userId: ctx.userId, sourceObservationId: observationId }, update: {} });
           await recordActivity(tx, { event: "OBSERVATION_WATCHED", subjectType: "OBSERVATION", subjectId: observationId, houseId: item.houseId, observationId, actorUserId: ctx.userId });
           const user = await tx.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { maxUserId: true } });
-          await enqueueText(tx, { key: `observation:${observationId}:watch:${ctx.userId}`, maxUserId: user.maxUserId, text: `Вы подписались на обновления 👀\n\n«${item.title}»\n\nЯ сообщу здесь, когда по обращению появится работа\nили изменится важный этап.`, buttonText: "Открыть обращение", buttonUrl: appLink(config.botName, "observation", observationId), recipientUserId: ctx.userId, houseId: item.houseId, accessKind: "OBSERVATION", subjectId: observationId });
+          await enqueueText(tx, { key: `observation:${observationId}:watch:${ctx.userId}`, maxUserId: user.maxUserId, text: `👀 Вы подписались на обновления обращения «${item.title}»\n\nЯ сообщу здесь, когда по нему изменится важный этап.`, buttonText: "Открыть обращение", buttonUrl: appLink(config.botName, "observation", observationId), recipientUserId: ctx.userId, houseId: item.houseId, accessKind: "OBSERVATION", subjectId: observationId });
         });
       } else {
         await ctx.db.$transaction(async (tx) => {
@@ -454,7 +458,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
         await tx.observationSubscription.create({ data: { observationId: item.id, userId: ctx.userId, reason: "AUTHOR" } });
         await recordActivity(tx, { event: "OBSERVATION_CREATED", subjectType: "OBSERVATION", subjectId: item.id, houseId, observationId: item.id, actorUserId: ctx.userId, metadata: { category: item.category } });
         const user = await tx.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { maxUserId: true } });
-        await enqueueText(tx, { key: `observation:${item.id}:author`, maxUserId: user.maxUserId, text: `Обращение создано ✅\n\n«${item.title}»\n\nВы автоматически следите за ним как автор.\nОтключить наблюдение для этого обращения нельзя.\n\nЯ напишу здесь, когда по обращению изменится важный этап.`, buttonText: "Открыть обращение", buttonUrl: appLink(config.botName, "observation", item.id), recipientUserId: ctx.userId, houseId, accessKind: "OBSERVATION", subjectId: item.id });
+        await enqueueText(tx, { key: `observation:${item.id}:author`, maxUserId: user.maxUserId, text: `✅ Обращение создано\n\n«${item.title}»\n\nЯ напишу здесь, когда по обращению изменится важный этап.`, buttonText: "Открыть обращение", buttonUrl: appLink(config.botName, "observation", item.id), recipientUserId: ctx.userId, houseId, accessKind: "OBSERVATION", subjectId: item.id });
         return item;
       });
       return reply.code(201).send({ id: result.id, status: result.status });

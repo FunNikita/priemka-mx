@@ -26,6 +26,28 @@ class MemoryUserRepository implements UserRepository {
 
 const botToken = "test-bot-token";
 
+it("localizes schema validation and preserves an explicit business error", async () => {
+  const { app } = await testApp(undefined, { businessDb: {} as PrismaClient });
+  try {
+    const headers = { "x-max-init-data": createSignedMaxInitData(botToken) };
+    const cases = [
+      [{ title: "Тест", description: "Описание", category: "OTHER" }, "Заполните поле «исполнитель»."],
+      [{ executorUserId: "не число", title: "Тест", description: "Описание", category: "OTHER" }, "Укажите корректное числовое значение в поле «исполнитель»."],
+    ] as const;
+    for (const [payload, expected] of cases) {
+      const response = await app.inject({ method: "POST", url: "/api/houses/1/works", headers, payload });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().message).toBe(expected);
+    }
+    const choice = await app.inject({ method: "GET", url: "/api/houses/1/works?status=WRONG", headers });
+    expect(choice.statusCode).toBe(400);
+    expect(choice.json().message).toBe("Выберите допустимое значение для поля «статус».");
+    const business = await app.inject({ method: "GET", url: "/api/me" });
+    expect(business.statusCode).toBe(401);
+    expect(business.json().message).not.toBe("Внутренняя ошибка сервиса. Повторите попытку позже.");
+  } finally { await app.close(); }
+});
+
 async function testApp(repository = new MemoryUserRepository(), options: Omit<Parameters<typeof createApp>[0], "config" | "userRepository" | "logger"> = {}) {
   return { app: await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, logger: false, ...options }), repository };
 }
@@ -282,7 +304,10 @@ describe("GET /api/me", () => {
     try {
       const response = await loggedApp.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": initData } });
       expect(response.statusCode).toBe(500);
+      expect(response.json().message).toBe("Внутренняя ошибка сервиса. Повторите попытку позже.");
+      expect(response.body).not.toContain("test repository failure");
       const records = logs.join("").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(logs.join("")).toContain("test repository failure");
       expect(records.some((record) => record.event === "http_request" && record.requestId && record.method === "GET" && record.path === "/api/me" && record.statusCode === 500 && typeof record.durationMs === "number" && typeof record.remoteIp === "string")).toBe(true);
       expect(logs.join("")).not.toContain(initData);
     } finally {

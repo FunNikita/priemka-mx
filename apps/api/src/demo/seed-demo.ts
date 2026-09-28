@@ -15,6 +15,14 @@ const demoUsers = [
   { maxUserId: "7000000000000000104", firstName: "Сергей", lastName: "Демо", role: "EXECUTOR" },
 ] as const;
 
+export const additionalDemoHouseAddresses = [
+  "Демо: Санкт-Петербург, ул. Сосновая, д. 7",
+  "Демо: Санкт-Петербург, пр. Маячный, д. 18",
+  "Демо: Москва, ул. Ясная, д. 24",
+  "Демо: Москва, пер. Липовый, д. 5",
+  "Демо: Самара, ул. Речная, д. 11",
+] as const;
+
 const demoWorks = [
   { title: "Демо: замена двери", status: "NEW", object: 0 },
   { title: "Демо: ремонт лифта", status: "IN_REVIEW", object: 0 },
@@ -47,6 +55,9 @@ export async function seedDemo(db: PrismaClient) {
 
   const address = "Демо: ул. Примерная, д. 12";
   const house = await db.house.findFirst({ where: { address } }) ?? await db.house.create({ data: { address } });
+  for (const extraAddress of additionalDemoHouseAddresses) {
+    if (!await db.house.findFirst({ where: { address: extraAddress } })) await db.house.create({ data: { address: extraAddress } });
+  }
   for (const [index, item] of demoUsers.entries()) {
     await db.houseMembership.upsert({
       where: { houseId_userId: { houseId: house.id, userId: users[index].id } },
