@@ -43,7 +43,7 @@ function fixture() {
     (where.sourceObservationId === undefined || (where.sourceObservationId === null) !== !!(work as typeof work & { sourceObservationId?: number }).sourceObservationId);
   let lastHouseId: number | null = null;
   const db = {
-    user: { findUniqueOrThrow: async ({ where }: { where: { id: number } }) => ({ id: where.id, maxUserId: String(9007199254740992n + BigInt(where.id)) }), findUnique: async () => ({ lastHouseId, firstName: "Макс", lastName: "Пользователь" }), findMany: async () => [{ id: 1, maxUserId: "9007199254740993" }], update: async ({ data }: { data: { lastHouseId: number } }) => { lastHouseId = data.lastHouseId; return { id: 1, lastHouseId }; } },
+    user: { findUniqueOrThrow: async ({ where }: { where: { id: number } }) => ({ id: where.id, maxUserId: String(9007199254740992n + BigInt(where.id)) }), findUnique: async () => ({ lastHouseId, firstName: "Макс", lastName: "Пользователь", maxUserId: "9007199254740993" }), findMany: async () => [{ id: 1, maxUserId: "9007199254740993" }], update: async ({ data }: { data: { lastHouseId: number } }) => { lastHouseId = data.lastHouseId; return { id: 1, lastHouseId }; } },
     houseMembership: {
       findUnique: async ({ where }: { where: { houseId_userId: { houseId: number } } }) => hasMembership && where.houseId_userId.houseId === 1 ? { userId: 1, role, status, executorCompanyName: company, user: { id: 1, firstName: "Макс", lastName: "Пользователь" }, createdAt: new Date("2026-09-23T00:00:00Z") } : null,
       findFirst: async () => hasMembership && status === "ACTIVE" ? { id: 1 } : null,
@@ -127,7 +127,7 @@ function fixture() {
       try { return await fn(db); } catch (error) { observations.splice(observationCount); comments.splice(commentCount); throw error; }
     },
   };
-  return { db: db as unknown as PrismaClient, media, blobs, subscriptions, observationSubscriptions, outboxJobs, observations, comments, createdWorks, historyEvents, activityEvents, setCompany: (value: string | null) => { company = value; }, setRole: (value: string) => { role = value; }, setStatus: (value: string) => { status = value; }, setMembership: (value: boolean) => { hasMembership = value; }, setChat: (value: typeof chat) => { chat = value; }, setWorkStatus: (value: string) => { work.status = value; }, linkExistingWork: (observationId: number) => { Object.assign(work, { sourceObservationId: observationId, sourceObservation: { ...observations.find((item) => item.id === observationId), authorId: 1, author: user, media: [] } }); }, assignExecutor: (value: number | null) => { work.executorUserId = value; work.executorName = value ? "ООО Управдом" : null; work.representativeName = value ? "Сергей Петров" : null; work.executor = value ? { id: value, firstName: "Сергей", lastName: "Петров" } : null; }, getChat: () => chat };
+  return { db: db as unknown as PrismaClient, media, blobs, subscriptions, observationSubscriptions, outboxJobs, observations, comments, createdWorks, historyEvents, activityEvents, setCompany: (value: string | null) => { company = value; }, setRole: (value: string) => { role = value; }, setStatus: (value: string) => { status = value; }, setMembership: (value: boolean) => { hasMembership = value; }, setChat: (value: typeof chat) => { chat = value; }, setWorkStatus: (value: string) => { work.status = value; }, linkExistingWork: (observationId: number) => { Object.assign(work, { sourceObservationId: observationId, sourceObservation: { ...observations.find((item) => item.id === observationId), authorId: 1, author: user, media: [], subscriptions: [] } }); }, assignExecutor: (value: number | null) => { work.executorUserId = value; work.executorName = value ? "ООО Управдом" : null; work.representativeName = value ? "Сергей Петров" : null; work.executor = value ? { id: value, firstName: "Сергей", lastName: "Петров" } : null; }, getChat: () => chat };
 }
 
 async function appFor(db: PrismaClient, isAdmin = false, now?: () => Date) {
@@ -231,6 +231,21 @@ describe("business API", () => {
       expect(first.statusCode).toBe(200);
       expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).json()).toEqual(first.json());
       expect(f.historyEvents.filter((event) => event.event === "SUBMITTED_FOR_INSPECTION")).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
+  it("uses the work label without repeating the source observation after creation", async () => {
+    const f = fixture();
+    const app = await appFor(f.db);
+    try {
+      expect((await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Заявка", description: "Описание" } })).statusCode).toBe(201);
+      f.linkExistingWork(1);
+      f.setRole("EXECUTOR");
+      f.assignExecutor(1);
+      expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).statusCode).toBe(200);
+      const job = [...f.outboxJobs.values()].find((item) => item.accessKind === "WORK");
+      expect(job?.text).toBe("💼 Работа «Лифт» (№7) передана на проверку.");
+      expect(job?.text).not.toContain("Обращение:");
     } finally { await app.close(); }
   });
 

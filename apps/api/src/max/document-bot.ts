@@ -31,7 +31,7 @@ function parseUpdate(value: string): BotUpdate | null {
     const userId = String(sender?.user_id ?? "");
     const chatId = String(update.chat_id ?? recipient?.chat_id ?? "");
     if (!/^[1-9][0-9]{0,31}$/.test(userId) || !/^-?[1-9][0-9]{0,31}$/.test(chatId)) return null;
-    return { type: update.update_type, chatId, userId, name: typeof sender?.first_name === "string" ? sender.first_name.slice(0, 100) : "друг", payload: typeof update.payload === "string" ? update.payload : null, text: typeof body?.text === "string" ? body.text : null, dialog: update.update_type === "bot_started" || recipient?.chat_type === "dialog" };
+    return { type: update.update_type, chatId, userId, name: typeof sender?.first_name === "string" ? sender.first_name.slice(0, 100) : "", payload: typeof update.payload === "string" ? update.payload : null, text: typeof body?.text === "string" ? body.text : null, dialog: update.update_type === "bot_started" || recipient?.chat_type === "dialog" };
   } catch { return null; }
 }
 
@@ -108,7 +108,7 @@ export async function deliverBotOutbox(db: PrismaClient, token: string, outboxId
     await db.botOutbox.update({ where: { id: job.id }, data: { completedAt: new Date(), sentText: true } });
     return;
   }
-  const result = job.publicKey ? await publicDocumentStatus(db, job.publicKey) : { message: "Некорректный код документа", bytes: null };
+  const result = job.publicKey ? await publicDocumentStatus(db, job.publicKey) : { message: "Некорректный код документа.", bytes: null };
   if (!job.sentText) {
     await throttle(target);
     await maxRequest(`/messages?${destination}`, token, { text: result.message });
@@ -121,14 +121,14 @@ export async function deliverBotOutbox(db: PrismaClient, token: string, outboxId
   const fileToken = job.fileToken ?? await uploadPdf(token, result.bytes);
   if (!job.fileToken) await db.botOutbox.update({ where: { id: job.id }, data: { fileToken } });
   await throttle(target);
-  await maxRequest(`/messages?${destination}`, token, { text: "PDF документа", attachments: [{ type: "file", payload: { token: fileToken } }] });
+  await maxRequest(`/messages?${destination}`, token, { text: "📄 Файл документа", attachments: [{ type: "file", payload: { token: fileToken } }] });
   await db.botOutbox.update({ where: { id: job.id }, data: { completedAt: new Date() } });
 }
 
 function greeting(name: string, timeZone: string) {
   const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone }).format(new Date()));
   const salutation = hour >= 5 && hour < 12 ? "Доброе утро" : hour >= 12 && hour < 18 ? "Добрый день" : hour >= 18 && hour < 23 ? "Добрый вечер" : "Доброй ночи";
-  return `${salutation}, ${name}!\n\nЯ чат-бот «Приёмка» — сервис для контроля работ в доме:\nот обращения жителя до проверки результата и приёмки работы.\n\nПока я ещё учусь отвечать на сообщения,\nно основной функционал уже доступен в мини-приложении.\n\nНажмите кнопку ниже, чтобы открыть сервис.`;
+  return `${salutation}${name.trim() ? `, ${name}` : ""}!\n\nЯ чат-бот «Приёмка» — сервис для контроля работ в доме.\n\nПока я ещё учусь отвечать на сообщения, но основной функционал уже доступен в мини-приложении.\n\nНажмите кнопку ниже, чтобы открыть сервис.`;
 }
 
 export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | null, token: string, config?: AppConfig) {
@@ -139,7 +139,7 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
     scope.addContentTypeParser("application/json", { parseAs: "string" }, (_request, body, done) => done(null, body));
     scope.post(webhookPath, { schema: { tags: ["MAX bot"], body: { type: "string" }, response: { 200: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] }, 401: { type: "object", properties: { message: { type: "string" } } }, 503: { type: "object", properties: { message: { type: "string" } } } } } }, async (request, reply) => {
       if (!db || !secret) return reply.code(503).send({ message: "Webhook не настроен" });
-      if (!sameSecret(request.headers["x-max-bot-api-secret"], secret)) return reply.code(401).send({ message: "Unauthorized" });
+      if (!sameSecret(request.headers["x-max-bot-api-secret"], secret)) return reply.code(401).send({ message: "Не удалось подтвердить запрос MAX." });
       const raw = request.body as string;
       const update = parseUpdate(raw);
       if (!update) return { ok: true };
@@ -157,9 +157,9 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
       const allowed = !config?.previewAccessRequired || !!(await db.previewAccess.findUnique({ where: { maxUserId: update.userId } }))?.enabled;
       const command = update.type === "bot_started" || /^\/start(?:\s|$)/.test(update.text ?? "") ? "start" : "unknown";
       const text = !allowed
-        ? `Доступ к тестированию «Приёмки» пока не открыт.\n\nВаш MAX ID: ${update.userId}\n\nПередайте этот ID администратору тестирования,\nчтобы он добавил аккаунт в список участников.`
+        ? `Доступ пока не открыт.\n\n#${update.userId}`
         : command === "start" ? greeting(update.name, timeZone)
-          : "Такой команды я пока не знаю.\n\nОсновной функционал «Приёмки» уже доступен\nв мини-приложении — откройте его по кнопке ниже.";
+          : "Такой команды я пока не знаю.\n\nОсновной функционал «Приёмки» уже доступен в мини-приложении — откройте его по кнопке ниже.";
       const eventKey = createHash("sha256").update(raw).digest("hex");
       const job = await enqueueText(db, { key: `webhook:${eventKey}`, maxUserId: update.userId, text, buttonText: allowed ? "Открыть сервис" : "", buttonUrl: allowed ? `https://max.ru/${botName}?startapp` : "" });
       app.log.info({ event: "max_bot_update", updateType: update.type, command, allowed, outboxId: job.id }, "MAX bot update");

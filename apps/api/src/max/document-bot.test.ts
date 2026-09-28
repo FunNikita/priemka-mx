@@ -33,13 +33,15 @@ it("deduplicates welcome, ignores group messages, and checks PreviewAccess befor
     await send(direct);
     await send(direct);
     expect(jobs.size).toBe(1);
-    expect([...jobs.values()][0].text).toContain("Ваш MAX ID: 9007199254740993");
+    expect([...jobs.values()][0].text).toBe("Доступ пока не открыт.\n\n#9007199254740993");
     enabled = true;
     await send({ update_type: "bot_started", chat_id: 123, user: { user_id: "9007199254740993", first_name: "Макс" }, timestamp: 1 });
     expect(jobs.size).toBe(2);
     expect([...jobs.values()][1].text).toContain("Я чат-бот «Приёмка»");
+    await send({ update_type: "bot_started", chat_id: 123, user: { user_id: "9007199254740993" }, timestamp: 2 });
+    expect([...jobs.values()][2].text).toMatch(/^(?:Доброе утро|Добрый день|Добрый вечер|Доброй ночи)!\n\n/);
     await send({ update_type: "bot_started", chat_id: 123, user: { user_id: "9007199254740993", first_name: "Макс" }, payload: `doc_${"a".repeat(20)}` });
-    expect([...jobs.values()][2]).toEqual(expect.objectContaining({ chatId: "9007199254740993", targetType: "USER", publicKey: "a".repeat(20) }));
+    expect([...jobs.values()][3]).toEqual(expect.objectContaining({ chatId: "9007199254740993", targetType: "USER", publicKey: "a".repeat(20) }));
   } finally { await app.close(); }
 });
 
@@ -94,6 +96,29 @@ it("drops a queued lifecycle message when the recipient loses house access", asy
   await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
   expect(job.deadAt).toBeInstanceOf(Date);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("sends the verified document with the new PDF caption", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "priemka-doc-caption-"));
+  vi.stubEnv("DOCUMENTS_DIR", directory);
+  const bytes = Buffer.from("%PDF-1.4\ncaption-test\n");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  await writeFile(join(directory, "report.pdf"), bytes);
+  const job = { id: 1, chatId: "9007199254740993", targetType: "USER", accessKind: "NONE", recipientUserId: null, houseId: null, subjectId: null, kind: "DOCUMENT", publicKey: "a".repeat(20), fileToken: null as string | null, completedAt: null as Date | null, deadAt: null, sentText: false };
+  const messages: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL, options: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/uploads?type=file")) return new Response(JSON.stringify({ url: "https://upload.max.ru/file", token: "file-token" }), { status: 200 });
+    if (url === "https://upload.max.ru/file") return new Response("", { status: 200 });
+    messages.push(JSON.parse(String(options.body)) as Record<string, unknown>);
+    return new Response("{}", { status: 200 });
+  }));
+  const db = { botOutbox: { findUnique: async () => job, update: async ({ data }: { data: Partial<typeof job> }) => Object.assign(job, data) }, documentVersion: { findUnique: async () => ({ storagePath: "report.pdf", sha256, version: 1, createdAt: new Date(), status: "FINAL", confirmations: [], document: { id: 1, type: "INSPECTION_REPORT", work: { title: "Работа", house: { address: "Дом" } } } }) } } as unknown as PrismaClient;
+  try {
+    await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
+    expect(messages[0].text).toContain("Статус: Сформирован");
+    expect(messages[1].text).toBe("📄 Файл документа");
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 it("drops a queued lifecycle message when preview access is revoked", async () => {

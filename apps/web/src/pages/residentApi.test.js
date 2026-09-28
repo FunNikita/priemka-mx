@@ -29,3 +29,11 @@ it('отклоняет неподдерживаемый формат фото д
   await expect(uploadPhoto(new File(['x'], 'bad.gif', { type: 'image/gif' }))).rejects.toThrow('JPEG');
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+it('показывает русский текст при сетевом сбое и сохраняет ответ бизнес-ошибки', async () => {
+  vi.stubGlobal('window', { location: { hostname: 'example.com' } });
+  const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Работа уже принята' }), { status: 409 }));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(request('/api/test')).rejects.toThrow('Не удалось связаться с сервером. Проверьте подключение к интернету и повторите попытку.');
+  await expect(request('/api/test')).rejects.toThrow('Работа уже принята');
+});
