@@ -429,46 +429,177 @@
           }
         },
         {
-          "name": "GET /api/houses/:houseId/observations",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-Max-Init-Data",
-                "value": "{{maxInitData}}",
-                "type": "text"
+          "name": "Observations — Обращения",
+          "item": [
+            {
+              "name": "GET /api/houses/:houseId/observations — active",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/houses/{{houseId}}/observations?tab=active&page=1&limit=20"
               }
-            ],
-            "url": "{{baseUrl}}/api/houses/{{houseId}}/observations"
-          }
-        },
-        {
-          "name": "POST /api/houses/:houseId/observations",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-Max-Init-Data",
-                "value": "{{maxInitData}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
+            },
+            {
+              "name": "GET /api/houses/:houseId/observations — history",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/houses/{{houseId}}/observations?tab=history&page=1&limit=20"
               }
-            ],
-            "url": "{{baseUrl}}/api/houses/{{houseId}}/observations",
-            "body": {
-              "mode": "raw",
-              "raw": "{\"category\":\"OTHER\",\"title\":\"Тестовое наблюдение\",\"description\":\"Описание события\"}",
-              "options": {
-                "raw": {
-                  "language": "json"
+            },
+            {
+              "name": "GET /api/houses/:houseId/observations — watching",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/houses/{{houseId}}/observations?tab=active&watching=true&page=1&limit=20"
+              }
+            },
+            {
+              "name": "POST /api/houses/:houseId/observations",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/houses/{{houseId}}/observations",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"OTHER\",\n  \"title\": \"Тестовое обращение\",\n  \"description\": \"Описание обращения\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "GET /api/observations/:observationId",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/observations/{{observationId}}"
+              }
+            },
+            {
+              "name": "PUT /api/observations/:observationId/executor",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/observations/{{observationId}}/executor",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"executorUserId\": \"{{executorUserId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "POST /api/observations/:observationId/watch",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/observations/{{observationId}}/watch"
+              }
+            },
+            {
+              "name": "DELETE /api/observations/:observationId/watch",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/observations/{{observationId}}/watch"
+              }
+            },
+            {
+              "name": "POST /api/observations/:observationId/comments",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Max-Init-Data",
+                    "value": "{{maxInitData}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/observations/{{observationId}}/comments",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"Комментарий к обращению\",\n  \"mediaIds\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 }
               }
             }
-          }
+          ]
         },
         {
           "name": "GET /api/works/:workId/comments",
@@ -1125,6 +1256,14 @@
     {
       "key": "documentId",
       "value": "1"
+    },
+    {
+      "key": "observationId",
+      "value": ""
+    },
+    {
+      "key": "executorUserId",
+      "value": ""
     }
   ]
 }

@@ -238,7 +238,7 @@ export async function registerHousesApi(app: FastifyInstance, config: AppConfig,
     const query = request.query as { status?: "PENDING" | "ACTIVE" | "REJECTED"; page?: number; limit?: number };
     const currentPage = query.page ?? 1;
     const currentLimit = query.limit ?? 20;
-    const where = { houseId, role: "RESIDENT" as const, joinedVia: "REQUEST" as const, status: query.status ?? "PENDING" };
+    const where = { houseId, role: "RESIDENT" as const, status: query.status ?? "PENDING" };
     const [total, items] = await Promise.all([
       ctx.db.houseMembership.count({ where }),
       ctx.db.houseMembership.findMany({ where, skip: (currentPage - 1) * currentLimit, take: currentLimit, orderBy: [{ requestedAt: "asc" }, { id: "asc" }], include: { user: { select: { id: true, firstName: true, lastName: true, photoUrl: true } } } }),
@@ -254,11 +254,11 @@ export async function registerHousesApi(app: FastifyInstance, config: AppConfig,
     const { decision } = request.body as { decision: "APPROVE" | "REJECT" };
     if (!await canReview(houseId, ctx.userId)) return failure(reply, 403, "Нет права рассматривать заявки");
     const current = await ctx.db.houseMembership.findUnique({ where: { id: membershipId } });
-    if (!current || current.houseId !== houseId || current.role !== "RESIDENT" || current.joinedVia !== "REQUEST") return failure(reply, 404, "Заявка не найдена");
+    if (!current || current.houseId !== houseId || current.role !== "RESIDENT") return failure(reply, 404, "Заявка не найдена");
     const target = decision === "APPROVE" ? "ACTIVE" : "REJECTED";
     if (current.status === target) return view(current);
     if (current.status !== "PENDING") return failure(reply, 409, "Заявка уже рассмотрена");
-    const changed = await ctx.db.houseMembership.updateMany({ where: { id: membershipId, houseId, role: "RESIDENT", joinedVia: "REQUEST", status: "PENDING" }, data: { status: target } });
+    const changed = await ctx.db.houseMembership.updateMany({ where: { id: membershipId, houseId, role: "RESIDENT", status: "PENDING" }, data: { status: target } });
     if (!changed.count) return failure(reply, 409, "Заявка уже изменена");
     const reviewed = await ctx.db.houseMembership.findUniqueOrThrow({ where: { id: membershipId } });
     const house = await ctx.db.house.findUnique({ where: { id: houseId }, select: { address: true } });

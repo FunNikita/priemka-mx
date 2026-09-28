@@ -121,6 +121,7 @@ model User {
   comments       Comment[]
   media          Media[]
   assignedWorks  Work[]
+  workExecutorAssignments WorkExecutorAssignment[]
   lastHouse      House?             @relation("LastOpenedHouse", fields: [lastHouseId], references: [id], onDelete: SetNull)
   createdInspections Inspection[]   @relation("InspectionCreator")
   inspectionAssignments InspectionAssignment[]
@@ -211,7 +212,20 @@ model Work {
   inspections      Inspection[]
   issues            Issue[]
   documents         Document[]
+  executorAssignments WorkExecutorAssignment[]
   @@index([houseId, status, date])
+}
+
+model WorkExecutorAssignment {
+  id           Int       @id @default(autoincrement())
+  workId       Int
+  userId       Int
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  work         Work      @relation(fields: [workId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
+  @@index([userId, workId])
+  @@index([workId, unassignedAt])
 }
 
 model WorkSubscription {
@@ -295,11 +309,18 @@ model Observation {
   @@index([houseId, status, createdAt])
 }
 
+enum CommentAuthorType {
+  USER
+  EXECUTOR
+}
+
 model Comment {
   id        Int      @id @default(autoincrement())
   workId    Int?
   observationId Int?
   authorId  Int
+  authorTypeSnapshot CommentAuthorType?
+  authorDisplayNameSnapshot String? @db.VarChar(255)
   text      String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

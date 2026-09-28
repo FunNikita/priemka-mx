@@ -24,8 +24,8 @@ export type MeResponse = { query_id?: string; ip?: string; auth_date: number; us
 export type ListHousesQuery = PageQuery & { q?: string };
 export type HouseListItem = HouseRef & { access: { status: HouseAccessStatus; role: HouseMembershipRole | null; joinedVia: MembershipJoinSource | null }; actions: { open: boolean; requestAccess: boolean; cancelRequest: boolean } };
 export type ListHousesResponse = Page<HouseListItem>;
-export type JoinRequest = { id: Id; houseId: Id; role: "RESIDENT"; status: MembershipStatus; joinedVia: "REQUEST"; executorCompanyName: string | null; createdAt: IsoDateTime; updatedAt: IsoDateTime };
-export type CreateJoinRequestResponse = JoinRequest;
+export type JoinRequest = { id: Id; houseId: Id; role: "RESIDENT"; status: MembershipStatus; joinedVia: MembershipJoinSource; executorCompanyName: string | null; createdAt: IsoDateTime; updatedAt: IsoDateTime };
+export type CreateJoinRequestResponse = JoinRequest & { joinedVia: "REQUEST" };
 export type CancelJoinRequestResponse = void; // HTTP 204
 export type ListJoinRequestsQuery = PageQuery & { status?: MembershipStatus };
 export type JoinRequestWithUser = JoinRequest & { requestedAt: IsoDateTime; user: { id: Id; firstName: string; lastName: string; photoUrl: string | null } };
@@ -41,17 +41,19 @@ export type MediaRef = { id: Id; url: string; width: number; height: number; mim
 export type WorkflowMediaRef = { id: Id; url: string };
 export type Author = { id: Id; firstName: string; lastName: string };
 export type Executor = { userId: Id; companyName: string; representativeName: string | null };
+export type ObservationExecutor = { userId: Id; companyName: string };
+export type ObservationComment = { id: Id; text: string; author: { type: "USER" | "EXECUTOR"; displayName: string; photoUrl: string | null }; createdAt: IsoDateTime; media: MediaRef[] };
 export type WorkCard = { id: Id; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; isWatching: boolean; media: MediaRef[] };
 export type WorkDocument = { id: Id; type: DocumentType; title: string; version: number; status: DocumentStatus; createdAt: IsoDateTime; confirmedAt: IsoDateTime | null; fileUrl: string; actions: { confirm: boolean } };
 export type WorkDetail = { id: Id; house: HouseRef; houseObject: { id: Id; title: string } | null; sourceObservation: { id: Id; title: string; description: string; category: string; createdAt: IsoDateTime; author: Author; media: MediaRef[] } | null; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; dates: { createdAt: IsoDateTime; updatedAt: IsoDateTime; completedAt: IsoDateTime | null; submittedForInspectionAt: IsoDateTime | null }; history: { id: Id; event: string; details: string | null; createdAt: IsoDateTime }[]; media: MediaRef[]; executor: Executor | null; representative: { id: Id; name: string; phone: string | null; maxUrl: string | null } | null; isWatching: boolean; actions: { watch: boolean; unwatch: boolean; comment: boolean; edit: boolean; submitForInspection: boolean; reportRemediation: boolean; assignInspector: boolean; performInspection: boolean; generateReasonedRefusal: boolean; generateAcceptanceAct: boolean; confirmAcceptance: boolean; manageDocuments: boolean }; documents: WorkDocument[] };
 export type ListWorksQuery = PageQuery & { status?: WorkStatus; origin?: "MANUAL" | "OBSERVATION" };
 export type ListWorksResponse = Page<WorkCard> & { house: HouseRef & { chat: { title: string | null; joinUrl: string } | null }; actions: { manageChat: boolean } };
-export type Observation = { id: Id; title: string; description: string; category: string; status: WorkStatus; createdAt: IsoDateTime; author: Author; media: MediaRef[]; linkedWork: { id: Id; status: WorkStatus } | null; actions: { createWork: boolean } };
-export type ObservationDetail = Omit<Observation, "linkedWork"> & { house: HouseRef; updatedAt: IsoDateTime; linkedWork: { id: Id; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; createdAt: IsoDateTime; submittedForInspectionAt: IsoDateTime | null; executor: Executor | null; media: MediaRef[]; issues: { total: number; open: number; remediationSubmitted: number; resolved: number } } | null; isWatching: boolean; watchReason: "AUTHOR" | "MANUAL" | null; actions: { comment: boolean; watch: boolean; unwatch: boolean; createWork: boolean } };
+export type Observation = { id: Id; title: string; description: string; category: string; status: WorkStatus; createdAt: IsoDateTime; author: Author; media: MediaRef[]; linkedWork: { id: Id; status: WorkStatus } | null; isWatching: boolean; actions: { createWork: boolean } };
+export type ObservationDetail = Omit<Observation, "linkedWork"> & { house: HouseRef; updatedAt: IsoDateTime; linkedWork: { id: Id; title: string; description: string; category: string; status: WorkStatus; date: IsoDateTime; createdAt: IsoDateTime; submittedForInspectionAt: IsoDateTime | null; executor: ObservationExecutor | null; media: MediaRef[]; issues: { total: number; open: number; remediationSubmitted: number; resolved: number } } | null; workflow: { workId: Id; category: string; executor: ObservationExecutor | null; submittedForInspectionAt: IsoDateTime | null; inspection: { id: Id; status: InspectionAssignmentStatus; inspector: Author | null } | null; issueCounters: { total: number; open: number; remediationSubmitted: number; resolved: number }; issues: { id: Id; title: string; description: string; status: IssueStatus; photos: MediaRef[]; remediation: { comment: string; photos: MediaRef[] } | null; reinspections: { id: Id; status: ReinspectionStatus; result: ReinspectionResult | null; completedAt: IsoDateTime | null }[]; actions: { submitRemediation: boolean } }[]; documents: WorkDocument[] } | null; history: { id: Id; title: string; createdAt: IsoDateTime }[]; comments: ObservationComment[]; myTasks: { inspectionAssignmentId: Id | null; reinspectionIds: Id[] }; isWatching: boolean; watchReason: "AUTHOR" | "MANUAL" | null; actions: { comment: boolean; watch: boolean; unwatch: boolean; createWork: boolean; assignExecutor: boolean; submitForInspection: boolean; assignInspector: boolean; generateReasonedRefusal: boolean; confirmAcceptance: boolean } };
 export type EditWorkBody = { title?: string; description?: string; category?: string; executorUserId?: Id; addMediaIds?: Id[]; removeMediaIds?: Id[] };
 export type PreviewAccess = { maxUserId: string; enabled: boolean; createdAt: IsoDateTime; updatedAt: IsoDateTime };
 export type ActivityEvent = { id: Id; event: string; subjectType: string; subjectId: Id | null; subjectKey: string | null; actorUserId: Id | null; actorName: string | null; actorRole: HouseMembershipRole | null; metadata: Record<string, unknown> | null; createdAt: IsoDateTime };
-export type ListObservationsQuery = PageQuery & { status?: WorkStatus; search?: string };
+export type ListObservationsQuery = PageQuery & { tab?: "active" | "history"; search?: string; watching?: boolean };
 export type CreateObservationBody = { category: string; title: string; description: string; houseObjectId?: Id | null; mediaIds?: Id[] };
 export type Comment = { id: Id; text: string; author: Author; createdAt: IsoDateTime; media: MediaRef[] };
 export type CreateCommentBody = { text?: string; mediaIds?: Id[] };
@@ -94,6 +96,7 @@ export interface ApiContract {
   submitForInspection: Route<"POST", "/api/works/:workId/submit-for-inspection", { workId: Id }, never, EmptyBody, { submittedForInspectionAt: IsoDateTime }>;
   houseWorks: Route<"GET", "/api/houses/:houseId/works", { houseId: Id }, ListWorksQuery, never, ListWorksResponse>;
   work: Route<"GET", "/api/works/:workId", { workId: Id }, never, never, WorkDetail>;
+  workObservation: Route<"GET", "/api/works/:workId/observation", { workId: Id }, never, never, { observationId: Id | null }>;
   workActivity: Route<"GET", "/api/works/:workId/activity", { workId: Id }, PageQuery, never, Page<ActivityEvent>>;
   editWork: Route<"PATCH", "/api/works/:workId", { workId: Id }, never, EditWorkBody, { id: Id }>;
   watchWork: Route<"POST", "/api/works/:workId/watch", { workId: Id }, never, never, void>;
@@ -101,6 +104,7 @@ export interface ApiContract {
   observations: Route<"GET", "/api/houses/:houseId/observations", { houseId: Id }, ListObservationsQuery, never, Page<Observation>>;
   createObservation: Route<"POST", "/api/houses/:houseId/observations", { houseId: Id }, never, CreateObservationBody, { id: Id; status: WorkStatus }>;
   observation: Route<"GET", "/api/observations/:observationId", { observationId: Id }, never, never, ObservationDetail>;
+  assignObservationExecutor: Route<"PUT", "/api/observations/:observationId/executor", { observationId: Id }, never, { executorUserId: Id; category?: string }, { id: Id }>;
   observationHistory: Route<"GET", "/api/observations/:observationId/history", { observationId: Id }, PageQuery, never, Page<ActivityEvent>>;
   watchObservation: Route<"POST", "/api/observations/:observationId/watch", { observationId: Id }, never, never, void>;
   unwatchObservation: Route<"DELETE", "/api/observations/:observationId/watch", { observationId: Id }, never, never, void>;
@@ -148,6 +152,7 @@ export const apiRoutes = {
   submitForInspection: (workId: Id) => ({ method: "POST", path: `/api/works/${workId}/submit-for-inspection` } as const),
   houseWorks: (houseId: Id) => ({ method: "GET", path: `/api/houses/${houseId}/works` } as const),
   work: (workId: Id) => ({ method: "GET", path: `/api/works/${workId}` } as const),
+  workObservation: (workId: Id) => ({ method: "GET", path: `/api/works/${workId}/observation` } as const),
   workActivity: (workId: Id) => ({ method: "GET", path: `/api/works/${workId}/activity` } as const),
   editWork: (workId: Id) => ({ method: "PATCH", path: `/api/works/${workId}` } as const),
   watchWork: (workId: Id) => ({ method: "POST", path: `/api/works/${workId}/watch` } as const),
@@ -155,6 +160,7 @@ export const apiRoutes = {
   observations: (houseId: Id) => ({ method: "GET", path: `/api/houses/${houseId}/observations` } as const),
   createObservation: (houseId: Id) => ({ method: "POST", path: `/api/houses/${houseId}/observations` } as const),
   observation: (observationId: Id) => ({ method: "GET", path: `/api/observations/${observationId}` } as const),
+  assignObservationExecutor: (observationId: Id) => ({ method: "PUT", path: `/api/observations/${observationId}/executor` } as const),
   observationHistory: (observationId: Id) => ({ method: "GET", path: `/api/observations/${observationId}/history` } as const),
   watchObservation: (observationId: Id) => ({ method: "POST", path: `/api/observations/${observationId}/watch` } as const),
   unwatchObservation: (observationId: Id) => ({ method: "DELETE", path: `/api/observations/${observationId}/watch` } as const),
