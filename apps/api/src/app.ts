@@ -167,7 +167,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
             },
             start_param: { type: "string" },
             lastHouseId: { type: "integer", nullable: true },
-            houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "joinedVia", "executorCompanyName", "permissions"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, joinedVia: { type: "string", enum: ["CHAT", "INVITE", "REQUEST", "ADMIN"] }, executorCompanyName: { type: "string", nullable: true }, permissions: permissionsSchema } } },
+            houses: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "address", "role", "status", "joinedVia", "executorCompanyName", "permissions", "chat"], properties: { id: { type: "integer" }, address: { type: "string" }, role: { type: "string", enum: ["RESIDENT", "COUNCIL_MEMBER", "CHAIRMAN", "EXECUTOR"] }, status: { type: "string", enum: ["PENDING", "ACTIVE", "REJECTED"] }, joinedVia: { type: "string", enum: ["CHAT", "INVITE", "REQUEST", "ADMIN"] }, executorCompanyName: { type: "string", nullable: true }, permissions: permissionsSchema, chat: { type: "object", additionalProperties: false, nullable: true, required: ["title", "joinUrl"], properties: { title: { type: "string", nullable: true }, joinUrl: { type: "string" } } } } } },
           },
         },
         401: unauthorizedSchema,
@@ -179,14 +179,14 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
     const identity = await repository.upsertFromMax({ user: initData.user, authDate: initData.authDate, seenAt: now() });
     const businessDb = options.businessDb ?? (repository instanceof PrismaUserRepository ? repository.prisma : null);
     const houses = businessDb
-      ? await businessDb.houseMembership.findMany({ where: { user: { maxUserId: initData.user.id } }, include: { house: true }, orderBy: { houseId: "asc" } })
+      ? await businessDb.houseMembership.findMany({ where: { user: { maxUserId: initData.user.id } }, include: { house: { include: { chat: true } } }, orderBy: { houseId: "asc" } })
       : [];
     const lastHouseId = businessDb ? (await businessDb.user.findUnique({ where: { id: identity.id }, select: { lastHouseId: true } }))?.lastHouseId : null;
     const sorted = houses.sort((a, b) => {
       const rank = (m: typeof a) => m.status === "ACTIVE" ? (m.houseId === lastHouseId ? 0 : 1) : 2;
       return rank(a) - rank(b) || a.houseId - b.houseId;
     });
-    return { ...toMaxResponse(initData, identity), lastHouseId: lastHouseId ?? null, houses: sorted.map((membership) => ({ id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions: permissionsFor(membership.role, membership.status) })) };
+    return { ...toMaxResponse(initData, identity), lastHouseId: lastHouseId ?? null, houses: sorted.map((membership) => { const permissions = permissionsFor(membership.role, membership.status); return { id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions, chat: permissions.viewHouseChat && membership.house.chat ? { title: membership.house.chat.title, joinUrl: membership.house.chat.joinUrl } : null }; }) };
   });
 
   await registerHousesApi(app, config, repository, now, options.businessDb);

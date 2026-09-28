@@ -469,7 +469,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const [linked, events, comments] = await Promise.all([
       workId ? ctx.db.work.findUnique({ where: { id: workId }, include: { media: { where: { temporary: false }, include: { blob: true } }, issues: { include: { answer: { include: { media: { include: { blob: true } } } }, remediations: { orderBy: { createdAt: "desc" }, take: 1, include: { media: { include: { blob: true } } } }, reinspections: { orderBy: { createdAt: "desc" } } } }, inspections: { orderBy: { createdAt: "desc" }, take: 1, include: { assignments: { include: { assignee: true } } } }, documents: { include: { versions: { orderBy: { version: "desc" }, take: 1, include: { confirmations: true } } } } } }) : null,
       ctx.db.activityEvent.findMany({ where: { OR: [{ observationId }, ...(workId ? [{ workId }] : [])] }, orderBy: { id: "asc" } }),
-      ctx.db.comment.findMany({ where: { OR: [{ observationId }, ...(workId ? [{ workId }] : [])] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { author: true, media: { include: { blob: true } } } }),
+      ctx.db.comment.findMany({ where: { OR: [{ observationId }, ...(workId ? [{ workId }] : [])] }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { author: true, media: { include: { blob: true } } } }),
     ]);
     const issues = linked?.issues ?? [];
     const linkedWork = linked ? { id: linked.id, title: linked.title, description: linked.description, category: linked.category, status: linked.status, date: linked.date, createdAt: linked.createdAt, submittedForInspectionAt: linked.submittedForInspectionAt, executor: observationExecutorDto(linked), media: linked.media.map(mediaRef), issues: { total: issues.length, open: issues.filter((issue) => issue.status === "OPEN").length, remediationSubmitted: issues.filter((issue) => issue.status === "REMEDIATION_SUBMITTED").length, resolved: issues.filter((issue) => issue.status === "RESOLVED").length } } : null;
@@ -533,7 +533,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     if (!await observationAccess(ctx, observationId)) return bad(reply, 404, "Обращение не найдено");
     const { page, limit, skip } = pageOf(request.query as { page?: number; limit?: number });
     const where = { observationId };
-    const [total, items] = await Promise.all([ctx.db.comment.count({ where }), ctx.db.comment.findMany({ where, skip, take: limit, orderBy: { id: "asc" }, include: { author: true, media: { include: { blob: true } } } })]);
+    const [total, items] = await Promise.all([ctx.db.comment.count({ where }), ctx.db.comment.findMany({ where, skip, take: limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { author: true, media: { include: { blob: true } } } })]);
     return { items: items.map((item) => ({ id: item.id, text: item.text, author: author(item.author), createdAt: item.createdAt, media: item.media.map(mediaRef) })), page, limit, total };
   });
 
@@ -592,7 +592,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const ctx = request.business!;
     if (!await workAccess(ctx, workId)) return bad(reply, 404, "Работа не найдена");
     const { page, limit, skip } = pageOf(request.query as { page?: number; limit?: number });
-    const [total, comments] = await Promise.all([ctx.db.comment.count({ where: { workId } }), ctx.db.comment.findMany({ where: { workId }, skip, take: limit, orderBy: { id: "asc" }, include: { author: true, media: { include: { blob: true } } } })]);
+    const [total, comments] = await Promise.all([ctx.db.comment.count({ where: { workId } }), ctx.db.comment.findMany({ where: { workId }, skip, take: limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { author: true, media: { include: { blob: true } } } })]);
     return { items: comments.map((item) => ({ id: item.id, text: item.text, author: author(item.author), createdAt: item.createdAt, media: item.media.map(mediaRef) })), page, limit, total };
   });
 
