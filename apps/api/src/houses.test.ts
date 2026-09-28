@@ -273,4 +273,45 @@ describe("houses and join requests", () => {
       expect((await decide(2, second.id, "APPROVE")).statusCode).toBe(409);
     } finally { await app.close(); }
   });
+
+  it("lists all pending residents of this house regardless of joinedVia", async () => {
+    const f = fixture();
+    f.add(1, 2, "CHAIRMAN", "ACTIVE");
+    const requested = f.add(1, 1, "RESIDENT", "PENDING", "REQUEST");
+    const addedByAdmin = f.add(1, 3, "RESIDENT", "PENDING", "ADMIN");
+    f.add(1, 4, "COUNCIL_MEMBER", "PENDING", "ADMIN");
+    f.add(1, 8, "CHAIRMAN", "PENDING", "ADMIN");
+    f.add(1, 9, "EXECUTOR", "PENDING", "ADMIN");
+    f.add(2, 5, "RESIDENT", "PENDING", "ADMIN");
+    f.add(1, 6, "RESIDENT", "ACTIVE", "ADMIN");
+    f.add(1, 7, "RESIDENT", "REJECTED", "REQUEST");
+    const app = await f.app();
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/houses/1/join-requests", headers: auth(2) });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(expect.objectContaining({ total: 2, items: [
+        expect.objectContaining({ id: requested.id, role: "RESIDENT", status: "PENDING", joinedVia: "REQUEST" }),
+        expect.objectContaining({ id: addedByAdmin.id, role: "RESIDENT", status: "PENDING", joinedVia: "ADMIN" }),
+      ] }));
+    } finally { await app.close(); }
+  });
+
+  it("lets this house's active chairman approve and reject pending ADMIN residents", async () => {
+    const f = fixture();
+    f.add(1, 2, "CHAIRMAN", "ACTIVE");
+    const approved = f.add(1, 3, "RESIDENT", "PENDING", "ADMIN");
+    const rejected = f.add(1, 4, "RESIDENT", "PENDING", "ADMIN");
+    const app = await f.app();
+    try {
+      const decide = (id: number, decision: "APPROVE" | "REJECT") => app.inject({ method: "PATCH", url: `/api/houses/1/join-requests/${id}`, headers: auth(2), payload: { decision } });
+      const approve = await decide(approved.id, "APPROVE");
+      expect(approve.statusCode).toBe(200);
+      expect(approve.json()).toEqual(expect.objectContaining({ status: "ACTIVE", joinedVia: "ADMIN" }));
+      const reject = await decide(rejected.id, "REJECT");
+      expect(reject.statusCode).toBe(200);
+      expect(reject.json()).toEqual(expect.objectContaining({ status: "REJECTED", joinedVia: "ADMIN" }));
+      expect(approved.joinedVia).toBe("ADMIN");
+      expect(rejected.joinedVia).toBe("ADMIN");
+    } finally { await app.close(); }
+  });
 });
