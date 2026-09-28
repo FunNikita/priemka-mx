@@ -14,6 +14,8 @@ function fixture() {
   const outbox = new Map<string, Record<string, unknown>>();
   const activities: Record<string, unknown>[] = [];
   let nextId = 1;
+  let inspectionWork: { id: number; houseId: number; status: string; submittedForInspectionAt: Date; category: string; title: string; executorUserId: number; sourceObservationId: null; subscriptions: []; sourceObservation: null } | null = null;
+  let inspectionCount = 0;
   const add = (houseId: number, userId: number, role: Member["role"], status: Member["status"], joinedVia: Member["joinedVia"] = "ADMIN") => {
     const row: Member = { id: nextId++, houseId, userId, role, status, joinedVia, executorCompanyName: null, canSignAcceptanceAct: false, authorityBasis: null, requestedAt: new Date("2026-09-25T00:00:00Z"), createdAt: new Date("2026-09-25T00:00:00Z"), updatedAt: new Date("2026-09-25T00:00:00Z") };
     members.push(row);
@@ -21,7 +23,7 @@ function fixture() {
   };
   const matches = (m: Member, where: Record<string, unknown>) => Object.entries(where).every(([key, value]) => (m as unknown as Record<string, unknown>)[key] === value);
   const db = {
-    user: { findUnique: async ({ where }: { where: { id?: number } }) => where.id && where.id > 5 ? null : { id: where.id ?? 1, lastHouseId: null, maxUserId: String(9007199254740992n + BigInt(where.id ?? 1)), firstName: "Имя", lastName: "Фамилия", username: null, photoUrl: null, memberships: members.filter((m) => m.userId === where.id).map((m) => ({ ...m, house: houses.find((h) => h.id === m.houseId)! })) }, update: async ({ data }: { data: { lastHouseId: number } }) => ({ id: 1, lastHouseId: data.lastHouseId }), updateMany: async () => ({ count: 1 }), count: async () => 5, findMany: async () => Array.from({ length: 5 }, (_, index) => ({ id: index + 1, maxUserId: String(9007199254740993n + BigInt(index)), firstName: "Имя", lastName: "Фамилия", username: null, photoUrl: null, memberships: members.filter((m) => m.userId === index + 1).map((m) => ({ ...m, house: houses.find((h) => h.id === m.houseId)! })) })) },
+    user: { findUniqueOrThrow: async ({ where }: { where: { id: number } }) => ({ id: where.id, firstName: "Имя", lastName: "Фамилия" }), findUnique: async ({ where }: { where: { id?: number } }) => where.id && where.id > 5 ? null : { id: where.id ?? 1, lastHouseId: null, maxUserId: String(9007199254740992n + BigInt(where.id ?? 1)), firstName: "Имя", lastName: "Фамилия", username: null, photoUrl: null, memberships: members.filter((m) => m.userId === where.id).map((m) => ({ ...m, house: houses.find((h) => h.id === m.houseId)! })) }, update: async ({ data }: { data: { lastHouseId: number } }) => ({ id: 1, lastHouseId: data.lastHouseId }), updateMany: async () => ({ count: 1 }), count: async () => 5, findMany: async () => Array.from({ length: 5 }, (_, index) => ({ id: index + 1, maxUserId: String(9007199254740993n + BigInt(index)), firstName: "Имя", lastName: "Фамилия", username: null, photoUrl: null, memberships: members.filter((m) => m.userId === index + 1).map((m) => ({ ...m, house: houses.find((h) => h.id === m.houseId)! })) })) },
     house: {
       findUnique: async ({ where }: { where: { id: number } }) => houses.find((h) => h.id === where.id) ?? null,
       findFirst: async ({ where }: { where: { address: string } }) => houses.find((h) => h.address === where.address) ?? null,
@@ -63,7 +65,10 @@ function fixture() {
     },
     $queryRaw: async () => [{ id: 1 }],
     activityEvent: { create: async ({ data }: { data: Record<string, unknown> }) => { activities.push(data); return data; } },
-    work: { count: async () => 0 },
+    work: { count: async () => 0, findUnique: async () => inspectionWork, findUniqueOrThrow: async () => inspectionWork!, update: async ({ data }: { data: { status: string } }) => { inspectionWork!.status = data.status; return inspectionWork; } },
+    checklistTemplate: { findUnique: async () => ({ id: 1, active: true, category: "OTHER", version: 1, items: [{ order: 1, title: "Пункт", description: null, method: "Визуально", sourceType: "OTHER", sourceLabel: null, commentRequiredOnFail: false, photoRequiredOnFail: false }] }) },
+    inspection: { count: async () => inspectionCount, create: async () => ({ id: ++inspectionCount }) },
+    workHistory: { create: async () => ({ id: 1 }) },
     inspectionAssignment: { count: async () => 0 },
     reinspection: { count: async () => 0 },
     previewAccess: { findUnique: async ({ where }: { where: { maxUserId: string } }) => preview.has(where.maxUserId) ? { maxUserId: where.maxUserId, enabled: preview.get(where.maxUserId), createdAt: new Date(), updatedAt: new Date() } : null, upsert: async ({ where, create, update }: { where: { maxUserId: string }; create: { enabled: boolean }; update: { enabled: boolean } }) => { preview.set(where.maxUserId, preview.has(where.maxUserId) ? update.enabled : create.enabled); return { maxUserId: where.maxUserId, enabled: preview.get(where.maxUserId), createdAt: new Date(), updatedAt: new Date() }; }, count: async () => preview.size, findMany: async () => [...preview].map(([maxUserId, enabled]) => ({ maxUserId, enabled, createdAt: new Date(), updatedAt: new Date() })) },
@@ -71,8 +76,32 @@ function fixture() {
     $transaction: async (fn: (client: unknown) => Promise<unknown>) => fn(db),
   };
   const app = (allowSelfRoleSwitch = false) => createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin: user.id === "9007199254740997" }) }, businessDb: db as unknown as PrismaClient, logger: false, staticRoot: "/nonexistent-priemka-static" });
-  return { app, add, members, outbox, activities };
+  return { app, add, members, outbox, activities, prepareInspection: () => { inspectionCount = 0; inspectionWork = { id: 7, houseId: 1, status: "NEW", submittedForInspectionAt: new Date(), category: "OTHER", title: "Работа", executorUserId: 4, sourceObservationId: null, subscriptions: [], sourceObservation: null }; } };
 }
+
+describe("workflow demo candidates", () => {
+  it("shows chairman only with demo flag and keeps real active members", async () => {
+    const f = fixture();
+    const chair = f.add(1, 1, "CHAIRMAN", "ACTIVE"); chair.executorCompanyName = "Демо УК";
+    f.add(1, 2, "EXECUTOR", "ACTIVE").executorCompanyName = "Реальный исполнитель";
+    f.add(1, 3, "COUNCIL_MEMBER", "ACTIVE");
+    const list = async (enabled: boolean, role: string) => { const app = await f.app(enabled); try { const response = await app.inject({ method: "GET", url: `/api/houses/1/members?role=${role}`, headers: auth(1) }); expect(response.statusCode, response.body).toBe(200); return response.json().items.map((item: { id: number }) => item.id); } finally { await app.close(); } };
+    expect(await list(false, "EXECUTOR")).toEqual([2]);
+    expect(await list(false, "COUNCIL_MEMBER")).toEqual([3]);
+    expect(await list(true, "EXECUTOR")).toEqual([2, 1]);
+    expect(await list(true, "COUNCIL_MEMBER")).toEqual([3, 1]);
+  });
+
+  it("allows chairman self inspection only with demo flag and keeps real council assignment", async () => {
+    const f = fixture(); f.add(1, 1, "CHAIRMAN", "ACTIVE"); f.add(1, 2, "COUNCIL_MEMBER", "ACTIVE"); f.prepareInspection();
+    const post = (app: Awaited<ReturnType<typeof f.app>>, assigneeUserId: number) => app.inject({ method: "POST", url: "/api/works/7/inspections", headers: auth(1), payload: { checklistTemplateId: 1, assigneeUserId } });
+    const disabled = await f.app(false);
+    try { expect((await post(disabled, 1)).statusCode).toBe(400); expect((await post(disabled, 2)).statusCode).toBe(201); } finally { await disabled.close(); }
+    f.prepareInspection();
+    const enabled = await f.app(true);
+    try { expect((await post(enabled, 1)).statusCode).toBe(201); } finally { await enabled.close(); }
+  });
+});
 
 describe("houses and join requests", () => {
   it("notifies the chairman about a new request and the resident about its decision", async () => {

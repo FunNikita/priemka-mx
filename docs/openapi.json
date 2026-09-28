@@ -3895,6 +3895,75 @@
         }
       }
     },
+    "/api/works/{workId}/observation": {
+      "get": {
+        "tags": [
+          "Works"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "workId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "observationId"
+                  ],
+                  "properties": {
+                    "observationId": {
+                      "type": "integer",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "maxUserId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/works/{workId}/activity": {
       "get": {
         "tags": [
@@ -4202,6 +4271,171 @@
         }
       }
     },
+    "/api/observations/{observationId}/executor": {
+      "put": {
+        "tags": [
+          "Observations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "executorUserId"
+                ],
+                "properties": {
+                  "executorUserId": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "observationId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "maxInitData": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "maxUserId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "maxUserId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "maxUserId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "maxUserId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/houses/{houseId}/observations": {
       "get": {
         "tags": [
@@ -4212,15 +4446,13 @@
             "schema": {
               "type": "string",
               "enum": [
-                "NEW",
-                "IN_REVIEW",
-                "IN_PROGRESS",
-                "WAITING",
-                "ACCEPTED"
-              ]
+                "active",
+                "history"
+              ],
+              "default": "active"
             },
             "in": "query",
-            "name": "status",
+            "name": "tab",
             "required": false
           },
           {
@@ -4230,6 +4462,14 @@
             },
             "in": "query",
             "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "watching",
             "required": false
           },
           {
@@ -4298,6 +4538,7 @@
                           "author",
                           "media",
                           "linkedWork",
+                          "isWatching",
                           "actions"
                         ],
                         "properties": {
@@ -4405,6 +4646,9 @@
                                 ]
                               }
                             }
+                          },
+                          "isWatching": {
+                            "type": "boolean"
                           },
                           "actions": {
                             "type": "object",
@@ -4653,6 +4897,10 @@
                     "linkedWork",
                     "isWatching",
                     "watchReason",
+                    "workflow",
+                    "history",
+                    "comments",
+                    "myTasks",
                     "actions"
                   ],
                   "properties": {
@@ -4816,8 +5064,7 @@
                           "nullable": true,
                           "required": [
                             "userId",
-                            "companyName",
-                            "representativeName"
+                            "companyName"
                           ],
                           "properties": {
                             "userId": {
@@ -4825,10 +5072,6 @@
                             },
                             "companyName": {
                               "type": "string"
-                            },
-                            "representativeName": {
-                              "type": "string",
-                              "nullable": true
                             }
                           }
                         },
@@ -4905,6 +5148,460 @@
                         null
                       ]
                     },
+                    "workflow": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "required": [
+                        "workId",
+                        "category",
+                        "executor",
+                        "submittedForInspectionAt",
+                        "inspection",
+                        "issueCounters",
+                        "issues",
+                        "documents"
+                      ],
+                      "properties": {
+                        "workId": {
+                          "type": "integer"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "executor": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "required": [
+                            "userId",
+                            "companyName"
+                          ],
+                          "properties": {
+                            "userId": {
+                              "type": "integer"
+                            },
+                            "companyName": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "submittedForInspectionAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "inspection": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "required": [
+                            "id",
+                            "status",
+                            "inspector"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "integer"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "inspector": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "firstName",
+                                "lastName"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "firstName": {
+                                  "type": "string"
+                                },
+                                "lastName": {
+                                  "type": "string"
+                                }
+                              },
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "issueCounters": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "total",
+                            "open",
+                            "remediationSubmitted",
+                            "resolved"
+                          ],
+                          "properties": {
+                            "total": {
+                              "type": "integer"
+                            },
+                            "open": {
+                              "type": "integer"
+                            },
+                            "remediationSubmitted": {
+                              "type": "integer"
+                            },
+                            "resolved": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "title",
+                              "description",
+                              "status",
+                              "photos",
+                              "remediation",
+                              "reinspections",
+                              "actions"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "photos": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "url",
+                                    "width",
+                                    "height",
+                                    "mimeType",
+                                    "size"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "integer"
+                                    },
+                                    "height": {
+                                      "type": "integer"
+                                    },
+                                    "mimeType": {
+                                      "type": "string"
+                                    },
+                                    "size": {
+                                      "type": "integer"
+                                    }
+                                  }
+                                }
+                              },
+                              "remediation": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "required": [
+                                  "comment",
+                                  "photos"
+                                ],
+                                "properties": {
+                                  "comment": {
+                                    "type": "string"
+                                  },
+                                  "photos": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "required": [
+                                        "id",
+                                        "url",
+                                        "width",
+                                        "height",
+                                        "mimeType",
+                                        "size"
+                                      ],
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer"
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        },
+                                        "width": {
+                                          "type": "integer"
+                                        },
+                                        "height": {
+                                          "type": "integer"
+                                        },
+                                        "mimeType": {
+                                          "type": "string"
+                                        },
+                                        "size": {
+                                          "type": "integer"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "reinspections": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "status",
+                                    "result",
+                                    "completedAt"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "status": {
+                                      "type": "string"
+                                    },
+                                    "result": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "completedAt": {
+                                      "type": "string",
+                                      "format": "date-time",
+                                      "nullable": true
+                                    }
+                                  }
+                                }
+                              },
+                              "actions": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "submitRemediation"
+                                ],
+                                "properties": {
+                                  "submitRemediation": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "documents": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "type",
+                              "title",
+                              "version",
+                              "status",
+                              "createdAt",
+                              "confirmedAt",
+                              "fileUrl",
+                              "actions"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "integer"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "confirmedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "fileUrl": {
+                                "type": "string"
+                              },
+                              "actions": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "confirm"
+                                ],
+                                "properties": {
+                                  "confirm": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "title",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "comments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "text",
+                          "author",
+                          "createdAt",
+                          "media"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "author": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "type",
+                              "displayName",
+                              "photoUrl"
+                            ],
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "USER",
+                                  "EXECUTOR"
+                                ]
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "photoUrl": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "media": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "id",
+                                "url",
+                                "width",
+                                "height",
+                                "mimeType",
+                                "size"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "url": {
+                                  "type": "string"
+                                },
+                                "width": {
+                                  "type": "integer"
+                                },
+                                "height": {
+                                  "type": "integer"
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "myTasks": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "inspectionAssignmentId",
+                        "reinspectionIds"
+                      ],
+                      "properties": {
+                        "inspectionAssignmentId": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "reinspectionIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
                     "actions": {
                       "type": "object",
                       "additionalProperties": false,
@@ -4912,7 +5609,12 @@
                         "comment",
                         "watch",
                         "unwatch",
-                        "createWork"
+                        "createWork",
+                        "assignExecutor",
+                        "submitForInspection",
+                        "assignInspector",
+                        "generateReasonedRefusal",
+                        "confirmAcceptance"
                       ],
                       "properties": {
                         "comment": {
@@ -4925,6 +5627,21 @@
                           "type": "boolean"
                         },
                         "createWork": {
+                          "type": "boolean"
+                        },
+                        "assignExecutor": {
+                          "type": "boolean"
+                        },
+                        "submitForInspection": {
+                          "type": "boolean"
+                        },
+                        "assignInspector": {
+                          "type": "boolean"
+                        },
+                        "generateReasonedRefusal": {
+                          "type": "boolean"
+                        },
+                        "confirmAcceptance": {
                           "type": "boolean"
                         }
                       }

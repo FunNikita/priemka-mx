@@ -176,6 +176,17 @@ async function ensureReinspectionReport(db: PrismaClient, reinspectionId: number
   return generate(db, reinspection.issue.workId, "REINSPECTION_REPORT", userId, botName, { reinspectionId });
 }
 
+async function ensureAcceptanceAct(db: PrismaClient, workId: number, botName: string) {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM Work WHERE id = ${workId} FOR UPDATE`;
+    const work = await tx.work.findUniqueOrThrow({ where: { id: workId } });
+    if (work.status !== "WAITING" || !work.executorUserId || await tx.issue.count({ where: { workId, status: { not: "RESOLVED" } } }) || !await tx.inspectionAssignment.count({ where: { inspection: { workId }, status: "COMPLETED" } })) return null;
+    const existing = await tx.document.findFirst({ where: { workId, type: "ACCEPTANCE_ACT" } });
+    if (existing) return existing;
+    return generate(tx as PrismaClient, workId, "ACCEPTANCE_ACT", work.executorUserId, botName);
+  }, { timeout: 15_000 });
+}
+
 async function acceptedAcceptanceActId(db: PrismaClient, workId: number) {
   const event = await db.workHistory.findFirst({ where: { workId, event: "ACCEPTANCE_CONFIRMED" }, orderBy: { id: "desc" } });
   const recordedId = event?.details?.match(/Документ №(\d+)/)?.[1];
@@ -261,7 +272,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const members = await ctx.db.houseMembership.findMany({ where: { houseId, role: requestedRole, status: "ACTIVE" }, include: { user: { select: { id: true, firstName: true, lastName: true } } } });
     const items = members.filter((member) => requestedRole !== "EXECUTOR" || member.executorCompanyName?.trim()).map(({ user, executorCompanyName }) => ({ id: user.id, name: `${user.firstName} ${user.lastName}`.trim(), executorCompanyName }));
     const self = await houseRole(ctx, houseId);
-    if (self?.status === "ACTIVE" && self.role === "CHAIRMAN" && (requestedRole === "COUNCIL_MEMBER" || self.executorCompanyName?.trim())) {
+    if (config.allowSelfRoleSwitch === true && self?.status === "ACTIVE" && self.role === "CHAIRMAN" && (requestedRole === "COUNCIL_MEMBER" || self.executorCompanyName?.trim())) {
       const user = await ctx.db.user.findUniqueOrThrow({ where: { id: ctx.userId }, select: { id: true, firstName: true, lastName: true } });
       items.push({ id: user.id, name: `${user.firstName} ${user.lastName}`.trim(), executorCompanyName: self.executorCompanyName });
     }
@@ -279,7 +290,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     if (!template?.active || !template.items.length) return fail(reply, 400, "Шаблон недоступен");
     if (template.category !== work.category) return fail(reply, 400, "Категория чек-листа не совпадает с категорией работы");
     const assignee = await ctx.db.houseMembership.findUnique({ where: { houseId_userId: { houseId: work.houseId, userId: input.assigneeUserId } } });
-    if (assignee?.status !== "ACTIVE" || (assignee.role !== "COUNCIL_MEMBER" && !(input.assigneeUserId === ctx.userId && assignee.role === "CHAIRMAN"))) return fail(reply, 400, "Назначать можно только активного члена совета этого дома");
+    if (assignee?.status !== "ACTIVE" || (assignee.role !== "COUNCIL_MEMBER" && !(config.allowSelfRoleSwitch === true && input.assigneeUserId === ctx.userId && assignee.role === "CHAIRMAN"))) return fail(reply, 400, "Назначать можно только активного члена совета этого дома");
     const created = await ctx.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM Work WHERE id = ${workId} FOR UPDATE`;
       const current = await tx.work.findUniqueOrThrow({ where: { id: workId } });
@@ -356,6 +367,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     if (found.assigneeUserId !== ctx.userId) return fail(reply, 404, "Проверка не найдена");
     if (found.status === "COMPLETED") {
       await ensureInspectionReport(ctx.db, found.inspectionId, ctx.userId, config.botName);
+      await ensureAcceptanceAct(ctx.db, found.inspection.workId, config.botName);
       return { status: "COMPLETED" };
     }
     const role = await houseRole(ctx, found.inspection.work.houseId);
@@ -382,6 +394,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     });
     if (outcome === "INCOMPLETE") return fail(reply, 400, "Заполните все пункты и доказательства");
     const report = await ensureInspectionReport(ctx.db, found.inspectionId, ctx.userId, config.botName);
+    await ensureAcceptanceAct(ctx.db, found.inspection.workId, config.botName);
     if (outcome === "FINAL_COMPLETED" && report) {
       const issueCount = await ctx.db.issue.count({ where: { workId: found.inspection.workId, status: { not: "RESOLVED" } } });
       await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По работе ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка работы ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка работы ${workLabel(found.inspection.work)} завершена без замечаний.\n\nМожно оформить и подтвердить акт приёмки.` }] : [] });
@@ -474,6 +487,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     if (found.assigneeUserId !== ctx.userId) return fail(reply, 404, "Повторная проверка не найдена");
     if (found.status === "COMPLETED") {
       await ensureReinspectionReport(ctx.db, found.id, ctx.userId, config.botName);
+      await ensureAcceptanceAct(ctx.db, found.issue.workId, config.botName);
       return { status: "COMPLETED", result: found.result };
     }
     const role = await houseRole(ctx, found.issue.work.houseId);
@@ -495,6 +509,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         return tx.reinspection.findUniqueOrThrow({ where: { id: found.id } });
       });
       const report = await ensureReinspectionReport(ctx.db, found.id, ctx.userId, config.botName);
+      await ensureAcceptanceAct(ctx.db, found.issue.workId, config.botName);
       if (report) {
         const remaining = await ctx.db.issue.count({ where: { workId: found.issue.workId, status: { not: "RESOLVED" } } });
         const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка работы ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по работе ${workLabel(found.issue.work)} устранены.\n\nМожно оформить и подтвердить акт приёмки.` }] : [];

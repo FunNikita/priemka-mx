@@ -109,7 +109,7 @@ describe("local Postman MAX signer", () => {
     expect(collection.variable.map((variable: { key: string }) => variable.key)).toEqual(
       expect.arrayContaining(["houseId", "workId", "mediaId", "maxJoinUrl"]),
     );
-    const requests = business.item.map((item: { request: { method: string; url: string; header: { key: string; value: string }[] } }) => {
+    const requests = business.item.flatMap((item: { request?: { method: string; url: string; header: { key: string; value: string }[] }; item?: { request: { method: string; url: string; header: { key: string; value: string }[] } }[] }) => item.request ? [item] : item.item ?? []).map((item: { request: { method: string; url: string; header: { key: string; value: string }[] } }) => {
       expect(item.request.header).toEqual(expect.arrayContaining([
         expect.objectContaining({ key: "X-Max-Init-Data", value: "{{maxInitData}}" }),
       ]));
@@ -120,7 +120,7 @@ describe("local Postman MAX signer", () => {
       "GET {{baseUrl}}/api/works/{{workId}}",
       "POST {{baseUrl}}/api/works/{{workId}}/watch",
       "DELETE {{baseUrl}}/api/works/{{workId}}/watch",
-      "GET {{baseUrl}}/api/houses/{{houseId}}/observations",
+      "GET {{baseUrl}}/api/houses/{{houseId}}/observations?tab=active&page=1&limit=20",
       "POST {{baseUrl}}/api/houses/{{houseId}}/observations",
       "GET {{baseUrl}}/api/works/{{workId}}/comments?page=1&limit=20",
       "POST {{baseUrl}}/api/works/{{workId}}/comments",

@@ -26,16 +26,19 @@ const statusValues = ["NEW", "IN_REVIEW", "IN_PROGRESS", "WAITING", "ACCEPTED"] 
 const statusSchema = { type: "string", enum: statusValues } as const;
 const listQuery = { type: "object", properties: { status: statusSchema, page: { type: "integer", minimum: 1, default: 1 }, limit: { type: "integer", minimum: 1, maximum: 100, default: 20 } } } as const;
 const worksQuery = { type: "object", properties: { ...listQuery.properties, origin: { type: "string", enum: ["MANUAL", "OBSERVATION"] } } } as const;
-const observationQuery = { type: "object", properties: { status: statusSchema, search: { type: "string", maxLength: 200 }, page: listQuery.properties.page, limit: listQuery.properties.limit } } as const;
+const observationQuery = { type: "object", properties: { tab: { type: "string", enum: ["active", "history"], default: "active" }, search: { type: "string", maxLength: 200 }, watching: { type: "boolean" }, page: listQuery.properties.page, limit: listQuery.properties.limit } } as const;
 const mediaIdsProperty = { type: "array", uniqueItems: true, maxItems: 20, items: { type: "integer", minimum: 1 } } as const;
 const mediaRefSchema = { type: "object", additionalProperties: false, required: ["id", "url", "width", "height", "mimeType", "size"], properties: { id: { type: "integer" }, url: { type: "string" }, width: { type: "integer" }, height: { type: "integer" }, mimeType: { type: "string" }, size: { type: "integer" } } } as const;
 const executorSchema = { type: "object", additionalProperties: false, nullable: true, required: ["userId", "companyName", "representativeName"], properties: { userId: { type: "integer" }, companyName: { type: "string" }, representativeName: { type: "string", nullable: true } } } as const;
-const linkedWorkDetailSchema = { type: "object", additionalProperties: false, nullable: true, required: ["id", "title", "description", "category", "status", "date", "createdAt", "submittedForInspectionAt", "executor", "media", "issues"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, date: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" }, submittedForInspectionAt: { type: "string", format: "date-time", nullable: true }, executor: executorSchema, media: { type: "array", items: mediaRefSchema }, issues: { type: "object", additionalProperties: false, required: ["total", "open", "remediationSubmitted", "resolved"], properties: { total: { type: "integer" }, open: { type: "integer" }, remediationSubmitted: { type: "integer" }, resolved: { type: "integer" } } } } } as const;
+const observationExecutorSchema = { type: "object", additionalProperties: false, nullable: true, required: ["userId", "companyName"], properties: { userId: { type: "integer" }, companyName: { type: "string" } } } as const;
+const linkedWorkDetailSchema = { type: "object", additionalProperties: false, nullable: true, required: ["id", "title", "description", "category", "status", "date", "createdAt", "submittedForInspectionAt", "executor", "media", "issues"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, date: { type: "string", format: "date-time" }, createdAt: { type: "string", format: "date-time" }, submittedForInspectionAt: { type: "string", format: "date-time", nullable: true }, executor: observationExecutorSchema, media: { type: "array", items: mediaRefSchema }, issues: { type: "object", additionalProperties: false, required: ["total", "open", "remediationSubmitted", "resolved"], properties: { total: { type: "integer" }, open: { type: "integer" }, remediationSubmitted: { type: "integer" }, resolved: { type: "integer" } } } } } as const;
+function observationExecutorDto(work: { executorUserId: number | null; executorName: string | null }) { return work.executorUserId && work.executorName ? { userId: work.executorUserId, companyName: work.executorName } : null; }
 function executorDto(work: { executorUserId: number | null; executorName: string | null; representativeName: string | null }) { return work.executorUserId && work.executorName ? { userId: work.executorUserId, companyName: work.executorName, representativeName: work.representativeName } : null; }
 const workCardSchema = { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "status", "date", "isWatching", "media"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, date: { type: "string", format: "date-time" }, isWatching: { type: "boolean" }, media: { type: "array", items: mediaRefSchema } } } as const;
 const authorSchema = { type: "object", additionalProperties: false, required: ["id", "firstName", "lastName"], properties: { id: { type: "integer" }, firstName: { type: "string" }, lastName: { type: "string" } } } as const;
-const observationSchema = { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "status", "createdAt", "author", "media", "linkedWork", "actions"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, createdAt: { type: "string", format: "date-time" }, author: authorSchema, media: { type: "array", items: mediaRefSchema }, linkedWork: { type: "object", additionalProperties: false, nullable: true, required: ["id", "status"], properties: { id: { type: "integer" }, status: statusSchema } }, actions: { type: "object", additionalProperties: false, required: ["createWork"], properties: { createWork: { type: "boolean" } } } } } as const;
+const observationSchema = { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "status", "createdAt", "author", "media", "linkedWork", "isWatching", "actions"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, createdAt: { type: "string", format: "date-time" }, author: authorSchema, media: { type: "array", items: mediaRefSchema }, linkedWork: { type: "object", additionalProperties: false, nullable: true, required: ["id", "status"], properties: { id: { type: "integer" }, status: statusSchema } }, isWatching: { type: "boolean" }, actions: { type: "object", additionalProperties: false, required: ["createWork"], properties: { createWork: { type: "boolean" } } } } } as const;
 const commentSchema = { type: "object", additionalProperties: false, required: ["id", "text", "author", "createdAt", "media"], properties: { id: { type: "integer" }, text: { type: "string" }, author: authorSchema, createdAt: { type: "string", format: "date-time" }, media: { type: "array", items: mediaRefSchema } } } as const;
+const observationCommentSchema = { type: "object", additionalProperties: false, required: ["id", "text", "author", "createdAt", "media"], properties: { id: { type: "integer" }, text: { type: "string" }, author: { type: "object", additionalProperties: false, required: ["type", "displayName", "photoUrl"], properties: { type: { type: "string", enum: ["USER", "EXECUTOR"] }, displayName: { type: "string" }, photoUrl: { type: "string", nullable: true } } }, createdAt: { type: "string", format: "date-time" }, media: { type: "array", items: mediaRefSchema } } } as const;
 const houseRefSchema = { type: "object", additionalProperties: false, required: ["id", "address"], properties: { id: { type: "integer" }, address: { type: "string" } } } as const;
 const chatSchema = { type: "object", additionalProperties: false, required: ["title", "joinUrl"], properties: { title: { type: "string", nullable: true }, joinUrl: { type: "string" } } } as const;
 const houseSummarySchema = { type: "object", additionalProperties: false, required: ["id", "address", "chat"], properties: { ...houseRefSchema.properties, chat: { ...chatSchema, nullable: true } } } as const;
@@ -61,8 +64,11 @@ const workDetailSchema = {
 const observationListSchema = { type: "object", additionalProperties: false, required: ["items", "page", "limit", "total"], properties: { items: { type: "array", items: observationSchema }, page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" } } } as const;
 const commentsListSchema = { type: "object", additionalProperties: false, required: ["items", "page", "limit", "total"], properties: { items: { type: "array", items: commentSchema }, page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" } } } as const;
 const observationCreatedSchema = { type: "object", additionalProperties: false, required: ["id", "status"], properties: { id: { type: "integer" }, status: statusSchema } } as const;
-const observationDetailSchema = { type: "object", additionalProperties: false, required: ["id", "house", "title", "description", "category", "status", "author", "createdAt", "updatedAt", "media", "linkedWork", "isWatching", "watchReason", "actions"], properties: {
-  id: { type: "integer" }, house: houseRefSchema, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, author: authorSchema, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, media: { type: "array", items: mediaRefSchema }, linkedWork: linkedWorkDetailSchema, isWatching: { type: "boolean" }, watchReason: { type: "string", nullable: true, enum: ["AUTHOR", "MANUAL", null] }, actions: { type: "object", additionalProperties: false, required: ["comment", "watch", "unwatch", "createWork"], properties: { comment: { type: "boolean" }, watch: { type: "boolean" }, unwatch: { type: "boolean" }, createWork: { type: "boolean" } } },
+const observationDetailSchema = { type: "object", additionalProperties: false, required: ["id", "house", "title", "description", "category", "status", "author", "createdAt", "updatedAt", "media", "linkedWork", "isWatching", "watchReason", "workflow", "history", "comments", "myTasks", "actions"], properties: {
+  id: { type: "integer" }, house: houseRefSchema, title: { type: "string" }, description: { type: "string" }, category: { type: "string" }, status: statusSchema, author: authorSchema, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, media: { type: "array", items: mediaRefSchema }, linkedWork: linkedWorkDetailSchema, isWatching: { type: "boolean" }, watchReason: { type: "string", nullable: true, enum: ["AUTHOR", "MANUAL", null] },
+  workflow: { type: "object", additionalProperties: false, nullable: true, required: ["workId", "category", "executor", "submittedForInspectionAt", "inspection", "issueCounters", "issues", "documents"], properties: { workId: { type: "integer" }, category: { type: "string" }, executor: observationExecutorSchema, submittedForInspectionAt: { type: "string", format: "date-time", nullable: true }, inspection: { type: "object", additionalProperties: false, nullable: true, required: ["id", "status", "inspector"], properties: { id: { type: "integer" }, status: { type: "string" }, inspector: { ...authorSchema, nullable: true } } }, issueCounters: { type: "object", additionalProperties: false, required: ["total", "open", "remediationSubmitted", "resolved"], properties: { total: { type: "integer" }, open: { type: "integer" }, remediationSubmitted: { type: "integer" }, resolved: { type: "integer" } } }, issues: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "title", "description", "status", "photos", "remediation", "reinspections", "actions"], properties: { id: { type: "integer" }, title: { type: "string" }, description: { type: "string" }, status: { type: "string" }, photos: { type: "array", items: mediaRefSchema }, remediation: { type: "object", additionalProperties: false, nullable: true, required: ["comment", "photos"], properties: { comment: { type: "string" }, photos: { type: "array", items: mediaRefSchema } } }, reinspections: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "status", "result", "completedAt"], properties: { id: { type: "integer" }, status: { type: "string" }, result: { type: "string", nullable: true }, completedAt: { type: "string", format: "date-time", nullable: true } } } }, actions: { type: "object", additionalProperties: false, required: ["submitRemediation"], properties: { submitRemediation: { type: "boolean" } } } } } }, documents: { type: "array", items: documentSchema } } },
+  history: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "title", "createdAt"], properties: { id: { type: "integer" }, title: { type: "string" }, createdAt: { type: "string", format: "date-time" } } } }, comments: { type: "array", items: observationCommentSchema }, myTasks: { type: "object", additionalProperties: false, required: ["inspectionAssignmentId", "reinspectionIds"], properties: { inspectionAssignmentId: { type: "integer", nullable: true }, reinspectionIds: { type: "array", items: { type: "integer" } } } },
+  actions: { type: "object", additionalProperties: false, required: ["comment", "watch", "unwatch", "createWork", "assignExecutor", "submitForInspection", "assignInspector", "generateReasonedRefusal", "confirmAcceptance"], properties: { comment: { type: "boolean" }, watch: { type: "boolean" }, unwatch: { type: "boolean" }, createWork: { type: "boolean" }, assignExecutor: { type: "boolean" }, submitForInspection: { type: "boolean" }, assignInspector: { type: "boolean" }, generateReasonedRefusal: { type: "boolean" }, confirmAcceptance: { type: "boolean" } } },
 } } as const;
 const activityListSchema = { type: "object", additionalProperties: false, required: ["items", "page", "limit", "total"], properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "event", "subjectType", "subjectId", "subjectKey", "actorUserId", "actorName", "actorRole", "metadata", "createdAt"], properties: { id: { type: "integer" }, event: { type: "string" }, subjectType: { type: "string" }, subjectId: { type: "integer", nullable: true }, subjectKey: { type: "string", nullable: true }, actorUserId: { type: "integer", nullable: true }, actorName: { type: "string", nullable: true }, actorRole: { type: "string", nullable: true }, metadata: { type: "object", nullable: true, additionalProperties: true }, createdAt: { type: "string", format: "date-time" } } } }, page: { type: "integer" }, limit: { type: "integer" }, total: { type: "integer" } } } as const;
 const idResponseSchema = { type: "object", additionalProperties: false, required: ["id"], properties: { id: { type: "integer" } } } as const;
@@ -70,7 +76,12 @@ export const mediaUploadBodySchema = { type: "object", additionalProperties: fal
 export const photoResponseSchema = { type: "string", format: "binary" } as const;
 
 type Context = { db: PrismaClient; userId: number; isAdmin: boolean };
-type Membership = { role: string; status: string };
+type Membership = { role: string; status: string; executorCompanyName: string | null };
+
+function canAssignExecutor<T extends Membership & { userId: number }>(candidate: T | null, actor: Membership | null, executorUserId: number, actorUserId: number, allowSelfRoleSwitch: boolean): candidate is T {
+  return !!candidate && candidate.status === "ACTIVE" && !!candidate.executorCompanyName?.trim() &&
+    (candidate.role === "EXECUTOR" || (allowSelfRoleSwitch && actor?.status === "ACTIVE" && actor.role === "CHAIRMAN" && executorUserId === actorUserId && candidate.userId === actorUserId));
+}
 
 export function permissionsFor(role: string | null, status: string | null) {
   const active = status === "ACTIVE";
@@ -97,6 +108,18 @@ function mediaRef(media: { id: number; publicKey: string | null; blob: { width: 
 
 function author(user: { id: number; firstName: string; lastName: string }) {
   return { id: user.id, firstName: user.firstName, lastName: user.lastName };
+}
+
+function activityTitle(event: string, metadata: unknown): string | null {
+  const titles: Record<string, string> = {
+    OBSERVATION_CREATED: "Обращение создано", WORK_CREATED: "Назначен исполнитель", EXECUTOR_CHANGED: "Исполнитель изменён",
+    SUBMITTED_FOR_INSPECTION: "Передано на проверку", INSPECTION_ASSIGNED: "Назначен проверяющий", INSPECTION_COMPLETED: "Проверка завершена",
+    REMEDIATION_SUBMITTED: "Исполнитель сообщил об устранении", REINSPECTION_COMPLETED: "Повторная проверка завершена",
+    DOCUMENT_CONFIRMED: "Акт подтверждён", WORK_ACCEPTED: "Обращение принято",
+  };
+  if (event === "INSPECTION_COMPLETED" && metadata && typeof metadata === "object" && "issueCount" in metadata && typeof metadata.issueCount === "number" && metadata.issueCount > 0) return `Проверка завершена. Найдено ${metadata.issueCount} замечаний`;
+  if (event === "REINSPECTION_COMPLETED" && metadata && typeof metadata === "object" && "result" in metadata) return metadata.result === "RESOLVED" ? "Повторная проверка завершена. Замечание устранено" : "Повторная проверка завершена. Требуется повторное устранение";
+  return titles[event] ?? null;
 }
 
 function pageOf(query: { page?: number; limit?: number }) {
@@ -170,7 +193,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const chair = await membership(ctx, houseId);
     if (chair?.status !== "ACTIVE" || chair.role !== "CHAIRMAN") return bad(reply, 403, "Работу создаёт председатель дома");
     const candidate = await ctx.db.houseMembership.findUnique({ where: { houseId_userId: { houseId, userId: input.executorUserId } }, include: { user: true } });
-    if (!candidate || candidate.status !== "ACTIVE" || (candidate.role !== "EXECUTOR" && candidate.userId !== ctx.userId) || !candidate.executorCompanyName?.trim()) return bad(reply, 400, "Нужен активный исполнитель с компанией");
+    if (!canAssignExecutor(candidate, chair, input.executorUserId, ctx.userId, config.allowSelfRoleSwitch === true)) return bad(reply, 400, "Нужен активный исполнитель с компанией");
     if (!input.title.trim() || !input.description.trim() || !input.category.trim()) return bad(reply, 400, "Заполните данные работы");
     if (!await ctx.db.checklistTemplate.count({ where: { active: true, category: input.category.trim() } })) return bad(reply, 400, "Выберите категорию из активных чек-листов");
     const created = await ctx.db.$transaction(async (tx) => {
@@ -184,6 +207,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
         observationTitle = source.title;
       }
       const work = await tx.work.create({ data: { houseId, sourceObservationId: input.sourceObservationId ?? null, executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), title: input.title.trim(), description: input.description.trim(), category: input.category.trim(), status: "NEW" } });
+      await tx.workExecutorAssignment.create({ data: { workId: work.id, userId: candidate.userId } });
       if (input.sourceObservationId) {
         const watchers = await tx.observationSubscription.findMany({ where: { observationId: input.sourceObservationId }, select: { userId: true } });
         for (const watcher of watchers) await tx.workSubscription.upsert({ where: { workId_userId: { workId: work.id, userId: watcher.userId } }, create: { workId: work.id, userId: watcher.userId, sourceObservationId: input.sourceObservationId }, update: {} });
@@ -276,6 +300,15 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     return { id: work.id, house: { id: work.house.id, address: work.house.address }, houseObject: work.houseObject ? { id: work.houseObject.id, title: work.houseObject.title } : null, sourceObservation: work.sourceObservation ? { id: work.sourceObservation.id, title: work.sourceObservation.title, description: work.sourceObservation.description, category: work.sourceObservation.category, createdAt: work.sourceObservation.createdAt, author: author(work.sourceObservation.author), media: work.sourceObservation.media.map(mediaRef) } : null, title: work.title, description: work.description, category: work.category, status: work.status, date: work.date, dates: { createdAt: work.createdAt, updatedAt: work.updatedAt, completedAt: work.completedAt, submittedForInspectionAt: work.submittedForInspectionAt }, history: work.history.map((event) => ({ id: event.id, event: event.event, details: event.details, createdAt: event.createdAt })), media: work.media.map(mediaRef), executor: executorDto(work), representative: work.executor ? { id: work.executor.id, name: work.representativeName ?? `${work.executor.firstName} ${work.executor.lastName}`.trim(), phone: null, maxUrl: null } : null, isWatching: effectiveWatching, documents: documentItems, actions: { watch: permissions.watchWork && !effectiveWatching, unwatch: permissions.watchWork && !!watching && work.sourceObservation?.authorId !== ctx.userId, comment: permissions.commentWork, edit: chair && work.status === "NEW" && !work.submittedForInspectionAt && !inspections, reportRemediation: executor && !!openIssues, submitForInspection: executor && work.status === "NEW" && !work.submittedForInspectionAt, assignInspector: chair && work.status === "NEW" && !!work.submittedForInspectionAt && !inspections, performInspection: membership?.status === "ACTIVE" && membership.role === "COUNCIL_MEMBER" && !!myAssignments, generateReasonedRefusal: !!refusalChair && !!activeIssues, generateAcceptanceAct: executor && work.status === "WAITING" && !!completedInspections && !activeIssues && !hasAcceptanceAct, confirmAcceptance: documentItems.some((item) => item.type === "ACCEPTANCE_ACT" && item.actions.confirm), manageDocuments: chair || executor } };
   });
 
+  app.get("/api/works/:workId/observation", { ...secured, schema: { tags: ["Works"], security, params: workParams, response: { 200: { type: "object", additionalProperties: false, required: ["observationId"], properties: { observationId: { type: "integer", nullable: true } } }, 404: errorResponse } } }, async (request, reply) => {
+    const ctx = request.business!, { workId } = request.params as { workId: number };
+    const work = await ctx.db.work.findUnique({ where: { id: workId }, select: { houseId: true, sourceObservationId: true, executorUserId: true } });
+    if (!work) return bad(reply, 404, "Работа не найдена");
+    const member = await membership(ctx, work.houseId);
+    if (member?.status !== "ACTIVE" || (member.role === "EXECUTOR" && work.executorUserId !== ctx.userId && !await ctx.db.workExecutorAssignment.count({ where: { workId, userId: ctx.userId } }))) return bad(reply, 404, "Работа не найдена");
+    return { observationId: work.sourceObservationId };
+  });
+
   app.get("/api/works/:workId/activity", { ...secured, schema: { tags: ["Works"], security, params: workParams, querystring: { type: "object", properties: { page: listQuery.properties.page, limit: listQuery.properties.limit } }, response: { 200: activityListSchema, 404: errorResponse } } }, async (request, reply) => {
     const ctx = request.business!, { workId } = request.params as { workId: number };
     if (!await workAccess(ctx, workId)) return bad(reply, 404, "Работа не найдена");
@@ -310,12 +343,19 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
         }
         await attachMedia(tx as PrismaClient, ctx.userId, input.addMediaIds ?? [], { workId });
         const updated = await tx.work.update({ where: { id: workId }, data: { ...(input.title !== undefined ? { title: input.title.trim() } : {}), ...(input.description !== undefined ? { description: input.description.trim() } : {}), ...(input.category !== undefined ? { category: input.category.trim() } : {}), ...(candidate ? { executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim() } : {}) } });
+        if (candidate && candidate.userId !== current.executorUserId) {
+          await tx.workExecutorAssignment.updateMany({ where: { workId, unassignedAt: null }, data: { unassignedAt: now() } });
+          await tx.workExecutorAssignment.create({ data: { workId, userId: candidate.userId } });
+        }
         await tx.workHistory.create({ data: { workId, event: "WORK_EDITED", details: JSON.stringify({ fields: Object.keys(input) }) } });
         const activity = { subjectType: "WORK", subjectId: workId, houseId: current.houseId, workId, observationId: current.sourceObservationId ?? undefined, actorUserId: ctx.userId };
         const after = { title: updated.title, description: updated.description, category: updated.category, executorUserId: updated.executorUserId, companyName: updated.executorName, representativeName: updated.representativeName };
         const changedFields = Object.keys(before).filter((field) => before[field as keyof typeof before] !== after[field as keyof typeof after]);
         await recordActivity(tx, { ...activity, event: "WORK_EDITED", metadata: { before: Object.fromEntries(changedFields.map((field) => [field, before[field as keyof typeof before]])), after: Object.fromEntries(changedFields.map((field) => [field, after[field as keyof typeof after]])) } });
-        if (candidate && candidate.userId !== before.executorUserId) await recordActivity(tx, { ...activity, event: "EXECUTOR_CHANGED", metadata: { previousExecutorUserId: before.executorUserId, executorUserId: updated.executorUserId } });
+        if (candidate && candidate.userId !== before.executorUserId) {
+          await recordActivity(tx, { ...activity, event: "EXECUTOR_CHANGED", metadata: { previousExecutorUserId: before.executorUserId, executorUserId: updated.executorUserId } });
+          await notifyWorkWatchers(tx, config.botName, workId, `executor_changed:${candidate.userId}:${now().getTime()}`, `По работе ${workLabel(updated)} назначен другой исполнитель.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: `Вы назначены исполнителем работы ${workLabel(updated)}.` }] });
+        }
         if ((input.addMediaIds ?? []).length || remove.length) await recordActivity(tx, { ...activity, event: "WORK_MEDIA_CHANGED", metadata: { added: (input.addMediaIds ?? []).length, removed: remove.length } });
         return updated;
       });
@@ -348,22 +388,73 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     } });
   }
 
+  app.put("/api/observations/:observationId/executor", { ...secured, schema: { tags: ["Observations"], security, params: observationParams, body: { type: "object", additionalProperties: false, required: ["executorUserId"], properties: { executorUserId: { type: "integer", minimum: 1 }, category: { type: "string", minLength: 1, maxLength: 100 } } }, response: { 200: idResponseSchema, 400: errorResponse, 403: errorResponse, 404: errorResponse, 409: errorResponse } } }, async (request, reply) => {
+    const ctx = request.business!, { observationId } = request.params as { observationId: number };
+    const input = request.body as { executorUserId: number; category?: string };
+    const observation = await ctx.db.observation.findUnique({ where: { id: observationId } });
+    if (!observation) return bad(reply, 404, "Обращение не найдено");
+    const chair = await membership(ctx, observation.houseId);
+    if (chair?.status !== "ACTIVE" || chair.role !== "CHAIRMAN") return bad(reply, 403, "Исполнителя назначает председатель дома");
+    const candidate = await ctx.db.houseMembership.findUnique({ where: { houseId_userId: { houseId: observation.houseId, userId: input.executorUserId } }, include: { user: true } });
+    if (!canAssignExecutor(candidate, chair, input.executorUserId, ctx.userId, config.allowSelfRoleSwitch === true)) return bad(reply, 400, "Нужен активный исполнитель с компанией");
+    const category = input.category?.trim() || observation.category;
+    if (!await ctx.db.checklistTemplate.count({ where: { active: true, category } })) return bad(reply, 400, "Выберите категорию из активных чек-листов");
+    try {
+      const work = await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM Observation WHERE id = ${observationId} FOR UPDATE`;
+        const source = await tx.observation.findUniqueOrThrow({ where: { id: observationId }, include: { linkedWork: true } });
+        if (!source.linkedWork) {
+          const created = await tx.work.create({ data: { houseId: source.houseId, sourceObservationId: source.id, houseObjectId: source.houseObjectId, executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), title: source.title, description: source.description, category, status: "NEW" } });
+          await tx.workExecutorAssignment.create({ data: { workId: created.id, userId: candidate.userId } });
+          const watchers = await tx.observationSubscription.findMany({ where: { observationId }, select: { userId: true } });
+          for (const watcher of watchers) await tx.workSubscription.upsert({ where: { workId_userId: { workId: created.id, userId: watcher.userId } }, create: { workId: created.id, userId: watcher.userId, sourceObservationId: observationId }, update: {} });
+          await syncLinkedObservationStatus(tx, created.id, "IN_PROGRESS");
+          await tx.workHistory.create({ data: { workId: created.id, event: "WORK_CREATED", details: `Исполнитель ${candidate.userId}` } });
+          await recordActivity(tx, { event: "WORK_CREATED", subjectType: "WORK", subjectId: created.id, houseId: source.houseId, workId: created.id, observationId, actorUserId: ctx.userId, metadata: { executorUserId: candidate.userId, category } });
+          const texts = createdWorkTexts(created, candidate.executorCompanyName!.trim(), source.title);
+          await notifyWorkWatchers(tx, config.botName, created.id, "created", texts.general, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: texts.executor }] });
+          return created;
+        }
+        await tx.$queryRaw`SELECT id FROM Work WHERE id = ${source.linkedWork.id} FOR UPDATE`;
+        const current = await tx.work.findUniqueOrThrow({ where: { id: source.linkedWork.id } });
+        if (current.status !== "NEW" || current.submittedForInspectionAt || await tx.inspection.count({ where: { workId: current.id } })) throw new Error("WORK_NOT_EDITABLE");
+        if (current.executorUserId === candidate.userId) return current;
+        const changed = await tx.work.update({ where: { id: current.id }, data: { executorUserId: candidate.userId, executorName: candidate.executorCompanyName!.trim(), representativeName: `${candidate.user.firstName} ${candidate.user.lastName}`.trim(), category } });
+        await tx.workExecutorAssignment.updateMany({ where: { workId: current.id, unassignedAt: null }, data: { unassignedAt: now() } });
+        await tx.workExecutorAssignment.create({ data: { workId: current.id, userId: candidate.userId } });
+        await tx.workHistory.create({ data: { workId: current.id, event: "EXECUTOR_CHANGED", details: `Исполнитель ${candidate.userId}` } });
+        await recordActivity(tx, { event: "EXECUTOR_CHANGED", subjectType: "WORK", subjectId: current.id, houseId: source.houseId, workId: current.id, observationId, actorUserId: ctx.userId, metadata: { previousExecutorUserId: current.executorUserId, executorUserId: candidate.userId } });
+        await notifyWorkWatchers(tx, config.botName, current.id, `executor_changed:${candidate.userId}:${now().getTime()}`, `По обращению «${source.title}» назначен другой исполнитель.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: `Вы назначены исполнителем обращения «${source.title}».` }] });
+        return changed;
+      });
+      return { id: work.id };
+    } catch (error) {
+      if (error instanceof Error && error.message === "WORK_NOT_EDITABLE") return bad(reply, 409, "Обращение уже передано на проверку; сменить исполнителя нельзя");
+      throw error;
+    }
+  });
+
   app.get("/api/houses/:houseId/observations", { ...secured, schema: { tags: ["Observations"], security, params: idParams, querystring: observationQuery, response: { 200: observationListSchema, 403: errorResponse } } }, async (request, reply) => {
     const { houseId } = typedRequest<{ params: { houseId: number } }>(request).params;
-    const query = typedRequest<{ query: { status?: string; search?: string; page?: number; limit?: number } }>(request).query;
+    const query = typedRequest<{ query: { tab?: "active" | "history"; search?: string; watching?: boolean; page?: number; limit?: number } }>(request).query;
     const ctx = request.business!;
-    if (!await houseAccess(ctx, houseId, "viewObservations")) return bad(reply, 403, "Нет доступа к наблюдениям дома");
     const chair = await membership(ctx, houseId);
+    if (chair?.status !== "ACTIVE") return bad(reply, 403, "Нет доступа к обращениям дома");
     const canCreateWork = chair?.status === "ACTIVE" && chair.role === "CHAIRMAN";
     const { page, limit, skip } = pageOf(query);
-    const where = { houseId, ...(query.status ? { status: query.status as (typeof statusValues)[number] } : {}), ...(query.search ? { OR: [{ title: { contains: query.search } }, { description: { contains: query.search } }] } : {}) };
-    const [total, items] = await Promise.all([ctx.db.observation.count({ where }), ctx.db.observation.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { author: true, linkedWork: { select: { id: true, status: true } }, media: { include: { blob: true } } } })]);
-    return { items: items.map((item) => ({ id: item.id, title: item.title, description: item.description, category: item.category, status: item.status, createdAt: item.createdAt, author: author(item.author), media: item.media.map(mediaRef), linkedWork: item.linkedWork ?? null, actions: { createWork: canCreateWork && !item.linkedWork } })), page, limit, total };
+    const history = query.tab === "history";
+    const executor = chair.role === "EXECUTOR";
+    const where = { houseId, ...(executor ? { linkedWork: history ? { executorAssignments: { some: { userId: ctx.userId } }, OR: [{ status: "ACCEPTED" as const }, { executorUserId: { not: ctx.userId } }] } : { executorUserId: ctx.userId, status: { not: "ACCEPTED" as const } } } : { status: history ? "ACCEPTED" as const : { not: "ACCEPTED" as const }, ...(query.watching ? { OR: [{ authorId: ctx.userId }, { subscriptions: { some: { userId: ctx.userId, reason: { in: ["AUTHOR", "MANUAL"] as ("AUTHOR" | "MANUAL")[] } } } }] } : {}) }), ...(query.search ? { AND: [{ OR: [{ title: { contains: query.search } }, { description: { contains: query.search } }] }] } : {}) };
+    const [total, items] = await Promise.all([ctx.db.observation.count({ where }), ctx.db.observation.findMany({ where, skip, take: limit, orderBy: { createdAt: "desc" }, include: { author: true, linkedWork: { select: { id: true, status: true } }, media: { include: { blob: true } }, subscriptions: { where: { userId: ctx.userId }, select: { id: true } } } })]);
+    return { items: items.map((item) => ({ id: item.id, title: item.title, description: item.description, category: item.category, status: item.status, createdAt: item.createdAt, author: author(item.author), media: item.media.map(mediaRef), linkedWork: item.linkedWork ?? null, isWatching: !executor && (item.authorId === ctx.userId || item.subscriptions.length > 0), actions: { createWork: canCreateWork && !item.linkedWork } })), page, limit, total };
   });
 
   async function observationAccess(ctx: Context, observationId: number) {
     const item = await ctx.db.observation.findUnique({ where: { id: observationId }, include: { house: true, author: true, linkedWork: { select: { id: true, status: true } }, media: { where: { temporary: false }, include: { blob: true } }, subscriptions: { where: { userId: ctx.userId } } } });
-    if (!item || !await houseAccess(ctx, item.houseId, "viewObservations")) return null;
+    if (!item) return null;
+    const member = await membership(ctx, item.houseId);
+    if (member?.status !== "ACTIVE") return null;
+    if (member.role === "EXECUTOR" && (!item.linkedWork || !(await ctx.db.workExecutorAssignment.count({ where: { workId: item.linkedWork.id, userId: ctx.userId } })))) return null;
     return item;
   }
 
@@ -374,10 +465,31 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const m = await membership(ctx, item.houseId);
     const subscription = item.subscriptions[0];
     const isAuthor = item.authorId === ctx.userId;
-    const linked = item.linkedWork ? await ctx.db.work.findUnique({ where: { id: item.linkedWork.id }, include: { media: { where: { temporary: false }, include: { blob: true } }, issues: { select: { status: true } } } }) : null;
+    const workId = item.linkedWork?.id;
+    const [linked, events, comments] = await Promise.all([
+      workId ? ctx.db.work.findUnique({ where: { id: workId }, include: { media: { where: { temporary: false }, include: { blob: true } }, issues: { include: { answer: { include: { media: { include: { blob: true } } } }, remediations: { orderBy: { createdAt: "desc" }, take: 1, include: { media: { include: { blob: true } } } }, reinspections: { orderBy: { createdAt: "desc" } } } }, inspections: { orderBy: { createdAt: "desc" }, take: 1, include: { assignments: { include: { assignee: true } } } }, documents: { include: { versions: { orderBy: { version: "desc" }, take: 1, include: { confirmations: true } } } } } }) : null,
+      ctx.db.activityEvent.findMany({ where: { OR: [{ observationId }, ...(workId ? [{ workId }] : [])] }, orderBy: { id: "asc" } }),
+      ctx.db.comment.findMany({ where: { OR: [{ observationId }, ...(workId ? [{ workId }] : [])] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], include: { author: true, media: { include: { blob: true } } } }),
+    ]);
     const issues = linked?.issues ?? [];
-    const linkedWork = linked ? { id: linked.id, title: linked.title, description: linked.description, category: linked.category, status: linked.status, date: linked.date, createdAt: linked.createdAt, submittedForInspectionAt: linked.submittedForInspectionAt, executor: executorDto(linked), media: linked.media.map(mediaRef), issues: { total: issues.length, open: issues.filter((issue) => issue.status === "OPEN").length, remediationSubmitted: issues.filter((issue) => issue.status === "REMEDIATION_SUBMITTED").length, resolved: issues.filter((issue) => issue.status === "RESOLVED").length } } : null;
-    return { id: item.id, house: { id: item.house.id, address: item.house.address }, title: item.title, description: item.description, category: item.category, status: item.status, author: author(item.author), createdAt: item.createdAt, updatedAt: item.updatedAt, media: item.media.map(mediaRef), linkedWork, isWatching: isAuthor || !!subscription, watchReason: isAuthor ? "AUTHOR" : subscription?.reason ?? null, actions: { comment: true, watch: !isAuthor && !subscription, unwatch: !isAuthor && !!subscription, createWork: m?.status === "ACTIVE" && m.role === "CHAIRMAN" && !item.linkedWork } };
+    const linkedWork = linked ? { id: linked.id, title: linked.title, description: linked.description, category: linked.category, status: linked.status, date: linked.date, createdAt: linked.createdAt, submittedForInspectionAt: linked.submittedForInspectionAt, executor: observationExecutorDto(linked), media: linked.media.map(mediaRef), issues: { total: issues.length, open: issues.filter((issue) => issue.status === "OPEN").length, remediationSubmitted: issues.filter((issue) => issue.status === "REMEDIATION_SUBMITTED").length, resolved: issues.filter((issue) => issue.status === "RESOLVED").length } } : null;
+    const chair = m?.role === "CHAIRMAN" && m.status === "ACTIVE";
+    const executor = m?.role === "EXECUTOR" && m.status === "ACTIVE" && linked?.executorUserId === ctx.userId;
+    const inspection = linked?.inspections[0] ?? null;
+    const assignment = inspection?.assignments.find((entry) => entry.assigneeUserId === ctx.userId && entry.status !== "COMPLETED") ?? null;
+    const reinspections = workId ? await ctx.db.reinspection.findMany({ where: { issue: { workId }, assigneeUserId: ctx.userId, status: "ASSIGNED" }, select: { id: true } }) : [];
+    const documents = linked?.documents.flatMap((document) => {
+      const version = document.versions[0];
+      if (!version) return [];
+      const confirmedByExecutor = version.confirmations.some((entry) => entry.roleSnapshot === "EXECUTOR");
+      const confirmedByChair = version.confirmations.some((entry) => entry.roleSnapshot === "CHAIRMAN");
+      const confirm = document.type === "ACCEPTANCE_ACT" && version.status === "FINAL" && linked.status !== "ACCEPTED" && ((executor && !confirmedByExecutor && !version.confirmations.length) || (chair && confirmedByExecutor && !confirmedByChair));
+      return [{ id: document.id, type: document.type, title: document.title, version: version.version, status: version.status, createdAt: version.createdAt, confirmedAt: version.confirmedAt, fileUrl: `/doc/${version.publicKey}.pdf`, actions: { confirm } }];
+    }) ?? [];
+    const workflow = linked ? { workId: linked.id, category: linked.category, executor: observationExecutorDto(linked), submittedForInspectionAt: linked.submittedForInspectionAt, inspection: inspection ? { id: inspection.id, status: inspection.assignments[0]?.status ?? "ASSIGNED", inspector: inspection.assignments[0] ? author(inspection.assignments[0].assignee) : null } : null, issueCounters: linkedWork!.issues, issues: issues.map((issue) => ({ id: issue.id, title: issue.title, description: issue.description, status: issue.status, photos: issue.answer.media.map(mediaRef), remediation: issue.remediations[0] ? { comment: issue.remediations[0].comment, photos: issue.remediations[0].media.map(mediaRef) } : null, reinspections: issue.reinspections.map((entry) => ({ id: entry.id, status: entry.status, result: entry.result, completedAt: entry.completedAt })), actions: { submitRemediation: !!executor && issue.status === "OPEN" } })), documents } : null;
+    const editable = !!chair && !!linked && linked.status === "NEW" && !linked.submittedForInspectionAt && !inspection;
+    const residentSide = m?.role !== "EXECUTOR";
+    return { id: item.id, house: { id: item.house.id, address: item.house.address }, title: item.title, description: item.description, category: item.category, status: item.status, author: author(item.author), createdAt: item.createdAt, updatedAt: item.updatedAt, media: item.media.map(mediaRef), linkedWork, workflow, history: events.flatMap((event) => { const title = activityTitle(event.event, event.metadata); return title ? [{ id: event.id, title, createdAt: event.createdAt }] : []; }), comments: comments.map((comment) => ({ id: comment.id, text: comment.text, author: comment.authorTypeSnapshot === "EXECUTOR" && comment.authorDisplayNameSnapshot ? { type: "EXECUTOR", displayName: comment.authorDisplayNameSnapshot, photoUrl: null } : { type: "USER", displayName: comment.authorDisplayNameSnapshot ?? `${comment.author.firstName} ${comment.author.lastName}`.trim(), photoUrl: comment.author.photoUrl ?? null }, createdAt: comment.createdAt, media: comment.media.map(mediaRef) })), myTasks: { inspectionAssignmentId: assignment?.id ?? null, reinspectionIds: reinspections.map((entry) => entry.id) }, isWatching: isAuthor || !!subscription, watchReason: isAuthor ? "AUTHOR" : subscription?.reason ?? null, actions: { comment: residentSide || !!executor, watch: residentSide && !isAuthor && !subscription, unwatch: residentSide && !isAuthor && !!subscription, createWork: !!chair && !linked, assignExecutor: !!chair && (!linked || editable), submitForInspection: !!executor && linked?.status === "NEW" && !linked.submittedForInspectionAt, assignInspector: !!chair && linked?.status === "NEW" && !!linked.submittedForInspectionAt && !inspection, generateReasonedRefusal: !!chair && issues.some((issue) => issue.status !== "RESOLVED"), confirmAcceptance: documents.some((document) => document.actions.confirm) } };
   });
 
   app.get("/api/observations/:observationId/history", { ...secured, schema: { tags: ["Observations"], security, params: observationParams, querystring: { type: "object", properties: { page: listQuery.properties.page, limit: listQuery.properties.limit } }, response: { 200: activityListSchema, 404: errorResponse } } }, async (request, reply) => {
@@ -394,6 +506,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       const ctx = request.business!, { observationId } = request.params as { observationId: number };
       const item = await observationAccess(ctx, observationId);
       if (!item) return bad(reply, 404, "Обращение не найдено");
+      if ((await membership(ctx, item.houseId))?.role === "EXECUTOR") return bad(reply, 404, "Обращение не найдено");
       if (method === "DELETE" && item.authorId === ctx.userId) return reply.code(409).send({ message: "Автор обращения обязан наблюдать за ним", code: "AUTHOR_WATCH_REQUIRED" });
       if (method === "POST") {
         await ctx.db.$transaction(async (tx) => {
@@ -428,11 +541,17 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
     const ctx = request.business!, { observationId } = request.params as { observationId: number };
     const item = await observationAccess(ctx, observationId);
     if (!item) return bad(reply, 404, "Обращение не найдено");
+    const member = await membership(ctx, item.houseId);
+    const executorComment = member?.role === "EXECUTOR" && !!item.linkedWork;
+    const linkedWork = executorComment ? await ctx.db.work.findUnique({ where: { id: item.linkedWork!.id }, select: { executorUserId: true, executorName: true } }) : null;
+    if (executorComment && linkedWork?.executorUserId !== ctx.userId) return bad(reply, 404, "Обращение не найдено");
+    if (executorComment && !linkedWork?.executorName?.trim()) return bad(reply, 409, "Не указана компания назначенной работы");
     const input = request.body as { text?: string; mediaIds?: number[] };
     if (!input.text?.trim() && !input.mediaIds?.length) return bad(reply, 400, "Пустой комментарий");
     try {
       const comment = await ctx.db.$transaction(async (tx) => {
-        const created = await tx.comment.create({ data: { observationId, authorId: ctx.userId, text: input.text?.trim() ?? "" } });
+        const currentUser = await tx.user.findUniqueOrThrow({ where: { id: ctx.userId } });
+        const created = await tx.comment.create({ data: { observationId, authorId: ctx.userId, text: input.text?.trim() ?? "", authorTypeSnapshot: executorComment ? "EXECUTOR" : "USER", authorDisplayNameSnapshot: executorComment ? linkedWork!.executorName!.trim() : `${currentUser.firstName} ${currentUser.lastName}`.trim() } });
         await attachMedia(tx as PrismaClient, ctx.userId, input.mediaIds ?? [], { commentId: created.id });
         await recordActivity(tx, { event: "OBSERVATION_COMMENT_ADDED", subjectType: "OBSERVATION", subjectId: observationId, houseId: item.houseId, observationId, actorUserId: ctx.userId, metadata: { commentId: created.id } });
         return created;
