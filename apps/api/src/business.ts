@@ -250,7 +250,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
       await tx.workHistory.create({ data: { workId, event: "SUBMITTED_FOR_INSPECTION" } });
       await recordActivity(tx, { event: "SUBMITTED_FOR_INSPECTION", subjectType: "WORK", subjectId: workId, houseId: current.houseId, workId, observationId: current.sourceObservationId ?? undefined, actorUserId: ctx.userId });
       const chairmen = await tx.houseMembership.findMany({ where: { houseId: current.houseId, role: "CHAIRMAN", status: "ACTIVE" }, select: { userId: true, role: true, status: true } });
-      await notifyWorkWatchers(tx, config.botName, workId, "submitted", `💼 Работа ${workLabel(current)} передана на проверку.`, { previewRequired: config.previewAccessRequired, actionRecipients: chairmen.filter((member) => member.role === "CHAIRMAN" && member.status === "ACTIVE").map((member) => ({ userId: member.userId, text: `💼 Работа ${workLabel(current)} передана на проверку.\n\nВам нужно назначить проверяющего.` })) });
+      await notifyWorkWatchers(tx, config.botName, workId, "submitted", `💼 Обращение ${workLabel(current)} передано на проверку.`, { previewRequired: config.previewAccessRequired, actionRecipients: chairmen.filter((member) => member.role === "CHAIRMAN" && member.status === "ACTIVE").map((member) => ({ userId: member.userId, text: `💼 Обращение ${workLabel(current)} передано на проверку.\n\nВам нужно назначить проверяющего.` })) });
       return at;
     });
     return submitted ? { submittedForInspectionAt: submitted } : bad(reply, 409, "Работа уже находится на проверке");
@@ -354,7 +354,7 @@ export async function registerBusinessApi(app: FastifyInstance, config: AppConfi
         await recordActivity(tx, { ...activity, event: "WORK_EDITED", metadata: { before: Object.fromEntries(changedFields.map((field) => [field, before[field as keyof typeof before]])), after: Object.fromEntries(changedFields.map((field) => [field, after[field as keyof typeof after]])) } });
         if (candidate && candidate.userId !== before.executorUserId) {
           await recordActivity(tx, { ...activity, event: "EXECUTOR_CHANGED", metadata: { previousExecutorUserId: before.executorUserId, executorUserId: updated.executorUserId } });
-          await notifyWorkWatchers(tx, config.botName, workId, `executor_changed:${candidate.userId}:${now().getTime()}`, `По работе ${workLabel(updated)} назначен другой исполнитель.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: `Вы назначены исполнителем работы ${workLabel(updated)}.` }] });
+          await notifyWorkWatchers(tx, config.botName, workId, `executor_changed:${candidate.userId}:${now().getTime()}`, `По обращению ${workLabel(updated)} назначен другой исполнитель.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: candidate.userId, text: `Вы назначены исполнителем обращения ${workLabel(updated)}.` }] });
         }
         if ((input.addMediaIds ?? []).length || remove.length) await recordActivity(tx, { ...activity, event: "WORK_MEDIA_CHANGED", metadata: { added: (input.addMediaIds ?? []).length, removed: remove.length } });
         return updated;

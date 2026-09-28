@@ -237,7 +237,7 @@ async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number
     if (accepted.count) {
       await tx.workHistory.create({ data: { workId: document.workId, event: "ACCEPTANCE_CONFIRMED", details: `Документ №${document.id}, версия ${readyVersion.version}` } });
       await recordActivity(tx, { event: "WORK_ACCEPTED", subjectType: "WORK", subjectId: document.workId, houseId: currentWork.houseId, workId: document.workId, observationId: currentWork.sourceObservationId ?? undefined, actorUserId: representative.userId, metadata: { documentId } });
-      await notifyWorkWatchers(tx, botName, document.workId, "accepted", `Работа ${workLabel(currentWork)} принята. Акт приёмки приложен.`, { previewRequired, pdfPublicKey: readyVersion.publicKey });
+      await notifyWorkWatchers(tx, botName, document.workId, "accepted", `✅ Обращение ${workLabel(currentWork)} принято. Акт приёмки приложен.`, { previewRequired, pdfPublicKey: readyVersion.publicKey });
     }
     return true;
   });
@@ -300,7 +300,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       await syncLinkedObservationStatus(tx, workId, "IN_REVIEW");
       await tx.workHistory.create({ data: { workId, event: "INSPECTION_ASSIGNED", details: `Проверяющий ${input.assigneeUserId}` } });
       await recordActivity(tx, { event: "INSPECTION_ASSIGNED", subjectType: "WORK", subjectId: workId, houseId: current.houseId, workId, observationId: current.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { assigneeUserId: input.assigneeUserId, inspectionId: inspection.id } });
-      await notifyWorkWatchers(tx, config.botName, workId, `inspection_assigned:${inspection.id}`, `По работе ${workLabel(current)} назначена проверка.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: input.assigneeUserId, text: `Вам назначена проверка работы ${workLabel(current)}. Откройте работу и заполните чек-лист.` }] });
+      await notifyWorkWatchers(tx, config.botName, workId, `inspection_assigned:${inspection.id}`, `По обращению ${workLabel(current)} назначена проверка.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: input.assigneeUserId, text: `Вам назначена проверка обращения ${workLabel(current)}. Откройте обращение и заполните чек-лист.` }] });
       return inspection;
     }).catch((cause: unknown) => { if (cause instanceof Error && cause.message === "INSPECTION_CONFLICT") return null; throw cause; });
     if (!created) return fail(reply, 409, "Проверка уже назначена");
@@ -397,7 +397,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     await ensureAcceptanceAct(ctx.db, found.inspection.workId, config.botName);
     if (outcome === "FINAL_COMPLETED" && report) {
       const issueCount = await ctx.db.issue.count({ where: { workId: found.inspection.workId, status: { not: "RESOLVED" } } });
-      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По работе ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка работы ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка работы ${workLabel(found.inspection.work)} завершена без замечаний.\n\nМожно оформить и подтвердить акт приёмки.` }] : [] });
+      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По обращению ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка обращения ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка обращения ${workLabel(found.inspection.work)} завершена без замечаний.\n\nМожно оформить и подтвердить акт приёмки.` }] : [] });
     }
     return { status: "COMPLETED" };
   });
@@ -450,7 +450,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         await updateWorkStatusFromIssues(tx, issue.workId);
         await tx.workHistory.create({ data: { workId: issue.workId, event: "REMEDIATION_SUBMITTED", details: input.comment.trim() } });
         await recordActivity(tx, { event: "REMEDIATION_SUBMITTED", subjectType: "ISSUE", subjectId: issueId, houseId: issue.work.houseId, workId: issue.workId, observationId: issue.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { remediationId: remediation.id, reinspectionId: reinspection.id } });
-        await notifyWorkWatchers(tx, config.botName, issue.workId, `remediation:${remediation.id}`, `По работе ${workLabel(issue.work)} отправлено устранение замечания.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: reinspection.assigneeUserId, text: `По работе ${workLabel(issue.work)} отправлено устранение. Вам назначена повторная проверка.` }] });
+        await notifyWorkWatchers(tx, config.botName, issue.workId, `remediation:${remediation.id}`, `По обращению ${workLabel(issue.work)} отправлено устранение замечания.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: reinspection.assigneeUserId, text: `По обращению ${workLabel(issue.work)} отправлено устранение. Вам назначена повторная проверка.` }] });
         return { remediation, reinspection };
       });
       return reply.code(201).send({ id: created.remediation.id, reinspectionId: created.reinspection.id });
@@ -512,8 +512,8 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       await ensureAcceptanceAct(ctx.db, found.issue.workId, config.botName);
       if (report) {
         const remaining = await ctx.db.issue.count({ where: { workId: found.issue.workId, status: { not: "RESOLVED" } } });
-        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка работы ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по работе ${workLabel(found.issue.work)} устранены.\n\nМожно оформить и подтвердить акт приёмки.` }] : [];
-        await notifyWorkWatchers(ctx.db, config.botName, found.issue.workId, `reinspection:${found.id}`, `По работе ${workLabel(found.issue.work)} завершена повторная проверка. Результат: ${input.result === "RESOLVED" ? "замечание устранено" : "замечание осталось"}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: action });
+        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка обращения ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по обращению ${workLabel(found.issue.work)} устранены.\n\nМожно оформить и подтвердить акт приёмки.` }] : [];
+        await notifyWorkWatchers(ctx.db, config.botName, found.issue.workId, `reinspection:${found.id}`, `По обращению ${workLabel(found.issue.work)} завершена повторная проверка. Результат: ${input.result === "RESOLVED" ? "замечание устранено" : "замечание осталось"}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: action });
       }
       return { status: persisted.status, result: persisted.result };
     } catch (error) { if (error instanceof Error && error.message === "INVALID_MEDIA") return fail(reply, 400, "Некорректные mediaIds"); throw error; }
@@ -528,7 +528,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       if (!await ctx.db.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) return fail(reply, 409, "Нет активных замечаний");
       const created = await generate(ctx.db, workId, input.type, ctx.userId, config.botName);
       await ctx.db.documentVersion.update({ where: { id: created.id }, data: { status: "CONFIRMED", confirmedAt: now() } });
-      await notifyWorkWatchers(ctx.db, config.botName, workId, `reasoned_refusal:${created.id}`, `По работе ${workLabel(work)} оформлен мотивированный отказ. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: work.executorUserId ? [{ userId: work.executorUserId, text: `По работе ${workLabel(work)} оформлен мотивированный отказ. Ознакомьтесь с PDF и устраните замечания.` }] : [] });
+      await notifyWorkWatchers(ctx.db, config.botName, workId, `reasoned_refusal:${created.id}`, `По обращению ${workLabel(work)} оформлен мотивированный отказ. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: work.executorUserId ? [{ userId: work.executorUserId, text: `По обращению ${workLabel(work)} оформлен мотивированный отказ. Ознакомьтесь с PDF и устраните замечания.` }] : [] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: "CONFIRMED", fileUrl: `/doc/${created.publicKey}.pdf` });
     }
     const role = await houseRole(ctx, work.houseId);
@@ -544,7 +544,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         if (current.status !== "WAITING" || await tx.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) throw new Error("WORK_NOT_READY");
         return generate(tx as PrismaClient, workId, "ACCEPTANCE_ACT", ctx.userId, config.botName);
       }, { timeout: 15_000 });
-      await notifyWorkWatchers(ctx.db, config.botName, workId, `acceptance_ready:${created.id}`, `По работе ${workLabel(work)} оформлен акт приёмки. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: [{ userId: ctx.userId, text: `Акт приёмки по работе ${workLabel(work)} готов. Подтвердите его, затем председатель сможет завершить приёмку.` }] });
+      await notifyWorkWatchers(ctx.db, config.botName, workId, `acceptance_ready:${created.id}`, `По обращению ${workLabel(work)} оформлен акт приёмки. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: [{ userId: ctx.userId, text: `Акт приёмки по обращению ${workLabel(work)} готов. Подтвердите его, затем председатель сможет завершить приёмку.` }] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: created.status, fileUrl: `/doc/${created.publicKey}.pdf` });
     } catch (error) {
       if (error instanceof Error && error.message === "ACCEPTANCE_ACT_ALREADY_EXISTS") return fail(reply, 409, "Акт приёмки для этой работы уже сформирован");
@@ -586,7 +586,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     await recordActivity(ctx.db, { event: "DOCUMENT_CONFIRMED", subjectType: "DOCUMENT", subjectId: documentId, houseId: document.work.houseId, workId: document.workId, observationId: document.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { role: roleSnapshot, version: original.version } });
     if (roleSnapshot === "EXECUTOR") {
       const chairmen = await ctx.db.houseMembership.findMany({ where: { houseId: document.work.houseId, role: "CHAIRMAN", status: "ACTIVE" }, select: { userId: true } });
-      await notifyWorkWatchers(ctx.db, config.botName, document.workId, `acceptance_executor_confirmed:${documentId}`, `Исполнитель подтвердил акт приёмки по работе ${workLabel(document.work)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: original.publicKey, actionRecipients: chairmen.map((chairman) => ({ userId: chairman.userId, text: `Исполнитель подтвердил акт приёмки по работе ${workLabel(document.work)}.\n\nТеперь вам нужно подтвердить акт. PDF приложен.` })) });
+      await notifyWorkWatchers(ctx.db, config.botName, document.workId, `acceptance_executor_confirmed:${documentId}`, `Исполнитель подтвердил акт приёмки по обращению ${workLabel(document.work)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: original.publicKey, actionRecipients: chairmen.map((chairman) => ({ userId: chairman.userId, text: `Исполнитель подтвердил акт приёмки по обращению ${workLabel(document.work)}.\n\nТеперь вам нужно подтвердить акт. PDF приложен.` })) });
     }
     const result = await finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName, config.previewAccessRequired);
     return result.status === "CONFLICT" ? fail(reply, 409, "Эта работа уже принята по другому акту") : result;
@@ -615,5 +615,5 @@ export async function publicDocumentStatus(db: PrismaClient, key: string) {
   if (!verified.ok) return { message: "Документ найден, но целостность файла не подтверждена.", bytes: null };
   const document = version.document;
   const names = version.confirmations.map((item) => `${item.roleSnapshot === "CHAIRMAN" ? "Председатель" : "Исполнитель"}: ${item.user.firstName} ${item.user.lastName}`).join("; ");
-  return { message: `✅ Документ №${document.id} найден\n\n${documentTitle[document.type]}\nДом: ${document.work.house.address}\nРабота: «${document.work.title}»\nВерсия: ${version.version}\nСформирован: ${version.createdAt.toLocaleString("ru-RU")}\nСтатус: ${documentStatusTitle(version.status)}${document.type === "ACCEPTANCE_ACT" ? `\nПодтвердил: ${names || "ожидает подтверждения"}` : ""}\n\nЦелостность файла: подтверждена 🤝`, bytes: verified.bytes };
+  return { message: `✅ Документ №${document.id} найден\n\n${documentTitle[document.type]}\nДом: ${document.work.house.address}\nОбращение: «${document.work.title}»\nВерсия: ${version.version}\nСформирован: ${version.createdAt.toLocaleString("ru-RU")}\nСтатус: ${documentStatusTitle(version.status)}${document.type === "ACCEPTANCE_ACT" ? `\nПодтвердил: ${names || "ожидает подтверждения"}` : ""}\n\nЦелостность файла: подтверждена 🤝`, bytes: verified.bytes };
 }

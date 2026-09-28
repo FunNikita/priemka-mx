@@ -13,9 +13,9 @@ it("merges watchers and action recipients, prefers the action, and checks curren
     previewAccess: { findUnique: async ({ where }: { where: { maxUserId: string } }) => preview.has(Number(where.maxUserId)) ? { enabled: true } : null },
     botOutbox: { upsert: async ({ create }: { create: Record<string, unknown> }) => { jobs.push(create); return create; } },
   } as unknown as PrismaClient;
-  await notifyWorkWatchers(db, "PriemkaDemoBot", 7, "inspection_completed:1", "Проверка завершена", { previewRequired: true, actionRecipients: [{ userId: 2, text: "Вам нужно устранить замечания" }, { userId: 4, text: "Вам назначена работа" }] });
+  await notifyWorkWatchers(db, "PriemkaDemoBot", 7, "inspection_completed:1", "Проверка завершена", { previewRequired: true, actionRecipients: [{ userId: 2, text: "Вам нужно устранить замечания" }, { userId: 4, text: "Вам назначено обращение" }] });
   expect(jobs).toHaveLength(3);
-  expect(jobs.filter((job) => job.chatId === "2")).toEqual([expect.objectContaining({ text: "Вам нужно устранить замечания", targetType: "USER", accessKind: "WORK" })]);
+  expect(jobs.filter((job) => job.chatId === "2")).toEqual([expect.objectContaining({ text: "Вам нужно устранить замечания", buttonText: "Открыть обращение", targetType: "USER", accessKind: "WORK" })]);
   expect(jobs.some((job) => job.chatId === "3")).toBe(false);
   preview.delete(1);
   jobs.length = 0;

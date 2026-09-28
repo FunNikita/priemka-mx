@@ -9,10 +9,10 @@ export function observationContext(workTitle: string, observationTitle?: string 
 }
 
 export function createdWorkTexts(work: { id: number; title: string }, executorCompanyName: string, observationTitle?: string | null) {
-  const context = observationContext(work.title, observationTitle);
+  const label = workLabel({ ...work, title: observationTitle || work.title });
   return {
-    general: `🆕 Создана работа ${workLabel(work)}.\n${context}\nИсполнитель: ${executorCompanyName}\nТекущий этап: в работе`,
-    executor: `💼 Вам назначена работа ${workLabel(work)}.\n${context}\nОткройте работу, чтобы выполнить её и передать на проверку.`,
+    general: `🆕 Обращение ${label} передано исполнителю.\n\nИсполнитель: ${executorCompanyName}\nТекущий этап: в работе`,
+    executor: `💼 Вам назначено обращение ${label}.\n\nОткройте обращение, выполните работы и передайте результат на проверку.`,
   };
 }
 

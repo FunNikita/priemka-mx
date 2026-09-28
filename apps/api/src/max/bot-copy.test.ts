@@ -8,13 +8,13 @@ describe("MAX bot copy", () => {
     expect(observationContext(" Ремонт   крыши ", "ремонт крыши")).toBe("");
     expect(observationContext("Ремонт крыши", null)).toBe("");
     const different = createdWorkTexts({ id: 8, title: "Ремонт крыши" }, "УК", "Течёт крыша");
-    expect(different.general).toContain("🆕 Создана работа «Ремонт крыши» (№8).\nОбращение: «Течёт крыша»\n\nИсполнитель: УК");
-    expect(different.executor).toContain("💼 Вам назначена работа «Ремонт крыши» (№8).\nОбращение: «Течёт крыша»\n\nОткройте работу");
+    expect(different.general).toBe("🆕 Обращение «Течёт крыша» (№8) передано исполнителю.\n\nИсполнитель: УК\nТекущий этап: в работе");
+    expect(different.executor).toBe("💼 Вам назначено обращение «Течёт крыша» (№8).\n\nОткройте обращение, выполните работы и передайте результат на проверку.");
     for (const source of [" ремонт   КРЫШИ ", null]) {
       const texts = createdWorkTexts({ id: 8, title: "Ремонт крыши" }, "УК", source);
-      expect(texts.general).not.toContain("Обращение:");
-      expect(texts.executor).not.toContain("Обращение:");
-      expect(texts.general).toContain("(№8).\n\nИсполнитель");
+      expect(texts.general).toContain("🆕 Обращение ");
+      expect(texts.executor).toContain("Откройте обращение");
+      expect(texts.general).not.toContain("Создана работа");
     }
   });
 

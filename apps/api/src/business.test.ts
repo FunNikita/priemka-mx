@@ -438,8 +438,8 @@ describe("business API", () => {
       f.assignExecutor(1);
       expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).statusCode).toBe(200);
       const job = [...f.outboxJobs.values()].find((item) => item.accessKind === "WORK");
-      expect(job?.text).toBe("💼 Работа «Лифт» (№7) передана на проверку.");
-      expect(job?.text).not.toContain("Обращение:");
+      expect(job?.text).toBe("💼 Обращение «Лифт» (№7) передано на проверку.");
+      expect(job?.text).not.toContain("Работа");
     } finally { await app.close(); }
   });
 
