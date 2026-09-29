@@ -225,6 +225,10 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     const secondAfterId = await upload(3);
     const secondMultiRemediation = await call(3, "POST", `/api/issues/${multiIssues[1].id}/remediations`, { comment: "Второе исправлено", mediaIds: [secondAfterId] });
     expect(secondMultiRemediation.statusCode).toBe(201);
+    const secondMultiReinspectionId = secondMultiRemediation.json().reinspectionId as number;
+    const beforeSecondReinspection = await call(1, "GET", `/api/reinspections/${secondMultiReinspectionId}`);
+    expect(beforeSecondReinspection.statusCode).toBe(200);
+    expect(beforeSecondReinspection.json()).toEqual(expect.objectContaining({ comment: null, media: [] }));
     expect((await db.work.findUniqueOrThrow({ where: { id: multiWork.id } })).status).toBe("WAITING");
     expect((await call(1, "POST", `/api/reinspections/${firstMultiRemediation.json().reinspectionId}/complete`, { result: "RESOLVED" })).statusCode).toBe(200);
     const firstMultiReinspectionId = firstMultiRemediation.json().reinspectionId as number;
@@ -242,7 +246,14 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await db.reinspection.findUniqueOrThrow({ where: { id: firstMultiReinspectionId } })).result).toBe("RESOLVED");
     expect((await db.work.findUniqueOrThrow({ where: { id: multiWork.id } })).status).toBe("WAITING");
     expect((await call(3, "GET", `/api/works/${multiWork.id}`)).json().actions.reportRemediation).toBe(false);
-    expect((await call(1, "POST", `/api/reinspections/${secondMultiRemediation.json().reinspectionId}/complete`, { result: "NOT_RESOLVED", comment: "Остался дефект" })).statusCode).toBe(200);
+    const reviewPhotoId = await upload(1);
+    expect((await call(1, "POST", `/api/reinspections/${secondMultiReinspectionId}/complete`, { result: "NOT_RESOLVED", comment: "Остался дефект", mediaIds: [reviewPhotoId] })).statusCode).toBe(200);
+    const reviewPhoto = await db.media.findUniqueOrThrow({ where: { id: reviewPhotoId } });
+    const completedSecondReinspection = await call(1, "GET", `/api/reinspections/${secondMultiReinspectionId}`);
+    expect(completedSecondReinspection.statusCode).toBe(200);
+    expect(completedSecondReinspection.json()).toEqual(expect.objectContaining({ status: "COMPLETED", result: "NOT_RESOLVED", comment: "Остался дефект", media: [{ id: reviewPhotoId, url: `/photo/${reviewPhoto.publicKey}` }] }));
+    expect((await call(1, "POST", `/api/reinspections/${secondMultiReinspectionId}/complete`, { result: "RESOLVED", comment: "Не должно измениться", mediaIds: [latePhoto] })).json().result).toBe("NOT_RESOLVED");
+    expect((await call(1, "GET", `/api/reinspections/${secondMultiReinspectionId}`)).json()).toEqual(completedSecondReinspection.json());
     expect((await db.work.findUniqueOrThrow({ where: { id: multiWork.id } })).status).toBe("IN_PROGRESS");
     const retryAfterId = await upload(3);
     const retryMultiRemediation = await call(3, "POST", `/api/issues/${multiIssues[1].id}/remediations`, { comment: "Второе исправлено повторно", mediaIds: [retryAfterId] });

@@ -10034,6 +10034,8 @@
                     "id",
                     "status",
                     "result",
+                    "comment",
+                    "media",
                     "issue",
                     "remediation",
                     "actions"
@@ -10049,6 +10051,30 @@
                     "result": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "comment": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "media": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "url"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     },
                     "issue": {
                       "type": "object",

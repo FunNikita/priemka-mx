@@ -14,7 +14,7 @@ import { newPublicPhotoKey } from "./photo-keys.js";
 import { syncLinkedObservationStatus } from "./observation-work.js";
 import { recordActivity } from "./activity.js";
 import { appLink, enqueueText, notifyWorkWatchers } from "./max/notifications.js";
-import { createdWorkTexts, workLabel } from "./max/bot-copy.js";
+import { createdWorkTexts, issueWord, workLabel } from "./max/bot-copy.js";
 
 const mediaRoot = () => resolve(process.env.MEDIA_DIR ?? "/app/data/media");
 const maxFileSize = 10 * 1024 * 1024;
@@ -117,7 +117,11 @@ function activityTitle(event: string, metadata: unknown): string | null {
     REMEDIATION_SUBMITTED: "Исполнитель сообщил об устранении", REINSPECTION_COMPLETED: "Повторная проверка завершена",
     DOCUMENT_CONFIRMED: "Акт подтверждён", WORK_ACCEPTED: "Обращение принято",
   };
-  if (event === "INSPECTION_COMPLETED" && metadata && typeof metadata === "object" && "issueCount" in metadata && typeof metadata.issueCount === "number" && metadata.issueCount > 0) return `Проверка завершена. Найдено ${metadata.issueCount} замечаний`;
+  if (event === "INSPECTION_COMPLETED" && metadata && typeof metadata === "object" && "issueCount" in metadata && typeof metadata.issueCount === "number" && metadata.issueCount > 0) return `Проверка завершена. Найдено ${metadata.issueCount} ${issueWord(metadata.issueCount)}`;
+  if (event === "DOCUMENT_CONFIRMED" && metadata && typeof metadata === "object" && "role" in metadata) {
+    if (metadata.role === "EXECUTOR") return "Акт подтверждён исполнителем";
+    if (metadata.role === "CHAIRMAN") return "Акт подтверждён председателем";
+  }
   if (event === "REINSPECTION_COMPLETED" && metadata && typeof metadata === "object" && "result" in metadata) return metadata.result === "RESOLVED" ? "Повторная проверка завершена. Замечание устранено" : "Повторная проверка завершена. Требуется повторное устранение";
   return titles[event] ?? null;
 }

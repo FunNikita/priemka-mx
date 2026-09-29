@@ -125,7 +125,7 @@ Frontend использует эти флаги и всё равно обраб�
 
 `GET /api/me/issues` и `GET /api/works/:workId/issues` возвращают `work` с `category`, `checklistItem` с названием, описанием и порядком, `evidence` с исходным комментарием и фото, статус, историю `remediations` и `reinspections`. `actions.submitRemediation` показывает возможность отправить устранение. Исполнитель должен устранить **все** замечания. `POST /api/issues/:issueId/remediations` требует комментарий и фото; каждая отправка остаётся отдельной неизменяемой попыткой. Backend создаёт повторную проверку исходному проверяющему.
 
-Проверяющий после переключения обратно в `COUNCIL_MEMBER` получает `GET /api/me/reinspections`, детали `GET /api/reinspections/:reinspectionId` и завершает `POST /api/reinspections/:reinspectionId/complete` с `RESOLVED` или `NOT_RESOLVED`. Для `NOT_RESOLVED` обязателен комментарий. Завершённая повторная проверка неизменяема. Пока хоть одно замечание `OPEN` или `REMEDIATION_SUBMITTED`, акт недоступен.
+Проверяющий после переключения обратно в `COUNCIL_MEMBER` получает `GET /api/me/reinspections`, детали `GET /api/reinspections/:reinspectionId` и завершает `POST /api/reinspections/:reinspectionId/complete` с `RESOLVED` или `NOT_RESOLVED`. Detail повторной проверки всегда содержит её собственные `comment` и `media`: до завершения `comment: null` и `media: []`, после завершения — сохранённый комментарий проверяющего и контрольные фотографии. Для восстановления этих данных frontend может использовать detail повторной проверки без отдельного запроса `GET /api/works/:workId/issues`. Для `NOT_RESOLVED` обязателен комментарий. Завершённая повторная проверка неизменяема. Пока хоть одно замечание `OPEN` или `REMEDIATION_SUBMITTED`, акт недоступен.
 
 ## Документы и акт приёмки
 

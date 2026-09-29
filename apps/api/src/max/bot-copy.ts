@@ -1,5 +1,5 @@
-export function workLabel(work: { id: number; title: string }) {
-  return `«${work.title}» (№${work.id})`;
+export function workLabel(work: { title: string }) {
+  return `«${work.title}»`;
 }
 
 export function observationContext(workTitle: string, observationTitle?: string | null) {

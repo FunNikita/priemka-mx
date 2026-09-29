@@ -262,6 +262,9 @@ describe("business API", () => {
       const fresh = await app.inject({ method: "POST", url: `/api/observations/${id}/comments`, headers: auth, payload: { text: "Новый комментарий" } });
       expect(fresh.statusCode).toBe(201);
       expect(f.comments.at(-1)).toEqual(expect.objectContaining({ observationId: id, text: "Новый комментарий" }));
+      expect(f.activityEvents.some((event) => event.event === "OBSERVATION_COMMENT_ADDED" && event.observationId === id)).toBe(true);
+      for (const issueCount of [1, 2, 5]) f.activityEvents.push({ event: "INSPECTION_COMPLETED", metadata: { issueCount } });
+      for (const metadata of [{ role: "EXECUTOR" }, { role: "CHAIRMAN" }, null, "legacy", { role: "UNKNOWN" }]) f.activityEvents.push({ event: "DOCUMENT_CONFIRMED", metadata });
       const detail = await app.inject({ method: "GET", url: `/api/observations/${id}`, headers: auth });
       expect(detail.json().comments.map((comment: { text: string }) => comment.text)).toEqual(["Новый комментарий", "Старый комментарий"]);
       expect(detail.json().comments.map((comment: { author: unknown }) => comment.author)).toEqual([
@@ -269,7 +272,17 @@ describe("business API", () => {
         { type: "USER", displayName: "Макс Пользователь", photoUrl: "https://example.test/avatar.jpg" },
       ]);
       expect(f.comments.at(-1)).toEqual(expect.objectContaining({ authorTypeSnapshot: "USER", authorDisplayNameSnapshot: "Макс Пользователь" }));
-      expect(detail.json().history.map((event: { title: string }) => event.title)).toContain("Обращение создано");
+      expect(detail.json().history.map((event: { title: string }) => event.title)).toEqual([
+        "Обращение создано",
+        "Проверка завершена. Найдено 1 замечание",
+        "Проверка завершена. Найдено 2 замечания",
+        "Проверка завершена. Найдено 5 замечаний",
+        "Акт подтверждён исполнителем",
+        "Акт подтверждён председателем",
+        "Акт подтверждён",
+        "Акт подтверждён",
+        "Акт подтверждён",
+      ]);
     } finally { await app.close(); }
   });
 
@@ -438,7 +451,7 @@ describe("business API", () => {
       f.assignExecutor(1);
       expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).statusCode).toBe(200);
       const job = [...f.outboxJobs.values()].find((item) => item.accessKind === "WORK");
-      expect(job?.text).toBe("💼 Обращение «Лифт» (№7) передано на проверку.");
+      expect(job?.text).toBe("💼 Обращение «Лифт» передано на проверку.");
       expect(job?.text).not.toContain("Работа");
     } finally { await app.close(); }
   });
