@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { assignInspection, confirmChairmanDocument, createChairmanWork, decideJoinRequest, generateRefusal, loadChairmanHome, loadInspectionForm, loadWorkForm } from './chairmanApi';
+import { assignInspection, confirmChairmanDocument, createChairmanObservation, createChairmanWork, decideJoinRequest, generateRefusal, loadChairmanHome, loadInspectionForm, loadWorkForm } from './chairmanApi';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 function stub(responses) {
@@ -13,7 +13,16 @@ function stub(responses) {
 it('загружает заявки и работы только указанного дома', async () => {
   const fetchMock = stub([{ items: [{ id: 4 }], total: 1 }, { items: [{ id: 9 }], total: 1 }]);
   expect(await loadChairmanHome(8)).toEqual({ requests: [{ id: 4 }], works: [{ id: 9 }] });
-  expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(['/api/houses/8/join-requests?page=1&limit=100', '/api/houses/8/works?page=1&limit=100']);
+  expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(['/api/houses/8/join-requests?page=1&limit=100', '/api/houses/8/observations?tab=active&page=1&limit=100']);
+});
+
+it('создаёт обращение, затем назначает исполнителя', async () => {
+  const fetchMock = stub([{ id: 42 }, { id: 42 }]);
+  await createChairmanObservation(8, { executorUserId: 2, title: 'Дверь', description: 'Не закрывается', category: 'Двери и домофон', workflowCategory: 'COMMON_AREAS' });
+  expect(fetchMock.mock.calls.map(([path, init]) => [path, init.method, JSON.parse(init.body)])).toEqual([
+    ['/api/houses/8/observations', 'POST', { title: 'Дверь', description: 'Не закрывается', category: 'Двери и домофон' }],
+    ['/api/observations/42/executor', 'PUT', { executorUserId: 2, category: 'COMMON_AREAS' }],
+  ]);
 });
 
 it('отправляет только допустимое решение по заявке и точные тела действий', async () => {
