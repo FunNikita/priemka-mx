@@ -4,6 +4,7 @@ export type AppConfig = {
   botToken: string;
   botName: string;
   maxInitDataMaxAgeSeconds: number;
+  maxOutboundEnabled: boolean;
   allowSelfRoleSwitch?: boolean;
   previewAccessRequired?: boolean;
   botTimeZone?: string;
@@ -22,6 +23,8 @@ export function getConfig(): AppConfig {
   }
   const rawSelfRoleSwitch = process.env.ALLOW_SELF_ROLE_SWITCH ?? "false";
   if (rawSelfRoleSwitch !== "true" && rawSelfRoleSwitch !== "false") throw new Error("ALLOW_SELF_ROLE_SWITCH must be true or false");
+  const rawOutbound = process.env.MAX_OUTBOUND_ENABLED ?? "true";
+  if (rawOutbound !== "true" && rawOutbound !== "false") throw new Error("MAX_OUTBOUND_ENABLED must be true or false");
   const preview = process.env.PREVIEW_ACCESS_REQUIRED ?? "false";
   if (preview !== "true" && preview !== "false") throw new Error("PREVIEW_ACCESS_REQUIRED must be true or false");
   const botTimeZone = process.env.BOT_TIME_ZONE ?? "Europe/Moscow";
@@ -31,6 +34,7 @@ export function getConfig(): AppConfig {
     botToken,
     botName,
     maxInitDataMaxAgeSeconds,
+    maxOutboundEnabled: rawOutbound === "true",
     allowSelfRoleSwitch: rawSelfRoleSwitch === "true",
     previewAccessRequired: preview === "true",
     botTimeZone,

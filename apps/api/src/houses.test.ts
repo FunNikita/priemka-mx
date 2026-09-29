@@ -75,7 +75,7 @@ function fixture() {
     botOutbox: { upsert: async ({ where, create }: { where: { eventKey: string }; create: Record<string, unknown> }) => { if (!outbox.has(where.eventKey)) outbox.set(where.eventKey, create); return outbox.get(where.eventKey); } },
     $transaction: async (fn: (client: unknown) => Promise<unknown>) => fn(db),
   };
-  const app = (allowSelfRoleSwitch = false) => createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin: user.id === "9007199254740997" }) }, businessDb: db as unknown as PrismaClient, logger: false, staticRoot: "/nonexistent-priemka-static" });
+  const app = (allowSelfRoleSwitch = false) => createApp({ config: { botToken: token, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin: user.id === "9007199254740997" }) }, businessDb: db as unknown as PrismaClient, logger: false, staticRoot: "/nonexistent-priemka-static" });
   return { app, add, members, outbox, activities, prepareInspection: () => { inspectionCount = 0; inspectionWork = { id: 7, houseId: 1, status: "NEW", submittedForInspectionAt: new Date(), category: "OTHER", title: "Работа", executorUserId: 4, sourceObservationId: null, subscriptions: [], sourceObservation: null }; } };
 }
 

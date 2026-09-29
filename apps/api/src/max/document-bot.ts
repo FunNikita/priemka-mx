@@ -175,7 +175,7 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
       return { ok: true };
     });
   });
-  if (db && secret && process.env.NODE_ENV !== "test") {
+  if (db && secret && config?.maxOutboundEnabled !== false && process.env.NODE_ENV !== "test") {
     let running = false;
     const timer = setInterval(async () => {
       if (running) return;

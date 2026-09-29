@@ -3,12 +3,33 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import Fastify from "fastify";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { createApp } from "../app.js";
 import { appLink } from "./notifications.js";
-import { deliverBotOutbox, outboxRetryDelayMs, outboxRetryState } from "./document-bot.js";
+import { deliverBotOutbox, outboxRetryDelayMs, outboxRetryState, registerDocumentBot } from "./document-bot.js";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+it("does not start BotOutbox polling when MAX outbound is disabled", async () => {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("MAX_WEBHOOK_SECRET", "test_webhook_secret");
+  vi.useFakeTimers();
+  const findMany = vi.fn();
+  const app = Fastify({ logger: false });
+  registerDocumentBot(app, { botOutbox: { findMany } } as unknown as PrismaClient, "test-token", {
+    botToken: "test-token", botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600,
+    maxOutboundEnabled: false,
+  });
+  try {
+    await app.ready();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(findMany).not.toHaveBeenCalled();
+  } finally {
+    await app.close();
+    vi.useRealTimers();
+  }
+});
 
 it("uses documented startapp payloads", () => {
   expect(appLink("PriemkaDemoBot", "observation", 42)).toBe("https://max.ru/PriemkaDemoBot?startapp=observation_42");
@@ -31,7 +52,7 @@ it("deduplicates welcome, ignores group messages, and checks PreviewAccess befor
     if (!jobs.has(where.eventKey)) jobs.set(where.eventKey, { id: jobs.size + 1, ...create });
     return jobs.get(where.eventKey);
   } }, previewAccess: { findUnique: async () => enabled ? { enabled: true } : null } } as unknown as PrismaClient;
-  const app = await createApp({ config: { botToken: "test-token", botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, previewAccessRequired: true, botTimeZone: "Europe/Moscow" }, businessDb: db, userRepository: { isReady: async () => true, upsertFromMax: async () => ({ id: 1, isAdmin: false }) }, logger: false, staticRoot: "/nonexistent" });
+  const app = await createApp({ config: { botToken: "test-token", botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true, previewAccessRequired: true, botTimeZone: "Europe/Moscow" }, businessDb: db, userRepository: { isReady: async () => true, upsertFromMax: async () => ({ id: 1, isAdmin: false }) }, logger: false, staticRoot: "/nonexistent" });
   const send = (body: object) => app.inject({ method: "POST", url: "/max/webhook", headers: { "x-max-bot-api-secret": "test_webhook_secret", "content-type": "application/json" }, payload: body });
   try {
     const group = { update_type: "message_created", message: { sender: { user_id: "9007199254740993", first_name: "Макс" }, recipient: { chat_id: -123, chat_type: "chat" }, body: { text: "/start" } } };
