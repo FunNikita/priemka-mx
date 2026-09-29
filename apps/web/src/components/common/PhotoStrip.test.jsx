@@ -47,10 +47,22 @@ it('поддерживает перетаскивание мышью без сл
   const onOpen = vi.fn();
   await act(async () => root.render(<PhotoStrip photos={[{ id: 1, url: '/photo/1' }, { id: 2, url: '/photo/2' }]} onOpen={onOpen} />));
   const strip = container.querySelector('.photo-strip');
+  Object.defineProperties(strip, { clientWidth: { value: 100 }, scrollWidth: { value: 208 } });
+  await act(async () => strip.dispatchEvent(new Event('scroll', { bubbles: true })));
+  expect(strip.classList.contains('photo-strip--scrollable')).toBe(true);
   const pointer = (type, x) => { const event = new Event(type, { bubbles: true }); Object.defineProperties(event, { pointerType: { value: 'mouse' }, clientX: { value: x }, pointerId: { value: 1 } }); strip.dispatchEvent(event); };
   await act(async () => { pointer('pointerdown', 100); pointer('pointermove', 40); pointer('pointerup', 40); container.querySelector('.photo-strip__item').click(); });
   expect(strip.scrollLeft).toBe(60);
   expect(onOpen).not.toHaveBeenCalled();
+});
+
+it('не включает прокрутку, когда фотографии помещаются в полосу', async () => {
+  const onOpen = vi.fn();
+  await act(async () => root.render(<PhotoStrip photos={[{ id: 1, url: '/photo/1' }]} onOpen={onOpen} />));
+  const strip = container.querySelector('.photo-strip');
+  expect(strip.classList.contains('photo-strip--scrollable')).toBe(false);
+  await act(async () => container.querySelector('.photo-strip__item').click());
+  expect(onOpen).toHaveBeenCalledWith(0);
 });
 
 it('загружает оригинал только в открытой галерее', async () => {

@@ -53,7 +53,7 @@ export function HouseSwitcher({ houseId, houses = [], onHouseChange }) {
     finally { setSelecting(false); }
   };
   return <>
-    <CellAction before={<Avatar.Container size={40}><Avatar.Icon><Icon28BuildingOutline /></Avatar.Icon></Avatar.Container>} className="home-location-action" height="normal" mode="custom" style={{ '--MaxUi-CellAction_color': 'var(--text-secondary)' }} onClick={() => { setSelectedHouseId(houseId); setLoading(true); setOpen(true); }}>
+    <CellAction before={<Avatar.Container size={40}><Avatar.Icon><Icon28BuildingOutline className="home-location-building-icon" /></Avatar.Icon></Avatar.Container>} className="home-location-action" height="normal" mode="custom" style={{ '--MaxUi-CellAction_color': 'var(--text-secondary)' }} onClick={() => { setSelectedHouseId(houseId); setLoading(true); setOpen(true); }}>
       <Flex align="center" gap={5} className="home-location-address-group"><Typography.Body>{current?.address ?? 'Выберите дом'}</Typography.Body><Icon20ChevronRight className="home-location-chevron" /></Flex>
     </CellAction>
     {open ? <Modal className="home-access-modal house-picker-modal" title="Доступ к работам дома" onClose={close} actions={<Button mode="secondary" appearance="neutral" stretched disabled={selecting} onClick={() => void finishSelection()}>{selecting ? 'Сохраняем…' : 'Готово'}</Button>}><div className="home-access-dialog">

@@ -1,8 +1,9 @@
 .photo-strip-wrap { position: relative; min-width: 0; }
-.photo-strip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x; cursor: grab; }
-.photo-strip:active { cursor: grabbing; }
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x; pointer-events: none; }
+.photo-strip--scrollable { pointer-events: auto; cursor: grab; }
+.photo-strip--scrollable:active { cursor: grabbing; }
 .photo-strip::-webkit-scrollbar { display: none; }
-.photo-strip__item { width: 100px; height: 100px; flex: 0 0 100px; overflow: hidden; padding: 0; border: 0; border-radius: 14px; background: var(--app-surface-secondary); cursor: zoom-in; scroll-snap-align: start; }
+.photo-strip__item { width: 100px; height: 100px; flex: 0 0 100px; overflow: hidden; padding: 0; border: 0; border-radius: 14px; background: var(--app-surface-secondary); cursor: zoom-in; pointer-events: auto; scroll-snap-align: start; }
 .photo-image { position: relative; display: grid; width: 100%; height: 100%; place-items: center; }
 .photo-image > img { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
 .photo-image > img.photo-image__loaded { opacity: 1; }
