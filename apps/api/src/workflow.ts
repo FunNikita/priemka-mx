@@ -142,13 +142,12 @@ async function snapshotForWork(db: PrismaClient, workId: number, type: DocumentT
     const issues = await db.issue.findMany({ where: { workId, status: { not: "RESOLVED" } }, include: { answer: { include: { assignment: true, media: { orderBy: { id: "asc" }, include: { blob: true } } } } }, orderBy: { id: "asc" } });
     base.issues = issues.map((issue) => ({ title: issue.title, comment: issue.description, checkedAt: (issue.answer.assignment.completedAt ?? issue.createdAt).toISOString() }));
     base.summary = "Отказ от приёмки основан на перечисленных неустранённых замечаниях.";
-    const paths = issues.flatMap((issue) => issue.answer.media.map(mediaPath));
-    if (paths.length) base.photoGroups = [{ title: "ФОТОМАТЕРИАЛЫ", photos: paths }];
+    base.photoGroups = issues.flatMap((issue, index) => issue.answer.media.length ? [{ title: `Замечание ${index + 1}. ${issue.title}`, photos: issue.answer.media.map(mediaPath) }] : []);
   } else {
     const inspection = await db.inspection.findFirst({ where: { workId }, include: { items: true, assignments: { include: { answers: true } } }, orderBy: { id: "desc" } });
     const issues = await db.issue.findMany({ where: { workId }, select: { id: true, title: true, status: true }, orderBy: { id: "asc" } });
     base.rows = [{ label: "Категория", value: work.category }, { label: "Представитель исполнителя", value: work.representativeName ?? "" }, { label: "Проверено пунктов", value: String(inspection?.items.length ?? 0) }, { label: "Замечаний устранено", value: String(issues.filter((item) => item.status === "RESOLVED").length) }];
-    base.summary = issues.length ? `Все ${issues.length} замечаний устранены.` : "Замечаний по результатам проверки нет.";
+    base.summary = issues.length ? `${issues.length} ${issueWord(issues.length)} ${issues.length % 10 === 1 && issues.length % 100 !== 11 ? "устранено" : "устранены"}.` : "Замечаний по результатам проверки нет.";
   }
   return base;
 }

@@ -6,13 +6,21 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { createApp } from "../app.js";
 import { appLink } from "./notifications.js";
-import { deliverBotOutbox } from "./document-bot.js";
+import { deliverBotOutbox, outboxRetryDelayMs, outboxRetryState } from "./document-bot.js";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 it("uses documented startapp payloads", () => {
   expect(appLink("PriemkaDemoBot", "observation", 42)).toBe("https://max.ru/PriemkaDemoBot?startapp=observation_42");
   expect(appLink("PriemkaDemoBot", "work", 7)).toBe("https://max.ru/PriemkaDemoBot?startapp=work_7");
+});
+
+it("keeps exponential outbox retry delays capped at one hour", () => {
+  expect(Array.from({ length: 8 }, (_, index) => outboxRetryDelayMs(index + 1))).toEqual([10000, 20000, 40000, 80000, 160000, 320000, 640000, 1280000]);
+  expect(outboxRetryDelayMs(10)).toBe(3600000);
+  const at = new Date("2026-09-29T12:00:00.000Z");
+  expect(outboxRetryState(7, at)).toEqual({ attempts: 7, nextAttemptAt: new Date(at.getTime() + 640000) });
+  expect(outboxRetryState(8, at)).toEqual({ attempts: 8, nextAttemptAt: new Date(at.getTime() + 1280000), deadAt: at });
 });
 
 it("deduplicates welcome, ignores group messages, and checks PreviewAccess before fallback", async () => {
@@ -67,9 +75,10 @@ it("sends a PDF and open_app button in one direct message and retries attachment
   const job = { id: 1, chatId: "9007199254740993", targetType: "USER", accessKind: "NONE", recipientUserId: null, houseId: null, subjectId: null, kind: "TEXT", publicKey: "a".repeat(20), text: "Проверка завершена", buttonText: "Открыть работу", buttonUrl: appLink("PriemkaDemoBot", "work", 7), fileToken: null as string | null, completedAt: null as Date | null, deadAt: null as Date | null, sentText: false };
   const messages: { url: string; body: Record<string, unknown> }[] = [];
   let attempts = 0;
+  let uploads = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, options: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/uploads?type=file")) return new Response(JSON.stringify({ url: "https://upload.max.ru/file", token: "file-token" }), { status: 200 });
+    if (url.endsWith("/uploads?type=file")) { uploads++; return new Response(JSON.stringify({ url: "https://upload.max.ru/file", token: "file-token" }), { status: 200 }); }
     if (url === "https://upload.max.ru/file") return new Response("", { status: 200 });
     messages.push({ url, body: JSON.parse(String(options.body)) as Record<string, unknown> });
     attempts++;
@@ -82,10 +91,37 @@ it("sends a PDF and open_app button in one direct message and retries attachment
     expect(job.completedAt).toBeNull();
     await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
     expect(job.completedAt).toBeInstanceOf(Date);
+    expect(job.sentText).toBe(true);
+    expect(uploads).toBe(1);
+    expect(messages).toHaveLength(2);
+    await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
     expect(messages).toHaveLength(2);
     expect(messages[1].url).toContain("user_id=9007199254740993");
     expect(messages[1].body.attachments).toEqual([{ type: "file", payload: { token: "file-token" } }, { type: "inline_keyboard", payload: { buttons: [[{ type: "open_app", text: "Открыть работу", web_app: "PriemkaDemoBot", payload: "work_7" }]] } }]);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it("ignores completed and dead jobs without sending", async () => {
+  const jobs = [{ id: 1, completedAt: new Date(), deadAt: null }, { id: 2, completedAt: null, deadAt: new Date() }];
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const db = { botOutbox: { findUnique: async ({ where }: { where: { id: number } }) => jobs[where.id - 1] } } as unknown as PrismaClient;
+  await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
+  await deliverBotOutbox(db, "test-token", 2, "PriemkaDemoBot");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("does not turn external or malformed links into open_app buttons", async () => {
+  const job = { id: 1, chatId: "9007199254740993", targetType: "USER", accessKind: "NONE", recipientUserId: null, houseId: null, subjectId: null, kind: "TEXT", publicKey: "", text: "Событие", buttonText: "Открыть", buttonUrl: "https://example.org/phishing", completedAt: null as Date | null, deadAt: null, sentText: false };
+  const messages: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, options: RequestInit) => { messages.push(JSON.parse(String(options.body)) as Record<string, unknown>); return new Response("{}", { status: 200 }); }));
+  const db = { botOutbox: { findUnique: async () => job, update: async ({ data }: { data: Partial<typeof job> }) => Object.assign(job, data) } } as unknown as PrismaClient;
+  await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
+  expect(messages[0].attachments).toEqual([]);
+  job.completedAt = null;
+  job.buttonUrl = "invalid URL";
+  await deliverBotOutbox(db, "test-token", 1, "PriemkaDemoBot");
+  expect(messages[1].attachments).toEqual([]);
 });
 
 it("drops a queued lifecycle message when the recipient loses house access", async () => {

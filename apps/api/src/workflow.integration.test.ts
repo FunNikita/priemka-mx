@@ -110,6 +110,11 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect((await call(1, "POST", `/api/inspection-assignments/${first.id}/complete`, {})).statusCode).toBe(400);
     expect((await db.work.findUniqueOrThrow({ where: { id: work.id } })).status).toBe("IN_REVIEW");
     const before = await upload(1);
+    const foreignMediaId = await upload(4);
+    const foreignAnswer = await call(1, "PUT", `/api/inspection-assignments/${first.id}/answers/${item2}`, { result: "FAIL", mediaIds: [foreignMediaId] });
+    expect(foreignAnswer.statusCode).toBe(400);
+    expect(foreignAnswer.json().message).toBe("Некорректные mediaIds");
+    expect((await db.media.findUniqueOrThrow({ where: { id: foreignMediaId } })).temporary).toBe(true);
     const fivePhotos = [before, ...(await Promise.all(Array.from({ length: 4 }, () => upload(1))))];
     expect((await call(1, "PUT", `/api/inspection-assignments/${first.id}/answers/${item2}`, { result: "FAIL", mediaIds: fivePhotos })).statusCode).toBe(200);
     expect((await call(1, "PUT", `/api/inspection-assignments/${first.id}/answers/${item2}`, { result: "FAIL", mediaIds: [...fivePhotos, 999999] })).statusCode).toBe(400);
@@ -235,6 +240,12 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect(groupedPayload.photoGroups?.map((group) => group.photos.length)).toEqual([1, 1]);
     const multiIssues = await db.issue.findMany({ where: { workId: multiWork.id }, orderBy: { id: "asc" } });
     expect(multiIssues).toHaveLength(2);
+    const groupedRefusal = await call(0, "POST", `/api/works/${multiWork.id}/documents`, { type: "REASONED_REFUSAL" });
+    expect(groupedRefusal.statusCode).toBe(201);
+    const groupedRefusalDocument = await db.document.findUniqueOrThrow({ where: { id: groupedRefusal.json().id }, include: { versions: true } });
+    const groupedRefusalPayload = groupedRefusalDocument.versions[0].payloadJson as unknown as DocumentPayload;
+    expect(groupedRefusalPayload.photoGroups?.map((group) => group.title)).toEqual(multiIssues.map((issue, index) => `Замечание ${index + 1}. ${issue.title}`));
+    expect(groupedRefusalPayload.photoGroups?.map((group) => group.photos.length)).toEqual([1, 1]);
     const firstAfterId = await upload(3);
     const firstMultiRemediation = await call(3, "POST", `/api/issues/${multiIssues[0].id}/remediations`, { comment: "Первое исправлено", mediaIds: [firstAfterId] });
     expect(firstMultiRemediation.statusCode).toBe(201);
@@ -320,6 +331,8 @@ it.skipIf(!enabled)("runs inspection, issues, remediation, reinspection, act and
     expect(await db.document.count({ where: { workId: raceWork.id, type: "ACCEPTANCE_ACT" } })).toBe(1);
     expect((await call(0, "POST", `/api/works/${work.id}/documents`, { type: "ACCEPTANCE_ACT" })).statusCode).toBe(403);
     const act = await db.document.findFirstOrThrow({ where: { workId: work.id, type: "ACCEPTANCE_ACT" } });
+    const actSnapshot = await db.documentVersion.findUniqueOrThrow({ where: { documentId_version: { documentId: act.id, version: 1 } } });
+    expect((actSnapshot.payloadJson as unknown as DocumentPayload).summary).toBe("1 замечание устранено.");
     expect(await db.document.count({ where: { workId: work.id, type: "ACCEPTANCE_ACT" } })).toBe(1);
     expect((await call(3, "GET", `/api/works/${work.id}`)).json().actions.generateAcceptanceAct).toBe(false);
     const duplicateAct = await call(3, "POST", `/api/works/${work.id}/documents`, { type: "ACCEPTANCE_ACT" });
