@@ -397,7 +397,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     await ensureAcceptanceAct(ctx.db, found.inspection.workId, config.botName);
     if (outcome === "FINAL_COMPLETED" && report) {
       const issueCount = await ctx.db.issue.count({ where: { workId: found.inspection.workId, status: { not: "RESOLVED" } } });
-      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По обращению ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка обращения ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка обращения ${workLabel(found.inspection.work)} завершена без замечаний.\n\nМожно оформить и подтвердить акт приёмки.` }] : [] });
+      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По обращению ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка обращения ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка обращения ${workLabel(found.inspection.work)} завершена без замечаний.\n\nАкт приёмки сформирован автоматически. Подтвердите его.` }] : [] });
     }
     return { status: "COMPLETED" };
   });
@@ -512,22 +512,34 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       await ensureAcceptanceAct(ctx.db, found.issue.workId, config.botName);
       if (report) {
         const remaining = await ctx.db.issue.count({ where: { workId: found.issue.workId, status: { not: "RESOLVED" } } });
-        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка обращения ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по обращению ${workLabel(found.issue.work)} устранены.\n\nМожно оформить и подтвердить акт приёмки.` }] : [];
+        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка обращения ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по обращению ${workLabel(found.issue.work)} устранены.\n\nАкт приёмки сформирован автоматически. Подтвердите его.` }] : [];
         await notifyWorkWatchers(ctx.db, config.botName, found.issue.workId, `reinspection:${found.id}`, `По обращению ${workLabel(found.issue.work)} завершена повторная проверка. Результат: ${input.result === "RESOLVED" ? "замечание устранено" : "замечание осталось"}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: action });
       }
       return { status: persisted.status, result: persisted.result };
     } catch (error) { if (error instanceof Error && error.message === "INVALID_MEDIA") return fail(reply, 400, "Некорректные mediaIds"); throw error; }
   });
 
-  app.post("/api/works/:workId/documents", { ...guarded, schema: { tags: ["Documents"], ...secured, description: "Для одной работы допускается один акт приёмки; повторное создание ACCEPTANCE_ACT возвращает 409.", params: params("workId"), body: { type: "object", additionalProperties: false, required: ["type"], properties: { type: { type: "string", enum: ["REASONED_REFUSAL", "ACCEPTANCE_ACT"] } } }, response: { 201: documentCreatedSchema, ...response } } }, async (request, reply) => {
+  app.post("/api/works/:workId/documents", { ...guarded, schema: { tags: ["Documents"], ...secured, description: "Для одной работы допускается один акт приёмки и максимум один мотивированный отказ. REASONED_REFUSAL доступен только при наличии OPEN Issue; повторное создание документа возвращает 409.", params: params("workId"), body: { type: "object", additionalProperties: false, required: ["type"], properties: { type: { type: "string", enum: ["REASONED_REFUSAL", "ACCEPTANCE_ACT"] } } }, response: { 201: documentCreatedSchema, ...response } } }, async (request, reply) => {
     const ctx = context(request), workId = numberParam(request, "workId"), input = body<{ type: "REASONED_REFUSAL" | "ACCEPTANCE_ACT" }>(request);
     const work = await ctx.db.work.findUnique({ where: { id: workId } });
     if (!work || !await mayWork(ctx, work)) return fail(reply, 404, "Работа не найдена");
     if (input.type === "REASONED_REFUSAL") {
       if (!await isActiveChair(ctx, work.houseId)) return fail(reply, 403, "Только председатель оформляет отказ");
-      if (!await ctx.db.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) return fail(reply, 409, "Нет активных замечаний");
-      const created = await generate(ctx.db, workId, input.type, ctx.userId, config.botName);
-      await ctx.db.documentVersion.update({ where: { id: created.id }, data: { status: "CONFIRMED", confirmedAt: now() } });
+      let created;
+      try {
+        created = await ctx.db.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM Work WHERE id = ${workId} FOR UPDATE`;
+          if (await tx.document.findFirst({ where: { workId, type: "REASONED_REFUSAL" }, select: { id: true } })) throw new Error("REASONED_REFUSAL_ALREADY_EXISTS");
+          if (!await tx.issue.count({ where: { workId, status: "OPEN" } })) throw new Error("NO_OPEN_ISSUES_FOR_REFUSAL");
+          const document = await generate(tx as PrismaClient, workId, input.type, ctx.userId, config.botName);
+          await tx.documentVersion.update({ where: { id: document.id }, data: { status: "CONFIRMED", confirmedAt: now() } });
+          return document;
+        }, { timeout: 15_000 });
+      } catch (error) {
+        if (error instanceof Error && error.message === "REASONED_REFUSAL_ALREADY_EXISTS") return fail(reply, 409, "Мотивированный отказ для этой работы уже сформирован");
+        if (error instanceof Error && error.message === "NO_OPEN_ISSUES_FOR_REFUSAL") return fail(reply, 409, "Нет открытых замечаний для мотивированного отказа");
+        throw error;
+      }
       await notifyWorkWatchers(ctx.db, config.botName, workId, `reasoned_refusal:${created.id}`, `По обращению ${workLabel(work)} оформлен мотивированный отказ. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: work.executorUserId ? [{ userId: work.executorUserId, text: `По обращению ${workLabel(work)} оформлен мотивированный отказ. Ознакомьтесь с PDF и устраните замечания.` }] : [] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: "CONFIRMED", fileUrl: `/doc/${created.publicKey}.pdf` });
     }
