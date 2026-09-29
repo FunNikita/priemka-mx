@@ -4,9 +4,10 @@ import { useRef, useState } from 'react';
 
 import { PageHeader } from '../components/layout/PageHeader';
 import { Button } from '../components/ui/LegacyButton';
-import { ImagePreview } from '../components/ui/ImagePreview';
+import { PhotoGroup } from '../components/ui/PhotoGroup';
 import { Modal } from '../components/ui/Modal';
 import { CouncilApiWorkPage } from './CouncilApiWorkPage';
+import { formatDate } from './residentApi';
 import './ReportProblemPage.css';
 import './HomePage.css';
 
@@ -39,7 +40,7 @@ function DemoCouncilWorkPage({ inspection, onBack }) {
   ]);
   const [decision, setDecision] = useState(isCompleted ? 'approved' : null);
   const [remarks, setRemarks] = useState([]);
-  const [decisionAt, setDecisionAt] = useState(isCompleted ? '20.09 14:30' : '');
+  const [decisionAt, setDecisionAt] = useState(isCompleted ? formatDate('2026-09-20T14:30:00') : '');
   const [pendingDecision, setPendingDecision] = useState(null);
   const [openChecklistIndex, setOpenChecklistIndex] = useState(null);
   const [repeatOutcome, setRepeatOutcome] = useState(null);
@@ -50,11 +51,11 @@ function DemoCouncilWorkPage({ inspection, onBack }) {
   const confirmDecision = () => {
     const now = new Date();
     if (pendingDecision === 'remarks') {
-      setRemarks(checklist.filter((item) => item.result === 'FAIL').map((item, index) => ({ id: `${now.getTime()}-${index}`, date: formatRemarkDate(now), title: item.label, text: item.comment.trim(), photos: item.photos })));
+      setRemarks(checklist.filter((item) => item.result === 'FAIL').map((item, index) => ({ id: `${now.getTime()}-${index}`, date: formatDate(now), title: item.label, text: item.comment.trim(), photos: item.photos })));
       setDecision('remarks');
     }
     if (pendingDecision === 'approved') setDecision('approved');
-    setDecisionAt(formatHistoryTime(now));
+    setDecisionAt(formatDate(now));
     setPendingDecision(null);
   };
   return <Panel mode="primary" className="home-panel active-work-details-panel council-work-panel">
@@ -63,19 +64,19 @@ function DemoCouncilWorkPage({ inspection, onBack }) {
       <header className="active-work-details__head"><div className="active-work-details__title-row"><div className="active-work-details__title-status"><Typography.Title variant="small-strong" className="council-work__title">Ремонтные работы</Typography.Title><div className="active-work-details__status-list"><span className={`active-work-details__status active-work-details__status--${work.statusTone ?? inspectionType}`}>{repeatOutcome ? 'Повторная проверка завершена' : work.status}</span>{repeatOutcome ? <span className="active-work-details__status">{repeatOutcome === 'RESOLVED' ? 'Устранено' : 'Не устранено'}</span> : work.review ? <span className="active-work-details__status">{work.review}</span> : null}{!isCompleted && !repeatOutcome ? <span className="active-work-details__status active-work-details__status--checking">Вы проверяете</span> : null}</div></div><Typography.Label>ID {work.id}</Typography.Label></div></header>
       <section className="active-work-details__card">
         <Typography.Title variant="small-strong" className="council-work__section-title">История изменений</Typography.Title>
-        <ol className="active-work-details__history"><li><i /><time>12.12 12:00</time><span>Дата получения акта</span></li><li><i /><time>12.12 12:00</time><span>Смена статуса: Ждёт исправлений</span></li><li className={!decision ? 'active-work-details__history-current' : undefined}><i /><time>12.12 12:00</time><span>Смена статуса: Проверено</span></li>{decision ? <li className={`active-work-details__history-current${decision === 'approved' ? ' council-work__history-result--approved' : ''}`}><i /><time>{decisionAt}</time><span>{decision === 'approved' ? 'Проверка завершена: замечаний нет' : 'Смена статуса: найдены замечания'}</span></li> : null}</ol>
+        <ol className="active-work-details__history">{decision ? <li className={`active-work-details__history-current${decision === 'approved' ? ' council-work__history-result--approved' : ''}`}><i /><time>{decisionAt}</time><span>{decision === 'approved' ? 'Проверка завершена: замечаний нет' : 'Смена статуса: найдены замечания'}</span></li> : null}<li className={!decision ? 'active-work-details__history-current' : undefined}><i /><time>{formatDate('2026-12-12T12:00:00')}</time><span>Смена статуса: Проверено</span></li><li><i /><time>{formatDate('2026-12-12T12:00:00')}</time><span>Смена статуса: Ждёт исправлений</span></li><li><i /><time>{formatDate('2026-12-12T12:00:00')}</time><span>Дата получения акта</span></li></ol>
         <Typography.Title variant="small-strong" className="council-work__section-title">Основная информация</Typography.Title>
         <div className="active-work-details__field"><Typography.Label>Название работы</Typography.Label><Typography.Body>{work.title}</Typography.Body></div>
         <div className="active-work-details__field"><Typography.Label>Описание работы</Typography.Label><Typography.Body>{work.description}</Typography.Body></div>
         <div className="active-work-details__field"><Typography.Label>Адрес дома</Typography.Label><Typography.Body>Санкт-Петербург, ул. Примерная, д. 12</Typography.Body></div>
         <div className="active-work-details__field"><Typography.Label>Объект дома</Typography.Label><Typography.Body>Лифт</Typography.Body></div>
-        <div className="active-work-details__photos-section"><Typography.Title variant="small-strong" className="council-work__section-title">Фотографии</Typography.Title>{photos.length ? <div className="active-work-details__photo-list">{photos.map((photo, index) => <ImagePreview key={`${photo}-${index}`} title={`${work.title}: фото ${index + 1}`} src={photo} />)}</div> : null}</div>
+        <div className="active-work-details__photos-section"><Typography.Title variant="small-strong" className="council-work__section-title">Фотографии</Typography.Title>{photos.length ? <PhotoGroup className="active-work-details__photo-list" photos={photos} title={work.title} /> : null}</div>
       </section>
       {!isRepeat ? <section className="active-work-details__card council-work__checklist-card">
         <Typography.Title variant="small-strong" className="council-work__section-title">Чек-лист проверки</Typography.Title>
         <ul className="council-work__checklist">{checklist.map((item, index) => <ChecklistItem key={item.label} item={item} index={index} disabled={Boolean(decision)} isOpen={openChecklistIndex === index} onToggle={() => setOpenChecklistIndex((value) => value === index ? null : index)} onChange={(patch) => updateChecklistItem(index, patch)} />)}</ul>
         {remarks.length ? <div className="council-work__remarks-summary"><Typography.Title variant="small-strong" className="council-work__section-title">Замечания ({remarks.length})</Typography.Title>{remarks.map((remark) => <Typography.Body key={remark.id}>{remark.title}: {remark.text}</Typography.Body>)}</div> : null}
-        {remarks.length ? <div className="active-work-details__comments council-work__remarks-list"><Typography.Title variant="small-strong" className="council-work__section-title">Замечание</Typography.Title>{remarks.map((remark) => <article key={remark.id} className="active-work-details__remark-comment"><header><Avatar.Container size={32}><Avatar.Image src="https://sun9-67.userapi.com/s/v1/ig2/CY_xDesKnMtl0OiJynK0oc7QnxQVJUgeciJSi_MpZUiE3EHSCNltr76jugXaygGd2Xh0M8-61v7Jwfl1kO87YWVe.jpg?quality=95&crop=0,0,1440,1440&as=32x32,48x48,72x72,108x108,160x160,240x240,360x360,480x480,540x540,640x640,720x720,1080x1080,1280x1280,1440x1440&ava=1&u=SpmuDKJYdLKKRYYDgjLVQdEn6QnBonR3kSYxCSkCnm4&cs=200x200" alt="Иван Петров" fallback="ИП" /></Avatar.Container><span><b>Иван Петров</b><small>{remark.date}</small></span></header>{remark.text ? <Typography.Body>{remark.text}</Typography.Body> : null}{remark.photos.length ? <div className="active-work-details__comment-photo-list">{remark.photos.map((photo, photoIndex) => <ImagePreview key={`${photo}-${photoIndex}`} title={`Фото замечания ${photoIndex + 1}`} src={photo} />)}</div> : null}</article>)}</div> : null}
+        {remarks.length ? <div className="active-work-details__comments council-work__remarks-list"><Typography.Title variant="small-strong" className="council-work__section-title">Замечание</Typography.Title>{remarks.map((remark) => <article key={remark.id} className="active-work-details__remark-comment"><header><Avatar.Container size={32}><Avatar.Image src="https://sun9-67.userapi.com/s/v1/ig2/CY_xDesKnMtl0OiJynK0oc7QnxQVJUgeciJSi_MpZUiE3EHSCNltr76jugXaygGd2Xh0M8-61v7Jwfl1kO87YWVe.jpg?quality=95&crop=0,0,1440,1440&as=32x32,48x48,72x72,108x108,160x160,240x240,360x360,480x480,540x540,640x640,720x720,1080x1080,1280x1280,1440x1440&ava=1&u=SpmuDKJYdLKKRYYDgjLVQdEn6QnBonR3kSYxCSkCnm4&cs=200x200" alt="Иван Петров" fallback="ИП" /></Avatar.Container><span><b>Иван Петров</b><small>{remark.date}</small></span></header>{remark.text ? <Typography.Body>{remark.text}</Typography.Body> : null}{remark.photos.length ? <PhotoGroup className="active-work-details__comment-photo-list" photos={remark.photos} title={"Фото замечания"} /> : null}</article>)}</div> : null}
         {!remarks.length && !decision ? <div className="council-work__decision-actions"><Button mode="primary" appearance="negative" size="medium" stretched disabled={!isChecklistComplete || hasInvalidFail || !hasFail} onClick={() => setPendingDecision('remarks')}>Завершить с замечаниями</Button><Button mode="primary" appearance="themed" size="medium" stretched style={isChecklistComplete && !hasInvalidFail ? { backgroundColor: '#22c55e', color: '#fff' } : undefined} disabled={!isChecklistComplete || hasInvalidFail || hasFail} onClick={() => setPendingDecision('approved')}>Замечаний нет</Button></div> : null}
       </section> : null}
       {isRepeat ? <RepeatReview key={work.id} previousRemarks={previousRemarks} onComplete={setRepeatOutcome} /> : null}
@@ -116,11 +117,11 @@ function RepeatReview({ previousRemarks, onComplete }) {
       return <div key={item.id ?? index} className="council-work__repeat-summary-item">
         <Typography.Title variant="small-strong" className="council-work__section-title">{remark.title ?? remark.comment.split('.')[0]}</Typography.Title>
         <div className="active-work-details__field"><Typography.Label>Предыдущее замечание</Typography.Label><Typography.Body>{remark.comment}</Typography.Body></div>
-        {remark.photos?.length ? <div className="active-work-details__comment-photo-list">{remark.photos.map((photo, photoIndex) => <ImagePreview key={`${photo}-${photoIndex}`} title={`Фото предыдущего замечания ${index + 1}.${photoIndex + 1}`} src={photo} />)}</div> : null}
+        {remark.photos?.length ? <PhotoGroup className="active-work-details__comment-photo-list" photos={remark.photos} title={"Фото замечания"} /> : null}
         {remark.correction ? <div className="active-work-details__field"><Typography.Label>Ответ исполнителя</Typography.Label><Typography.Body>{remark.correction}</Typography.Body></div> : null}
-        {remark.correctionPhotos?.length ? <div className="active-work-details__comment-photo-list">{remark.correctionPhotos.map((photo, photoIndex) => <ImagePreview key={`${photo}-${photoIndex}`} title={`Фото исправления ${index + 1}.${photoIndex + 1}`} src={photo} />)}</div> : null}
+        {remark.correctionPhotos?.length ? <PhotoGroup className="active-work-details__comment-photo-list" photos={remark.correctionPhotos} title={"Фото исправления"} /> : null}
         <div className="active-work-details__field"><Typography.Label>Ваш результат</Typography.Label><Typography.Body>{item.result === 'RESOLVED' ? 'Устранено' : 'Не устранено'}</Typography.Body></div>
-        {item.result === 'NOT_RESOLVED' ? <><div className="active-work-details__field"><Typography.Label>Новое замечание</Typography.Label><Typography.Body>{item.comment.trim()}</Typography.Body></div><div className="active-work-details__comment-photo-list">{item.photos.map((photo, photoIndex) => <ImagePreview key={`${photo}-${photoIndex}`} title={`Фото нового замечания ${index + 1}.${photoIndex + 1}`} src={photo} />)}</div></> : null}
+        {item.result === 'NOT_RESOLVED' ? <><div className="active-work-details__field"><Typography.Label>Новое замечание</Typography.Label><Typography.Body>{item.comment.trim()}</Typography.Body></div><PhotoGroup className="active-work-details__comment-photo-list" photos={item.photos} title={"Фото нового замечания"} /></> : null}
       </div>;
     })}
   </section>;
@@ -147,18 +148,10 @@ function RepeatRemarkItem({ remark, item, index, disabled, isOpen, onToggle, onC
       {isOpen ? <Icon24ChevronUpSmall width={18} height={18} /> : <Icon24ChevronDown width={18} height={18} />}
     </button>
     {isOpen ? <div id={`repeat-remark-${index}`} className="council-work__repeat-item-body">
-      <div className="council-work__repeat-item-context"><div className="council-work__repeat-history-row">{remark.photos?.length ? <div className="active-work-details__comment-photo-list">{remark.photos.map((photo, photoIndex) => <ImagePreview key={`${photo}-${photoIndex}`} title={`Фото замечания ${index + 1}.${photoIndex + 1}`} src={photo} />)}</div> : null}<div className="council-work__repeat-stage"><Typography.Label>Замечание</Typography.Label><Typography.Body className="council-work__repeat-description">{remark.comment}</Typography.Body></div></div>
-      {remark.correction || remark.correctionPhotos?.length ? <div className="council-work__repeat-history-row">{remark.correctionPhotos?.length ? <div className="active-work-details__comment-photo-list">{remark.correctionPhotos.map((photo, photoIndex) => <ImagePreview key={`${photo}-${photoIndex}`} title={`Фото исправления ${index + 1}.${photoIndex + 1}`} src={photo} />)}</div> : null}<div className="council-work__repeat-stage"><Typography.Label>Ответ исполнителя</Typography.Label>{remark.correction ? <Typography.Body className="council-work__repeat-description">{remark.correction}</Typography.Body> : null}</div></div> : null}</div>
+      <div className="council-work__repeat-item-context"><div className="council-work__repeat-history-row">{remark.photos?.length ? <PhotoGroup className="active-work-details__comment-photo-list" photos={remark.photos} title={"Фото замечания"} /> : null}<div className="council-work__repeat-stage"><Typography.Label>Замечание</Typography.Label><Typography.Body className="council-work__repeat-description">{remark.comment}</Typography.Body></div></div>
+      {remark.correction || remark.correctionPhotos?.length ? <div className="council-work__repeat-history-row">{remark.correctionPhotos?.length ? <PhotoGroup className="active-work-details__comment-photo-list" photos={remark.correctionPhotos} title={"Фото исправления"} /> : null}<div className="council-work__repeat-stage"><Typography.Label>Ответ исполнителя</Typography.Label>{remark.correction ? <Typography.Body className="council-work__repeat-description">{remark.correction}</Typography.Body> : null}</div></div> : null}</div>
       <div className={`council-work__repeat-result-row${disabled ? ' council-work__repeat-result-row--completed' : ''}`}><Typography.Label>Ваш результат</Typography.Label><div className="admin-select council-work__repeat-result-select"><button type="button" className={`admin-select__trigger council-work__repeat-trigger--${selected?.tone ?? 'pending'}`} disabled={disabled} aria-haspopup="listbox" aria-expanded={isSelectOpen} aria-label={`Ваш результат: ${selected?.label ?? 'не выбран'}`} onClick={() => setSelectOpen((value) => !value)}><span>{selected?.label ?? 'Выберите результат'}</span><span className="admin-select__icon">{isSelectOpen ? <Icon24ChevronUpSmall width={20} height={20} /> : <Icon24ChevronDown width={20} height={20} />}</span></button>{isSelectOpen && !disabled ? <div className="admin-select__menu" role="listbox" aria-label={`Результат замечания ${index + 1}`}>{REINSPECTION_RESULTS.map((option) => <button key={option.value} type="button" className={`admin-select__option${item.result === option.value ? ' admin-select__option--selected' : ''}`} onClick={() => { onChange({ result: option.value }); setSelectOpen(false); }}>{option.label}</button>)}</div> : null}</div></div>
       {item.result === 'NOT_RESOLVED' ? <div className="council-work__checklist-details"><Typography.Label>Новое замечание</Typography.Label><textarea value={item.comment} disabled={disabled} placeholder="Опишите, что осталось неустранённым" onChange={(event) => onChange({ comment: event.target.value })} /><Typography.Label>Фотографии</Typography.Label><input ref={inputRef} className="active-work-details__file-input" type="file" accept="image/*" multiple disabled={disabled} onChange={(event) => { addPhotos(event.target.files ?? []); event.target.value = ''; }} /><div className="report-problem-photos__list report-problem-photos__list--with-actions">{item.photos.length ? <div className="report-problem-photo-actions"><button type="button" className="report-problem-photo-action" disabled={disabled || item.photos.length >= 10} aria-label="Добавить фото" onClick={() => inputRef.current?.click()}><Icon24AddCircle /></button><button type="button" className={`report-problem-photo-action${isEditingPhotos ? ' report-problem-photo-action--active' : ''}`} disabled={disabled} aria-label="Редактировать фотографии" aria-pressed={isEditingPhotos} onClick={() => setEditingPhotos((value) => !value)}><Icon24PenOutline /></button></div> : !disabled ? <button type="button" className="report-problem-photo-add" aria-label="Добавить фото" onClick={() => inputRef.current?.click()}><Icon24AddCircle /></button> : null}{item.photos.length ? <div className="report-problem-photo-list">{item.photos.map((photo, photoIndex) => <div className="report-problem-photo" key={photo}><img src={photo} alt={`Фото нового замечания ${photoIndex + 1}`} />{isEditingPhotos && !disabled ? <button type="button" aria-label={`Удалить фото ${photoIndex + 1}`} onClick={() => { onChange({ photos: item.photos.filter((value) => value !== photo) }); URL.revokeObjectURL(photo); }}><Icon12CancelCircleFillRed width={20} height={20} /></button> : null}</div>)}</div> : null}</div></div> : null}
     </div> : null}
   </li>;
-}
-
-function formatHistoryTime(date) {
-  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date).replace(',', '');
-}
-
-function formatRemarkDate(date) {
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(date).replace(',', ' в');
 }

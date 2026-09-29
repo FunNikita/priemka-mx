@@ -3,7 +3,7 @@ import { allPages, jsonRequest, request } from './residentApi';
 export async function loadChairmanHome(houseId) {
   const [requests, works] = await Promise.all([
     allPages(`/api/houses/${houseId}/join-requests`),
-    allPages(`/api/houses/${houseId}/works`),
+    allPages(`/api/houses/${houseId}/observations`, { tab: 'active' }),
   ]);
   return { requests: requests.items, works: works.items };
 }
@@ -22,6 +22,17 @@ export async function loadWorkForm(houseId) {
 
 export function createChairmanWork(houseId, input) {
   return request(`/api/houses/${houseId}/works`, jsonRequest('POST', input));
+}
+
+export async function createChairmanObservation(houseId, input, onCreated) {
+  const observation = await request(`/api/houses/${houseId}/observations`, jsonRequest('POST', { title: input.title, description: input.description, category: input.category }));
+  onCreated?.(observation.id);
+  await assignObservationExecutor(observation.id, { executorUserId: input.executorUserId, category: input.workflowCategory });
+  return observation;
+}
+
+export function assignObservationExecutor(observationId, input) {
+  return request(`/api/observations/${observationId}/executor`, jsonRequest('PUT', input));
 }
 
 export async function loadInspectionForm(houseId, category) {

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Icon24DismissOverlay } from '@vkontakte/icons';
+import { photoPreviewUrl } from '../common/photoPreviewUrl';
+import { PhotoGallery } from '../common/PhotoStrip';
 
 // Перенесённый паттерн DishImagePreview: миниатюра открывает полноэкранное фото.
-export function ImagePreview({ title, src, placeholder }) {
+export function ImagePreview({ title, src, photo, placeholder, onOpen }) {
   const [isOpen, setIsOpen] = useState(false);
 
   if (!src) {
@@ -10,14 +11,9 @@ export function ImagePreview({ title, src, placeholder }) {
   }
 
   return <>
-    <button type="button" className="media-preview__button" aria-label={`Открыть изображение: ${title}`} onClick={() => setIsOpen(true)}>
-      <img className="media-preview__image" src={src} alt={title} />
+    <button type="button" className="media-preview__button" aria-label={`Открыть изображение: ${title}`} onClick={onOpen ?? (() => setIsOpen(true))}>
+      <img className="media-preview__image" src={photoPreviewUrl(photo ?? src)} alt={title} />
     </button>
-    {isOpen ? <div className="image-modal-backdrop" role="presentation" onClick={() => setIsOpen(false)}>
-      <section className="image-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="image-modal__close" aria-label="Закрыть изображение" onClick={() => setIsOpen(false)}><Icon24DismissOverlay width={24} height={24} /></button>
-        <img className="image-modal__image" src={src} alt={title} />
-      </section>
-    </div> : null}
+    {isOpen && !onOpen ? <PhotoGallery photos={[photo ?? { url: src }]} title={title} onClose={() => setIsOpen(false)} /> : null}
   </>;
 }
