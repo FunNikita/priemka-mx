@@ -262,6 +262,9 @@ describe("business API", () => {
       const fresh = await app.inject({ method: "POST", url: `/api/observations/${id}/comments`, headers: auth, payload: { text: "Новый комментарий" } });
       expect(fresh.statusCode).toBe(201);
       expect(f.comments.at(-1)).toEqual(expect.objectContaining({ observationId: id, text: "Новый комментарий" }));
+      expect(f.activityEvents.some((event) => event.event === "OBSERVATION_COMMENT_ADDED" && event.observationId === id)).toBe(true);
+      for (const issueCount of [1, 2, 5]) f.activityEvents.push({ event: "INSPECTION_COMPLETED", metadata: { issueCount } });
+      for (const metadata of [{ role: "EXECUTOR" }, { role: "CHAIRMAN" }, null, "legacy", { role: "UNKNOWN" }]) f.activityEvents.push({ event: "DOCUMENT_CONFIRMED", metadata });
       const detail = await app.inject({ method: "GET", url: `/api/observations/${id}`, headers: auth });
       expect(detail.json().comments.map((comment: { text: string }) => comment.text)).toEqual(["Новый комментарий", "Старый комментарий"]);
       expect(detail.json().comments.map((comment: { author: unknown }) => comment.author)).toEqual([
@@ -269,7 +272,17 @@ describe("business API", () => {
         { type: "USER", displayName: "Макс Пользователь", photoUrl: "https://example.test/avatar.jpg" },
       ]);
       expect(f.comments.at(-1)).toEqual(expect.objectContaining({ authorTypeSnapshot: "USER", authorDisplayNameSnapshot: "Макс Пользователь" }));
-      expect(detail.json().history.map((event: { title: string }) => event.title)).toContain("Обращение создано");
+      expect(detail.json().history.map((event: { title: string }) => event.title)).toEqual([
+        "Обращение создано",
+        "Проверка завершена. Найдено 1 замечание",
+        "Проверка завершена. Найдено 2 замечания",
+        "Проверка завершена. Найдено 5 замечаний",
+        "Акт подтверждён исполнителем",
+        "Акт подтверждён председателем",
+        "Акт подтверждён",
+        "Акт подтверждён",
+        "Акт подтверждён",
+      ]);
     } finally { await app.close(); }
   });
 
@@ -438,8 +451,8 @@ describe("business API", () => {
       f.assignExecutor(1);
       expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).statusCode).toBe(200);
       const job = [...f.outboxJobs.values()].find((item) => item.accessKind === "WORK");
-      expect(job?.text).toBe("💼 Работа «Лифт» (№7) передана на проверку.");
-      expect(job?.text).not.toContain("Обращение:");
+      expect(job?.text).toBe("💼 Обращение «Лифт» передано на проверку.");
+      expect(job?.text).not.toContain("Работа");
     } finally { await app.close(); }
   });
 
@@ -626,7 +639,12 @@ describe("business API", () => {
       expect(f.blobs.size).toBe(1);
       const firstId = first.json().id as number;
       const secondId = second.json().id as number;
+      expect(f.media.get(firstId)!.blobId).toBe(f.media.get(secondId)!.blobId);
       expect(f.media.get(firstId)).toEqual(expect.objectContaining({ temporary: true, publicKey: null }));
+      f.media.get(secondId)!.publicKey = "temporaryphotokey123";
+      expect((await app.inject({ method: "GET", url: "/photo/temporaryphotokey123" })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/photo/unknownphotokey12345" })).statusCode).toBe(404);
+      f.media.get(secondId)!.publicKey = null;
       expect((await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Тест", description: "Описание", mediaIds: [999] } })).statusCode).toBe(400);
       f.media.get(secondId)!.ownerUserId = 2;
       expect((await app.inject({ method: "POST", url: "/api/works/7/comments", headers: auth, payload: { text: "", mediaIds: [secondId] } })).statusCode).toBe(400);
@@ -653,6 +671,7 @@ describe("business API", () => {
       const key = f.media.get(firstId)!.publicKey!;
       const original = await app.inject({ method: "GET", url: `/photo/${key}` });
       expect(original.statusCode).toBe(200);
+      expect(original.headers["content-type"]).toBe("image/png");
       expect(original.headers["cache-control"]).toBe("private, no-store");
       expect(original.headers["x-robots-tag"]).toBe("noindex, nofollow, noarchive, nosnippet");
       for (const query of ["?w=200&h=200", "?w=400&h=240&fit=cover", "?w=800&h=800&fit=contain"]) {
@@ -669,6 +688,43 @@ describe("business API", () => {
       f.media.get(secondId)!.expiresAt = new Date(0);
       expect(await cleanupExpiredMedia(f.db, new Date(), dir)).toEqual({ media: 1, blobs: 0 });
       expect(await readFile(join(dir, blob.storagePath))).toEqual(bytes);
+    } finally { await app.close(); delete process.env.MEDIA_DIR; }
+  });
+
+  it("accepts PNG, JPEG and WebP and rejects mismatched, unsupported, invalid and oversized uploads", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "priemka-media-formats-"));
+    tempDirs.push(dir);
+    process.env.MEDIA_DIR = dir;
+    const app = await appFor(fixture().db);
+    try {
+      const source = sharp({ create: { width: 32, height: 32, channels: 3, background: "blue" } });
+      const png = await source.clone().png().toBuffer();
+      const jpeg = await source.clone().jpeg().toBuffer();
+      const webp = await source.clone().webp().toBuffer();
+      for (const [bytes, mime] of [[png, "image/png"], [jpeg, "image/jpeg"], [webp, "image/webp"]] as const) {
+        expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(bytes, mime) })).statusCode).toBe(201);
+      }
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(png, "image/jpeg") })).statusCode).toBe(400);
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(png, "image/gif") })).statusCode).toBe(400);
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(Buffer.from("not an image"), "image/png") })).statusCode).toBe(400);
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(Buffer.alloc(10 * 1024 * 1024 + 1), "image/png") })).statusCode).toBe(413);
+    } finally { await app.close(); delete process.env.MEDIA_DIR; }
+  });
+
+  it("rejects expired temporary media on the business attach path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "priemka-expired-attach-"));
+    tempDirs.push(dir);
+    process.env.MEDIA_DIR = dir;
+    const f = fixture();
+    const app = await appFor(f.db);
+    try {
+      const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: "red" } }).png().toBuffer();
+      const upload = await app.inject({ method: "POST", url: "/api/media", ...multipartBody(bytes) });
+      expect(upload.statusCode).toBe(201);
+      f.media.get(upload.json().id)!.expiresAt = new Date(0);
+      const attach = await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Истёкшее фото", description: "Описание", mediaIds: [upload.json().id] } });
+      expect(attach.statusCode).toBe(400);
+      expect(f.media.get(upload.json().id)!.temporary).toBe(true);
     } finally { await app.close(); delete process.env.MEDIA_DIR; }
   });
 

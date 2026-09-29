@@ -130,6 +130,37 @@ export async function renderDocumentPdf(type: DocumentType, id: number, version:
       }
     }
   };
+  const inlinePhotos = async (group: { photos: string[] }, label: string) => {
+    const images = await Promise.all(group.photos.map((path) => preparePdfPhoto(path)));
+    let labeled = false;
+    doc.y += 7;
+    for (let offset = 0; offset < images.length;) {
+      const first = images[offset];
+      const second = images[offset + 1];
+      const pair = !!second && first.info.width / first.info.height <= 1.3 && second.info.width / second.info.height <= 1.3;
+      const row = pair ? [first, second] : [first];
+      const boxWidth = pair ? (width - 16) / 2 : Math.min(width - 24, 390);
+      const boxHeight = pair ? 265 : first.info.width / first.info.height > 1.3 ? 225 : 310;
+      const sizes = row.map(({ info }) => { const scale = Math.min(1, boxWidth / info.width, boxHeight / info.height); return { width: info.width * scale, height: info.height * scale }; });
+      const rowHeight = Math.max(...sizes.map((size) => size.height));
+      if (doc.y + rowHeight + 13 + (labeled ? 0 : 25) > bottom) { doc.addPage(); labeled = false; }
+      if (!labeled) {
+        doc.moveTo(left, doc.y).lineTo(left + width, doc.y).lineWidth(0.5).strokeColor("#cbd5e1").stroke();
+        doc.y += 5;
+        line(label, true, 10, 6);
+        labeled = true;
+      }
+      const top = doc.y;
+      row.forEach(({ data }, index) => {
+        const size = sizes[index];
+        const x = pair ? left + index * (boxWidth + 16) + (boxWidth - size.width) / 2 : left + (width - size.width) / 2;
+        doc.image(data, x, top + (rowHeight - size.height) / 2, { width: size.width, height: size.height });
+      });
+      doc.y = top + rowHeight + 13;
+      offset += row.length;
+    }
+    doc.y += 6;
+  };
 
   if (type === "ACCEPTANCE_ACT") {
     title(`АКТ ПРИЁМКИ № ${id}`);
@@ -154,20 +185,33 @@ export async function renderDocumentPdf(type: DocumentType, id: number, version:
     heading("РЕЗУЛЬТАТЫ ПРОВЕРКИ");
     const table = payload.checklist ?? payload.rows.map((row, index) => ({ order: index + 1, title: row.label, method: "VISUAL", result: row.value, comment: null }));
     const widths = [23, 175, 104, 94, width - 396];
+    const headers = ["№", "Критерий", "Метод проверки", "Результат", "Комментарий"];
     const cells = (values: string[], bold = false) => {
       const heights = values.map((value, index) => { doc.font(bold ? "Bold" : "Regular").fontSize(bold ? 8.5 : 9); return doc.heightOfString(value || "—", { width: widths[index] - 8, lineGap: 1 }); });
-      const h = Math.max(...heights) + 11; ensure(h);
+      const h = Math.max(...heights) + 11;
+      if (doc.y + h > bottom) { doc.addPage(); if (!bold) cells(headers, true); }
       const y = doc.y; let x = left;
       values.forEach((value, index) => { doc.rect(x, y, widths[index], h).lineWidth(0.5).strokeColor("#cbd5e1").stroke(); doc.font(bold ? "Bold" : "Regular").fontSize(bold ? 8.5 : 9).fillColor("#202124").text(value || "—", x + 4, y + 5, { width: widths[index] - 8, lineGap: 1 }); x += widths[index]; });
       doc.y = y + h;
     };
-    cells(["№", "Критерий", "Метод проверки", "Результат", "Комментарий"], true);
-    for (const row of table) cells([String(row.order), row.title, displayMethod(row.method), displayResult(row.result), row.comment ?? "—"]);
+    const matchedGroups = new Set<(typeof photoGroups)[number]>();
+    cells(headers, true);
+    let tablePage = doc.bufferedPageRange().count;
+    for (const row of table) {
+      if (doc.bufferedPageRange().count !== tablePage) cells(headers, true);
+      cells([String(row.order), row.title, displayMethod(row.method), displayResult(row.result), row.comment ?? "—"]);
+      tablePage = doc.bufferedPageRange().count;
+      for (const group of photoGroups) {
+        if (Number(/^Пункт\s+(\d+)\./u.exec(group.title)?.[1]) !== row.order || !group.photos.length) continue;
+        matchedGroups.add(group);
+        await inlinePhotos(group, `Фотографии к пункту ${row.order}`);
+      }
+    }
     heading("ИТОГ ПРОВЕРКИ");
     line(payload.summary);
     if (payload.issues?.length) { heading("ЗАМЕЧАНИЯ"); for (const item of payload.issues) line(`${item.title}: ${item.comment}`); }
     actor();
-    await photos(photoGroups);
+    await photos(photoGroups.filter((group) => !matchedGroups.has(group)));
     qrBlock();
   } else if (type === "REINSPECTION_REPORT") {
     title(`ОТЧЁТ О ПОВТОРНОЙ ПРОВЕРКЕ № ${id}`);
@@ -210,8 +254,20 @@ export async function renderDocumentPdf(type: DocumentType, id: number, version:
     title(`МОТИВИРОВАННЫЙ ОТКАЗ № ${id}`);
     line(`Дом: ${payload.house}`); line(`Работа: ${payload.work}`); line(`Исполнитель: ${payload.executor}`); line(`Дата: ${date(payload.createdAt)}`);
     heading("ОСНОВАНИЕ ОТКАЗА"); line(payload.summary);
-    if (payload.issues?.length) { heading("ЗАМЕЧАНИЯ"); for (const issue of payload.issues) line(`${issue.title}. ${issue.comment}. Проверка: ${date(issue.checkedAt)}`); }
-    actor(); await photos(photoGroups); qrBlock();
+    const matchedGroups = new Set<(typeof photoGroups)[number]>();
+    if (payload.issues?.length) {
+      heading("ЗАМЕЧАНИЯ");
+      for (const [index, issue] of payload.issues.entries()) {
+        heading(`ЗАМЕЧАНИЕ ${index + 1}`);
+        line(`${issue.title}. ${issue.comment}. Проверка: ${date(issue.checkedAt)}`);
+        for (const group of photoGroups) {
+          if (Number(/^Замечание\s+(\d+)\./u.exec(group.title)?.[1]) !== index + 1 || !group.photos.length) continue;
+          matchedGroups.add(group);
+          await inlinePhotos(group, `Фотографии к замечанию ${index + 1}`);
+        }
+      }
+    }
+    actor(); await photos(photoGroups.filter((group) => !matchedGroups.has(group))); qrBlock();
   }
 
   const pages = doc.bufferedPageRange().count;
