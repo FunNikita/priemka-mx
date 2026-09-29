@@ -37,5 +37,10 @@ if [[ -z "$public_base_url" ]]; then
   exit 1
 fi
 
-docker compose exec -T api node dist/src/scripts/ensure-max-webhook.js "$public_base_url"
-echo "MAX webhook настроен"
+max_outbound_enabled="${MAX_OUTBOUND_ENABLED:-$(sed -nE 's/^MAX_OUTBOUND_ENABLED=(true|false)[[:space:]]*$/\1/p' .env | tail -n 1)}"
+if [[ "$max_outbound_enabled" == "false" ]]; then
+  echo "MAX outbound отключён; настройка webhook пропущена"
+else
+  docker compose exec -T api node dist/src/scripts/ensure-max-webhook.js "$public_base_url"
+  echo "MAX webhook настроен"
+fi

@@ -10,7 +10,7 @@ const now = new Date("2026-09-24T16:00:00.000Z");
 
 async function checkMe(profile: Parameters<typeof createPostmanInitData>[1], initData?: string) {
   const app = await createApp({
-    config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
+    config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true },
     now: () => now,
     logger: false,
     userRepository: { isReady: async () => true, upsertFromMax: async () => ({ id: 1, isAdmin: false }) },

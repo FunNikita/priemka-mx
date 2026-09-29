@@ -1,6 +1,802 @@
-# TODO: конфигурация обязательных проверок собственного API для кейса «Умный город».
-# Это не OpenAPI: актуальная схема методов генерируется в docs/openapi.json.
-# Официальный кейс перечисляет сведения, необходимые для проверок, но не задаёт
-# точные имена полей YAML. Заполнить после определения бизнес-endpoint'ов и
-# получения формата конфигурации от платформы оценки.
-{}
+schemaVersion: "1.0"
+solution:
+  name: Приёмка
+api:
+  baseUrl: https://eval-priemka.ithube.ru
+  openapi: ./openapi.json
+  defaultHeaders:
+    Accept: application/json
+checks:
+
+  - id: ready
+    name: Проверить готовность API
+    method: GET
+    path: /api/ready
+    role: public
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - status
+    timeoutMs: 5000
+
+  - id: demo-house
+    name: Найти демо-дом
+    method: GET
+    path: /api/houses
+    role: RESIDENT
+    request:
+      query:
+        q: 'Демо: ул. Примерная, д. 12'
+        limit: 20
+    extract:
+      houseId: $.items[0].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - items
+        - page
+        - limit
+        - total
+    timeoutMs: 5000
+
+  - id: executor
+    name: Найти активного исполнителя
+    method: GET
+    path: /api/houses/{houseId}/members
+    role: CHAIRMAN
+    dependsOn:
+      - demo-house
+    request:
+      path:
+        houseId: ${houseId}
+      query:
+        role: EXECUTOR
+    extract:
+      executorUserId: $.items[0].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - items
+    timeoutMs: 5000
+
+  - id: inspector
+    name: Найти активного члена совета
+    method: GET
+    path: /api/houses/{houseId}/members
+    role: CHAIRMAN
+    dependsOn:
+      - demo-house
+    request:
+      path:
+        houseId: ${houseId}
+      query:
+        role: COUNCIL_MEMBER
+    extract:
+      inspectorUserId: $.items[0].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - items
+    timeoutMs: 5000
+
+  - id: template
+    name: Найти шаблон чек-листа категории «Освещение» (LIGHTING)
+    method: GET
+    path: /api/checklist-templates
+    role: CHAIRMAN
+    request:
+      query:
+        category: LIGHTING
+    extract:
+      checklistTemplateId: $.items[0].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - items
+    timeoutMs: 5000
+
+  - id: create-observation
+    name: Создать новое обращение
+    method: POST
+    path: /api/houses/{houseId}/observations
+    role: RESIDENT
+    dependsOn:
+      - demo-house
+    request:
+      path:
+        houseId: ${houseId}
+      headers:
+        Content-Type: application/json
+      body:
+        category: LIGHTING
+        title: 'API-проверка: приёмка работы'
+        description: Синтетическое обращение для воспроизводимой проверки API
+    extract:
+      observationId: $.id
+    repeatable: false
+    expected:
+      statusCodes:
+        - 201
+      contentType: application/json
+      requiredFields:
+        - id
+        - status
+    timeoutMs: 5000
+    description: >-
+      Каждый прогон создаёт новое синтетическое обращение с новым ID.
+      Публичного API для удаления обращений нет; проверка выполняется
+      в изолированной базе EVAL.
+
+  - id: assign-executor
+    name: Назначить исполнителя и создать работу (Work)
+    method: PUT
+    path: /api/observations/{observationId}/executor
+    role: CHAIRMAN
+    dependsOn:
+      - create-observation
+      - executor
+    request:
+      path:
+        observationId: ${observationId}
+      headers:
+        Content-Type: application/json
+      body:
+        executorUserId: ${executorUserId}
+    extract:
+      workId: $.id
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+    timeoutMs: 5000
+
+  - id: submit-work
+    name: Передать работу (Work) на проверку
+    method: POST
+    path: /api/works/{workId}/submit-for-inspection
+    role: EXECUTOR
+    dependsOn:
+      - assign-executor
+    request:
+      path:
+        workId: ${workId}
+      headers:
+        Content-Type: application/json
+      body: {}
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - submittedForInspectionAt
+    timeoutMs: 5000
+
+  - id: assign-inspector
+    name: Назначить одного проверяющего
+    method: POST
+    path: /api/works/{workId}/inspections
+    role: CHAIRMAN
+    dependsOn:
+      - submit-work
+      - inspector
+      - template
+    request:
+      path:
+        workId: ${workId}
+      headers:
+        Content-Type: application/json
+      body:
+        checklistTemplateId: ${checklistTemplateId}
+        assigneeUserId: ${inspectorUserId}
+    extract:
+      assignmentId: $.id
+    repeatable: false
+    expected:
+      statusCodes:
+        - 201
+      contentType: application/json
+      requiredFields:
+        - id
+    timeoutMs: 5000
+
+  - id: inspection-detail
+    name: Получить чек-лист проверки
+    method: GET
+    path: /api/inspection-assignments/{assignmentId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - assign-inspector
+    request:
+      path:
+        assignmentId: ${assignmentId}
+    extract:
+      itemId1: $.checklist[0].id
+      itemId2: $.checklist[1].id
+      itemId3: $.checklist[2].id
+      itemId4: $.checklist[3].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - status
+        - work
+        - inspection
+        - checklist
+        - actions
+    timeoutMs: 5000
+
+  - id: pass-item-1
+    name: Отметить пункт 1 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentId}
+        itemId: ${itemId1}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: pass-item-2
+    name: Отметить пункт 2 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentId}
+        itemId: ${itemId2}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: pass-item-3
+    name: Отметить пункт 3 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentId}
+        itemId: ${itemId3}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: pass-item-4
+    name: Отметить пункт 4 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentId}
+        itemId: ${itemId4}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: complete-inspection
+    name: Завершить проверку без замечаний
+    method: POST
+    path: /api/inspection-assignments/{assignmentId}/complete
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - pass-item-1
+      - pass-item-2
+      - pass-item-3
+      - pass-item-4
+    request:
+      path:
+        assignmentId: ${assignmentId}
+      headers:
+        Content-Type: application/json
+      body: {}
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - status
+    timeoutMs: 5000
+
+  - id: observation-with-act
+    name: Получить сформированный акт приёмки (Acceptance Act)
+    method: GET
+    path: /api/observations/{observationId}
+    role: CHAIRMAN
+    dependsOn:
+      - complete-inspection
+    request:
+      path:
+        observationId: ${observationId}
+    extract:
+      actId: $.workflow.documents[?(@.type=='ACCEPTANCE_ACT')].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - status
+        - workflow
+        - actions
+      bodySchema:
+        type: object
+        properties:
+          workflow:
+            type: object
+            properties:
+              documents:
+                type: array
+                contains:
+                  type: object
+                  required:
+                    - id
+                    - type
+                  properties:
+                    type:
+                      const: ACCEPTANCE_ACT
+    timeoutMs: 5000
+
+  - id: executor-confirm
+    name: Исполнитель подтверждает акт приёмки
+    method: POST
+    path: /api/documents/{documentId}/confirm
+    role: EXECUTOR
+    dependsOn:
+      - observation-with-act
+    request:
+      path:
+        documentId: ${actId}
+      headers:
+        Content-Type: application/json
+      body: {}
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - status
+    timeoutMs: 5000
+
+  - id: chairman-confirm
+    name: Председатель подтверждает акт приёмки
+    method: POST
+    path: /api/documents/{documentId}/confirm
+    role: CHAIRMAN
+    dependsOn:
+      - executor-confirm
+    request:
+      path:
+        documentId: ${actId}
+      headers:
+        Content-Type: application/json
+      body: {}
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - status
+    timeoutMs: 5000
+
+  - id: accepted
+    name: Проверить итоговый статус «Принято» (ACCEPTED)
+    method: GET
+    path: /api/observations/{observationId}
+    role: RESIDENT
+    dependsOn:
+      - chairman-confirm
+    request:
+      path:
+        observationId: ${observationId}
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      bodySchema:
+        type: object
+        properties:
+          status:
+            const: ACCEPTED
+      requiredFields:
+        - id
+        - status
+        - workflow
+        - actions
+    timeoutMs: 5000
+
+  - id: create-fail-observation
+    name: Создать обращение для сценария с замечанием (FAIL)
+    method: POST
+    path: /api/houses/{houseId}/observations
+    role: RESIDENT
+    dependsOn:
+      - accepted
+    request:
+      path:
+        houseId: ${houseId}
+      headers:
+        Content-Type: application/json
+      body:
+        category: LIGHTING
+        title: 'API-проверка: замечание по работе'
+        description: Отдельная синтетическая проверка появления замечания
+    extract:
+      observationFailId: $.id
+    repeatable: false
+    expected:
+      statusCodes:
+        - 201
+      contentType: application/json
+      requiredFields:
+        - id
+        - status
+    timeoutMs: 5000
+    description: >-
+      Каждый прогон создаёт новое синтетическое обращение с новым ID.
+      Публичного API для удаления обращений нет; проверка выполняется
+      в изолированной базе EVAL.
+
+  - id: assign-fail-executor
+    name: Назначить исполнителя по второму обращению
+    method: PUT
+    path: /api/observations/{observationId}/executor
+    role: CHAIRMAN
+    dependsOn:
+      - create-fail-observation
+    request:
+      path:
+        observationId: ${observationFailId}
+      headers:
+        Content-Type: application/json
+      body:
+        executorUserId: ${executorUserId}
+    extract:
+      workFailId: $.id
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+    timeoutMs: 5000
+
+  - id: submit-fail-work
+    name: Передать вторую работу на проверку
+    method: POST
+    path: /api/works/{workId}/submit-for-inspection
+    role: EXECUTOR
+    dependsOn:
+      - assign-fail-executor
+    request:
+      path:
+        workId: ${workFailId}
+      headers:
+        Content-Type: application/json
+      body: {}
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - submittedForInspectionAt
+    timeoutMs: 5000
+
+  - id: assign-fail-inspector
+    name: Назначить проверяющего второй работы
+    method: POST
+    path: /api/works/{workId}/inspections
+    role: CHAIRMAN
+    dependsOn:
+      - submit-fail-work
+    request:
+      path:
+        workId: ${workFailId}
+      headers:
+        Content-Type: application/json
+      body:
+        checklistTemplateId: ${checklistTemplateId}
+        assigneeUserId: ${inspectorUserId}
+    extract:
+      assignmentFailId: $.id
+    repeatable: false
+    expected:
+      statusCodes:
+        - 201
+      contentType: application/json
+      requiredFields:
+        - id
+    timeoutMs: 5000
+
+  - id: fail-inspection-detail
+    name: Получить чек-лист второй проверки
+    method: GET
+    path: /api/inspection-assignments/{assignmentId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - assign-fail-inspector
+    request:
+      path:
+        assignmentId: ${assignmentFailId}
+    extract:
+      failItemId1: $.checklist[0].id
+      failItemId2: $.checklist[1].id
+      failItemId3: $.checklist[2].id
+      failItemId4: $.checklist[3].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - status
+        - work
+        - inspection
+        - checklist
+        - actions
+    timeoutMs: 5000
+
+  - id: answer-fail-1
+    name: Отметить пункт 1 как «Не пройдено» (FAIL)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - fail-inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentFailId}
+        itemId: ${failItemId1}
+      headers:
+        Content-Type: application/json
+      body:
+        result: FAIL
+        comment: 'Демо: светильник не включается'
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: answer-fail-2
+    name: Отметить пункт 2 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - fail-inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentFailId}
+        itemId: ${failItemId2}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: answer-fail-3
+    name: Отметить пункт 3 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - fail-inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentFailId}
+        itemId: ${failItemId3}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: answer-fail-4
+    name: Отметить пункт 4 как «Пройдено» (PASS)
+    method: PUT
+    path: /api/inspection-assignments/{assignmentId}/answers/{itemId}
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - fail-inspection-detail
+    request:
+      path:
+        assignmentId: ${assignmentFailId}
+        itemId: ${failItemId4}
+      headers:
+        Content-Type: application/json
+      body:
+        result: PASS
+    repeatable: false
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - id
+        - result
+        - comment
+        - mediaIds
+    timeoutMs: 5000
+
+  - id: complete-fail-inspection
+    name: Завершить проверку с замечанием
+    method: POST
+    path: /api/inspection-assignments/{assignmentId}/complete
+    role: COUNCIL_MEMBER
+    dependsOn:
+      - answer-fail-1
+      - answer-fail-2
+      - answer-fail-3
+      - answer-fail-4
+    request:
+      path:
+        assignmentId: ${assignmentFailId}
+      headers:
+        Content-Type: application/json
+      body: {}
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - status
+    timeoutMs: 5000
+
+  - id: issue-created
+    name: Проверить создание замечания (Issue)
+    method: GET
+    path: /api/works/{workId}/issues
+    role: EXECUTOR
+    dependsOn:
+      - complete-fail-inspection
+    request:
+      path:
+        workId: ${workFailId}
+    extract:
+      issueId: $.items[0].id
+    repeatable: true
+    expected:
+      statusCodes:
+        - 200
+      contentType: application/json
+      requiredFields:
+        - items
+        - page
+        - limit
+        - total
+      bodySchema:
+        type: object
+        properties:
+          items:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required:
+                - id
+                - status
+              properties:
+                status:
+                  const: OPEN
+    timeoutMs: 5000
+    description: >-
+      После одного ответа FAIL создаётся отдельное открытое замечание.
+      Устранение требует загрузки фотографии через multipart и проверяется
+      в основном сценарии MAX.

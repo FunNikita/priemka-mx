@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "vitest run src",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint src --max-warnings=0"
   },
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^27.4.0"
   }
 }

@@ -1,0 +1,11 @@
+.document-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.document-row__link { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; color: inherit; text-decoration: none; }
+.document-row__format { display: inline-flex; align-items: center; justify-content: center; position: relative; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 10px; color: var(--text-secondary); background: var(--surface-secondary, rgba(127, 127, 127, .14)); }
+.document-row__name { display: flex; flex-direction: column; min-width: 0; gap: 2px; overflow: hidden; }
+.document-row__name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-row__name small { color: var(--text-secondary); font-size: 12px; }
+.document-row__download { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; color: var(--text-secondary); border-radius: 8px; }
+.document-row__download:hover { background: var(--surface-secondary, rgba(127, 127, 127, .14)); }
+.document-row__download svg { width: 22px; height: 22px; }
+.document-row__action { flex: 0 0 auto; }
+.document-row__error { flex-basis: 100%; color: #ff3650; font-size: 12px; }

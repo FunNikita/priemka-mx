@@ -1,9 +1,11 @@
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Button } from '../components/ui/LegacyButton';
-import { Icon20Check, Icon20ReplayOutline, Icon24AddCircle, Icon24Dismiss, Icon24PenOutline } from '@vkontakte/icons';
+import { Icon12CancelCircleFillRed, Icon20Check, Icon20ReplayOutline, Icon24AddCircle, Icon24PenOutline } from '@vkontakte/icons';
 import { useEffect, useRef, useState } from 'react';
 
 import { PageHeader } from '../components/layout/PageHeader';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
+import { photoPreviewUrl } from '../components/common/photoPreviewUrl';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { AppSelect } from '../components/ui/AppSelect';
 import { jsonRequest, request, uploadPhoto } from './residentApi';
@@ -61,8 +63,9 @@ export function ReportProblemPage({ onBack, houseId, houses = [], onAccessChange
     try {
       const mediaIds = photos.map((photo) => photo.mediaId);
       await request(`/api/houses/${address}/observations`, jsonRequest('POST', { category: type, title: title.trim(), description: description.trim(), mediaIds }));
+      hapticSuccess();
       setSent(true);
-    } catch (failure) { setError(failure.message); if (failure.status === 409) { try { await onAccessChanged?.(); } catch { /* Keep the original conflict message. */ } } }
+    } catch (failure) { hapticError(); setError(failure.message); if (failure.status === 409) { try { await onAccessChanged?.(); } catch { /* Keep the original conflict message. */ } } }
     finally { setSending(false); }
   };
 
@@ -81,7 +84,7 @@ export function ReportProblemPage({ onBack, houseId, houses = [], onAccessChange
         <label className="report-problem-field"><Typography.Label>Название проблемы</Typography.Label><input value={title} maxLength={80} placeholder="Например, не работает свет у входа" onChange={(event) => setTitle(event.target.value)} /></label>
         <div className="report-problem-description-photos"><label className="report-problem-field report-problem-field--description"><Typography.Label>Описание</Typography.Label><textarea value={description} maxLength={500} rows="3" placeholder="Расскажите подробнее, где и когда возникла проблема" onChange={(event) => setDescription(event.target.value)} /></label>
           <div className="report-problem-photos"><Typography.Title variant="small-strong">Фотографии</Typography.Title><input ref={fileInputRef} className="report-problem-photos__input" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={addPhotos} />
-            <div className={`report-problem-photos__list${photos.length ? ' report-problem-photos__list--with-actions' : ''}`}>{photos.length ? <div className="report-problem-photo-actions"><button type="button" className="report-problem-photo-action" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 20} aria-label="Добавить фотографию"><Icon24AddCircle /></button><button type="button" className={`report-problem-photo-action${isEditingPhotos ? ' report-problem-photo-action--active' : ''}`} onClick={() => setEditingPhotos((value) => !value)} aria-label="Редактировать фотографии" aria-pressed={isEditingPhotos}><Icon24PenOutline /></button></div> : null}{photos.map((photo, index) => <div key={photo.id} className="report-problem-photo">{photo.status === 'uploaded' ? <img src={photo.url} alt={`Фото проблемы ${index + 1}`} /> : photo.status === 'error' ? <button type="button" className="report-problem-photo__retry" aria-label={`Повторить загрузку фото ${index + 1}`} onClick={() => setPhotos((items) => items.map((item) => item.id === photo.id ? { ...item, status: 'queued' } : item))}><Icon20ReplayOutline /></button> : <LoadingSpinner />}{isEditingPhotos ? <button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => removePhoto(photo.id)}><Icon24Dismiss width={16} height={16} /></button> : null}</div>)}{!photos.length ? <button type="button" className="report-problem-photo-add" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 20} aria-label="Добавить фотографию"><Icon24AddCircle /></button> : null}</div>
+            <div className={`report-problem-photos__list${photos.length ? ' report-problem-photos__list--with-actions' : ''}`}>{photos.length ? <div className="report-problem-photo-actions"><button type="button" className="report-problem-photo-action" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 20} aria-label="Добавить фотографии к комментарию"><Icon24AddCircle /></button><button type="button" className={`report-problem-photo-action${isEditingPhotos ? ' report-problem-photo-action--active' : ''}`} onClick={() => setEditingPhotos((value) => !value)} aria-label="Редактировать фотографии комментария" aria-pressed={isEditingPhotos}><Icon24PenOutline /></button></div> : null}{photos.map((photo, index) => <div key={photo.id} className="report-problem-photo">{photo.status === 'uploaded' ? <img src={photoPreviewUrl(photo)} alt={`Фото проблемы ${index + 1}`} /> : photo.status === 'error' ? <button type="button" className="report-problem-photo__retry" aria-label={`Повторить загрузку фото ${index + 1}`} onClick={() => setPhotos((items) => items.map((item) => item.id === photo.id ? { ...item, status: 'queued' } : item))}><Icon20ReplayOutline /></button> : <LoadingSpinner />}<button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => removePhoto(photo.id)}><Icon12CancelCircleFillRed width={20} height={20} /></button></div>)}{!photos.length ? <button type="button" className="report-problem-photo-add" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 20} aria-label="Добавить фотографии к комментарию"><Icon24AddCircle /></button> : null}</div>
           </div>
         </div>
         {error ? <Typography.Body role="alert">{error}</Typography.Body> : null}

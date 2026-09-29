@@ -1,10 +1,9 @@
-import { Icon28HomeOutline, Icon28ListCheckOutline, Icon28UserCircleOutline, Icon28WriteOutline } from '@vkontakte/icons';
+import { Icon28HomeOutline, Icon28UserCircleOutline, Icon28WriteOutline } from '@vkontakte/icons';
 
 import './BottomTabBar.css';
 
 const tabs = [
   { id: 'home', label: 'Главная', icon: Icon28HomeOutline },
-  { id: 'inspections', label: 'Проверки', icon: Icon28ListCheckOutline },
   { id: 'works', label: 'События', icon: Icon28WriteOutline },
   { id: 'admin', label: 'Админка', icon: Icon28UserCircleOutline },
 ];
@@ -12,7 +11,7 @@ const tabs = [
 export function BottomTabBar({ activeTab, onChange, role = 'resident', isAdmin = false }) {
   const visibleTabs = tabs.filter((tab) => {
     if (tab.id === 'admin') return isAdmin;
-    if (tab.id === 'inspections') return role === 'council-member';
+    if (tab.id === 'works' && role === 'executor') return false;
     return true;
   });
   return (

@@ -1,19 +1,15 @@
-# Подготовка развёртывания
+# Развёртывание
 
-PROD обычно развёртывается из `main`, DEV — из `backend`. Конкретные адреса, SSH-параметры и абсолютные пути окружений хранятся только локально в игнорируемом `docs/DEPLOY.local.md`.
+`push backend` запускает проверки и автоматическое развёртывание DEV. `push main` так же обновляет PROD. EVAL запускается вручную через workflow **Deploy EVAL** с обязательным полным commit SHA. Push никогда не обновляет EVAL. Ветка `frontend` не обновляет DEV автоматически.
 
-Для каждого окружения нужен свой `.env`, `APP_PORT` и `COMPOSE_PROJECT_NAME` (`priemka-prod` или `priemka-dev`). FastPanel проксирует HTTPS на соответствующий `127.0.0.1:${APP_PORT}`. MySQL доступен только внутри сети Compose. Имена проектов разделяют volumes базы, медиа и документов.
+Каждое окружение имеет собственные `.env`, `COMPOSE_PROJECT_NAME`, свободный `APP_PORT`, MySQL и volumes для базы, media, документов и логов. MySQL доступен только сети Compose; API публикуется лишь на `127.0.0.1:${APP_PORT}`. HTTPS reverse proxy направляется на этот loopback адрес. Точные адреса, SSH-параметры, серверные пути и порты находятся только в локальном `docs/DEPLOY.local.md`.
 
-Планируемая цепочка: push `backend` → проверки → GitHub Actions → передача файлов по SSH в каталог DEV → `scripts/deploy-compose.sh` → `/api/ready`. Для `main` та же цепочка ведёт в PROD. GitHub Actions workflow и доступ к серверу будут настроены отдельно. Ветка `frontend` не развёртывается в DEV автоматически.
+Workflow EVAL проверяет указанный commit (Node 24, `npm ci`, Prisma generate, lint, typecheck, tests, build), синхронизирует файлы и запускает `scripts/deploy-compose.sh`, seed и readiness checks. Для SSH transport он использует существующий GitHub Environment `dev`; каталог назначения жёстко задан отдельно от DEV. GitHub Environment `prod` и его secrets не меняются.
 
-Скрипт запускается в уже подготовленном checkout или release directory. Он проверяет `.env` и конфигурацию Compose, собирает и запускает сервисы, затем ждёт readiness. Runtime API работает от непривилегированного пользователя `node`. Скрипт не меняет Git и не удаляет volumes.
+На EVAL нужны синтетические пользователи и `MAX_INIT_DATA_MAX_AGE_SECONDS=4320000` (50 суток). `MAX_OUTBOUND_ENABLED=false` отключает регистрацию webhook при deploy и polling BotOutbox. Проверка подписанного initData локально по настоящему MAX bot token остаётся включённой. DEV/PROD без переменной сохраняют `MAX_OUTBOUND_ENABLED=true` и прежнее поведение. Не копируйте реальные данные PROD в EVAL.
 
-Если volumes медиа и документов существовали до перехода runtime-контейнера с root на `node`, файлы в них могут остаться во владении root. Перед первым обновлением существующего окружения проверьте владельца и возможность записи для `node`; если запись недоступна, один раз безопасно исправьте ownership без удаления volumes.
+Скрипт запускается в подготовленном каталоге с `.env`: проверяет Compose, собирает контейнеры, ждёт `/api/ready`, затем на окружениях с разрешённым outbound настраивает webhook. Runtime API работает от пользователя `node`. Скрипт не меняет Git и не удаляет volumes.
 
-Перед применением migration `20260926000000_mvp_role_workflow` выполните `scripts/preflight-document-confirmations.sh` при запущенном сервисе MySQL и корректном Compose-окружении. Скрипт выполняет read-only запрос из `scripts/preflight-document-confirmations.sql`, завершает работу с ошибкой при дубликатах и не выводит пароль. Результат запроса должен содержать **0 строк**. Если строки есть, остановите обновление и разберите дубликаты вручную; migration не удаляет и не исправляет данные автоматически. На новой пустой БД, где таблицы ещё нет, preflight не нужен.
+Перед миграцией `20260926000000_mvp_role_workflow` в существующей БД запустите `scripts/preflight-document-confirmations.sh` при работающем MySQL. Read-only запрос должен вернуть **0 строк**. На новой пустой БД preflight не требуется. Не применяйте `prisma migrate reset` к развёрнутому окружению.
 
-`MAX_BOT_NAME` обязателен и проверяется при старте приложения. Имя должно соответствовать правилам MAX: 5–64 символа, латинские буквы, цифры и `_`.
-
-Закрытый тест включается только явным `PREVIEW_ACCESS_REQUIRED=true`; пример и default оставлены `false`. Перед включением добавьте подписанный MAX ID первого администратора в таблицу `PreviewAccess` через локальную административную процедуру БД (`maxUserId`, `enabled=true`, `updatedAt=NOW(3)`). Затем admin API может добавлять остальные ID. Системный администратор без записи PreviewAccess также получает `403`.
-
-`BOT_TIME_ZONE` по умолчанию `Europe/Moscow`. Дополнительный JSONL журнал настраивается через `APP_LOG_DIR` и `LOG_RETENTION_DAYS`; в Compose он хранится в отдельном volume. Правила формата, IP и ротации описаны в [LOGGING.md](LOGGING.md). `TRUSTED_PROXY_IP` задавайте только после проверки фактического адреса соединения от FastPanel/Docker gateway; пустое значение сохраняет socket IP и не доверяет `X-Forwarded-For`.
+`MAX_BOT_NAME` обязателен: 5–64 латинских букв, цифр и `_`. `PREVIEW_ACCESS_REQUIRED=true` включает отдельный gate после проверки подписи MAX; даже администратору нужна запись PreviewAccess. `TRUSTED_PROXY_IP` задавайте только после проверки фактического IP reverse proxy. `BOT_TIME_ZONE` по умолчанию `Europe/Moscow`; JSONL логи и ротация описаны в [LOGGING.md](LOGGING.md).

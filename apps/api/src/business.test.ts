@@ -166,7 +166,7 @@ function fixture() {
 }
 
 async function appFor(db: PrismaClient, isAdmin = false, now?: () => Date, allowSelfRoleSwitch = false) {
-  return createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin }) }, businessDb: db, now, logger: false, staticRoot: "/nonexistent-priemka-static" });
+  return createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin }) }, businessDb: db, now, logger: false, staticRoot: "/nonexistent-priemka-static" });
 }
 
 function multipartBody(bytes: Buffer, mimeType = "image/png") {
