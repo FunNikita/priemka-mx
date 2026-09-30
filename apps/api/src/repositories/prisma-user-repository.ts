@@ -1,12 +1,14 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../../generated/prisma/client.js";
 
+import { autoEnrollDemoResident } from "../demo-auto-enroll.js";
+
 import type { UserIdentity, UserRepository, UpsertMaxUserInput } from "./user-repository.js";
 
 export class PrismaUserRepository implements UserRepository {
   readonly prisma: PrismaClient;
 
-  constructor() {
+  constructor(private readonly demoAutoEnrollHouseAddress?: string) {
     const url = new URL(requiredEnv("DATABASE_URL"));
     this.prisma = new PrismaClient({
       adapter: new PrismaMariaDb({
@@ -39,7 +41,9 @@ export class PrismaUserRepository implements UserRepository {
       lastAuthDate: new Date(authDate * 1000),
       lastSeenAt: seenAt,
     };
-    return this.prisma.user.upsert({ where: { maxUserId: user.id }, create: { maxUserId: user.id, ...data }, update: data, select: { id: true, isAdmin: true } });
+    const identity = await this.prisma.user.upsert({ where: { maxUserId: user.id }, create: { maxUserId: user.id, ...data }, update: data, select: { id: true, isAdmin: true } });
+    await autoEnrollDemoResident(this.prisma, identity.id, this.demoAutoEnrollHouseAddress);
+    return identity;
   }
 
   async close(): Promise<void> {

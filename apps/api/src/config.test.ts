@@ -9,6 +9,7 @@ const originalBotName = process.env.MAX_BOT_NAME;
 const originalSelfRoleSwitch = process.env.ALLOW_SELF_ROLE_SWITCH;
 const originalPreview = process.env.PREVIEW_ACCESS_REQUIRED;
 const originalTimeZone = process.env.BOT_TIME_ZONE;
+const originalOutbound = process.env.MAX_OUTBOUND_ENABLED;
 
 afterEach(() => {
   if (original === undefined) delete process.env.MAX_INIT_DATA_MAX_AGE_SECONDS;
@@ -23,6 +24,21 @@ afterEach(() => {
   else process.env.PREVIEW_ACCESS_REQUIRED = originalPreview;
   if (originalTimeZone === undefined) delete process.env.BOT_TIME_ZONE;
   else process.env.BOT_TIME_ZONE = originalTimeZone;
+  if (originalOutbound === undefined) delete process.env.MAX_OUTBOUND_ENABLED;
+  else process.env.MAX_OUTBOUND_ENABLED = originalOutbound;
+});
+
+describe("MAX_OUTBOUND_ENABLED", () => {
+  it("defaults to true and accepts only explicit booleans", () => {
+    process.env.MAX_BOT_TOKEN = "test-token";
+    process.env.MAX_BOT_NAME = "PriemkaDemoBot";
+    delete process.env.MAX_OUTBOUND_ENABLED;
+    expect(getConfig().maxOutboundEnabled).toBe(true);
+    process.env.MAX_OUTBOUND_ENABLED = "false";
+    expect(getConfig().maxOutboundEnabled).toBe(false);
+    process.env.MAX_OUTBOUND_ENABLED = "invalid";
+    expect(() => getConfig()).toThrow("MAX_OUTBOUND_ENABLED must be true or false");
+  });
 });
 
 describe("preview and bot time zone", () => {
@@ -79,4 +95,33 @@ describe("MAX_BOT_NAME", () => {
     process.env.MAX_BOT_NAME = "PriemkaDemoBot";
     expect(getConfig().botName).toBe("PriemkaDemoBot");
   });
+});
+
+it("normalizes the optional demo address and rejects oversized configuration", () => {
+  const before = process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS;
+  process.env.MAX_BOT_TOKEN = "test-token";
+  process.env.MAX_BOT_NAME = "PriemkaDemoBot";
+  try {
+    delete process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS;
+    expect(getConfig().demoAutoEnrollHouseAddress).toBeUndefined();
+    process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = "  ";
+    expect(getConfig().demoAutoEnrollHouseAddress).toBeUndefined();
+    process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = "  Exact house  ";
+    expect(getConfig().demoAutoEnrollHouseAddress).toBe("Exact house");
+    process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = "x".repeat(513);
+    expect(() => getConfig()).toThrow("at most 512");
+  } finally {
+    if (before === undefined) delete process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS;
+    else process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = before;
+  }
+});
+
+it("defaults demo auto-approval to false and accepts only boolean values", () => {
+  const before = process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS;
+  process.env.MAX_BOT_TOKEN = "test-token"; process.env.MAX_BOT_NAME = "PriemkaDemoBot";
+  try {
+    delete process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS; expect(getConfig().demoAutoApproveJoinRequests).toBe(false);
+    for (const value of ["false", "true"]) { process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS = value; expect(getConfig().demoAutoApproveJoinRequests).toBe(value === "true"); }
+    process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS = "yes"; expect(() => getConfig()).toThrow("must be true or false");
+  } finally { if (before === undefined) delete process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS; else process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS = before; }
 });

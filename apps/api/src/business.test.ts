@@ -70,7 +70,7 @@ function fixture() {
     houseMembership: {
       findUnique: async ({ where }: { where: { houseId_userId: { houseId: number; userId: number } } }) => hasMembership && where.houseId_userId.houseId === 1 ? { userId: where.houseId_userId.userId, role: role === "CHAIRMAN" && where.houseId_userId.userId !== 1 ? otherCandidateRole : role, status, executorCompanyName: company, user: { id: where.houseId_userId.userId, firstName: "Макс", lastName: "Пользователь" }, createdAt: new Date("2026-09-23T00:00:00Z") } : null,
       findFirst: async () => hasMembership && status === "ACTIVE" ? { id: 1 } : null,
-      findMany: async () => hasMembership ? [{ houseId: 1, house, role, status, joinedVia: "ADMIN", executorCompanyName: company }] : [],
+      findMany: async () => hasMembership ? [{ houseId: 1, house: { ...house, chat }, role, status, joinedVia: "ADMIN", executorCompanyName: company }] : [],
     },
     house: { findUniqueOrThrow: async () => ({ ...house, chat }), findUnique: async ({ where }: { where: { id: number } }) => where.id === 1 ? { ...house, chat } : null },
     houseObject: { findFirst: async () => null },
@@ -147,9 +147,14 @@ function fixture() {
       findMany: async ({ where, include }: { where: Parameters<typeof matchesObservation>[1]; include?: { subscriptions?: { where: { userId: number } } } }) => observations.filter((item) => matchesObservation(item, where)).map((item) => ({ ...item, linkedWork: linkedWork(item.id as number), author: user, subscriptions: observationSubscriptions.has(`${item.id}:${include?.subscriptions?.where.userId ?? 1}`) ? [observationSubscriptions.get(`${item.id}:${include?.subscriptions?.where.userId ?? 1}`)] : [], media: [...media.values()].filter((m) => m.observationId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
     },
     comment: {
-      count: async () => comments.length,
+      count: async ({ where }: { where: { workId?: number; observationId?: number } }) => comments.filter((item) => where.workId !== undefined ? item.workId === where.workId : item.observationId === where.observationId).length,
       create: async ({ data }: { data: Record<string, unknown> }) => { const row = { ...data, id: comments.length + 1, createdAt: new Date() }; comments.push(row); return row; },
-      findMany: async ({ skip = 0, take = 20 }: { skip?: number; take?: number }) => comments.slice(skip, skip + take).map((item) => ({ ...item, author: user, media: [...media.values()].filter((m) => m.commentId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) })),
+      findMany: async ({ where, skip = 0, take = 20, orderBy }: { where: { workId?: number; observationId?: number; OR?: { workId?: number; observationId?: number }[] }; skip?: number; take?: number; orderBy?: { createdAt?: "asc" | "desc"; id?: "asc" | "desc" }[] }) => {
+        const matches = (item: Record<string, unknown>, filter: { workId?: number; observationId?: number }) => filter.workId !== undefined ? item.workId === filter.workId : item.observationId === filter.observationId;
+        const selected = comments.filter((item) => where.OR ? where.OR.some((filter) => matches(item, filter)) : matches(item, where));
+        if (orderBy) selected.sort((a, b) => { for (const rule of orderBy) { const key = rule.createdAt ? "createdAt" : "id"; const direction = rule[key] === "desc" ? -1 : 1; const left = key === "createdAt" ? (a.createdAt as Date).getTime() : a.id as number; const right = key === "createdAt" ? (b.createdAt as Date).getTime() : b.id as number; if (left !== right) return (left < right ? -1 : 1) * direction; } return 0; });
+        return selected.slice(skip, skip + take).map((item) => ({ ...item, author: user, media: [...media.values()].filter((m) => m.commentId === item.id).map((m) => ({ ...m, blob: blobs.get(m.blobId) })) }));
+      },
     },
     $transaction: async (fn: (client: unknown) => Promise<unknown>) => {
       const observationCount = observations.length;
@@ -161,7 +166,7 @@ function fixture() {
 }
 
 async function appFor(db: PrismaClient, isAdmin = false, now?: () => Date, allowSelfRoleSwitch = false) {
-  return createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin }) }, businessDb: db, now, logger: false, staticRoot: "/nonexistent-priemka-static" });
+  return createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true, allowSelfRoleSwitch }, userRepository: { isReady: async () => true, upsertFromMax: async ({ user }) => ({ id: Number(BigInt(user.id) - 9007199254740992n), isAdmin }) }, businessDb: db, now, logger: false, staticRoot: "/nonexistent-priemka-static" });
 }
 
 function multipartBody(bytes: Buffer, mimeType = "image/png") {
@@ -257,14 +262,27 @@ describe("business API", () => {
       const fresh = await app.inject({ method: "POST", url: `/api/observations/${id}/comments`, headers: auth, payload: { text: "Новый комментарий" } });
       expect(fresh.statusCode).toBe(201);
       expect(f.comments.at(-1)).toEqual(expect.objectContaining({ observationId: id, text: "Новый комментарий" }));
+      expect(f.activityEvents.some((event) => event.event === "OBSERVATION_COMMENT_ADDED" && event.observationId === id)).toBe(true);
+      for (const issueCount of [1, 2, 5]) f.activityEvents.push({ event: "INSPECTION_COMPLETED", metadata: { issueCount } });
+      for (const metadata of [{ role: "EXECUTOR" }, { role: "CHAIRMAN" }, null, "legacy", { role: "UNKNOWN" }]) f.activityEvents.push({ event: "DOCUMENT_CONFIRMED", metadata });
       const detail = await app.inject({ method: "GET", url: `/api/observations/${id}`, headers: auth });
-      expect(detail.json().comments.map((comment: { text: string }) => comment.text)).toEqual(["Старый комментарий", "Новый комментарий"]);
+      expect(detail.json().comments.map((comment: { text: string }) => comment.text)).toEqual(["Новый комментарий", "Старый комментарий"]);
       expect(detail.json().comments.map((comment: { author: unknown }) => comment.author)).toEqual([
         { type: "USER", displayName: "Макс Пользователь", photoUrl: "https://example.test/avatar.jpg" },
         { type: "USER", displayName: "Макс Пользователь", photoUrl: "https://example.test/avatar.jpg" },
       ]);
       expect(f.comments.at(-1)).toEqual(expect.objectContaining({ authorTypeSnapshot: "USER", authorDisplayNameSnapshot: "Макс Пользователь" }));
-      expect(detail.json().history.map((event: { title: string }) => event.title)).toContain("Обращение создано");
+      expect(detail.json().history.map((event: { title: string }) => event.title)).toEqual([
+        "Обращение создано",
+        "Проверка завершена. Найдено 1 замечание",
+        "Проверка завершена. Найдено 2 замечания",
+        "Проверка завершена. Найдено 5 замечаний",
+        "Акт подтверждён исполнителем",
+        "Акт подтверждён председателем",
+        "Акт подтверждён",
+        "Акт подтверждён",
+        "Акт подтверждён",
+      ]);
     } finally { await app.close(); }
   });
 
@@ -285,6 +303,20 @@ describe("business API", () => {
       const watched = (await app.inject({ method: "GET", url: "/api/houses/1/observations?watching=true", headers: auth })).json();
       expect(watched.items.map((item: { id: number }) => item.id)).toEqual([authorId, manualId, subscribedAuthorId]);
       expect(watched.total).toBe(3);
+    } finally { await app.close(); }
+  });
+
+  it("returns comments newest first with id as the tie-breaker in every public read", async () => {
+    const f = fixture(); const app = await appFor(f.db);
+    try {
+      const id = (await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Дом", description: "Описание" } })).json().id as number;
+      f.linkExistingWork(id);
+      const older = new Date("2026-09-27T00:00:00Z"), newer = new Date("2026-09-28T00:00:00Z");
+      for (const [commentId, createdAt, target] of [[1, older, "work"], [2, newer, "work"], [3, newer, "work"], [4, older, "observation"], [5, newer, "observation"], [6, newer, "observation"]] as const) f.comments.push({ id: commentId, createdAt, authorId: 1, text: `Комментарий ${commentId}`, ...(target === "work" ? { workId: 7 } : { observationId: id }) });
+      const ids = (items: { id: number }[]) => items.map((item) => item.id);
+      expect(ids((await app.inject({ method: "GET", url: `/api/observations/${id}`, headers: auth })).json().comments)).toEqual([6, 5, 3, 2, 4, 1]);
+      expect(ids((await app.inject({ method: "GET", url: `/api/observations/${id}/comments`, headers: auth })).json().items)).toEqual([6, 5, 4]);
+      expect(ids((await app.inject({ method: "GET", url: "/api/works/7/comments", headers: auth })).json().items)).toEqual([3, 2, 1]);
     } finally { await app.close(); }
   });
 
@@ -419,8 +451,8 @@ describe("business API", () => {
       f.assignExecutor(1);
       expect((await app.inject({ method: "POST", url: "/api/works/7/submit-for-inspection", headers: auth, payload: {} })).statusCode).toBe(200);
       const job = [...f.outboxJobs.values()].find((item) => item.accessKind === "WORK");
-      expect(job?.text).toBe("💼 Работа «Лифт» (№7) передана на проверку.");
-      expect(job?.text).not.toContain("Обращение:");
+      expect(job?.text).toBe("💼 Обращение «Лифт» передано на проверку.");
+      expect(job?.text).not.toContain("Работа");
     } finally { await app.close(); }
   });
 
@@ -458,7 +490,7 @@ describe("business API", () => {
       expect((await app.inject({ method: "GET", url: "/api/houses/1/works" })).statusCode).toBe(401);
       const me = await app.inject({ method: "GET", url: "/api/me", headers: auth });
       expect(me.json().user).toEqual(expect.objectContaining({ id: 1, maxUserId: "9007199254740993", isAdmin: false }));
-      expect(me.json().houses[0]).toEqual(expect.objectContaining({ id: 1, role: "RESIDENT", permissions: expect.objectContaining({ manageHouseChat: false, viewWorks: true }) }));
+      expect(me.json().houses[0]).toEqual(expect.objectContaining({ id: 1, role: "RESIDENT", chat: null, permissions: expect.objectContaining({ manageHouseChat: false, viewWorks: true }) }));
       expect(me.json().houses[0].permissions).not.toHaveProperty("reportRemediation");
       const list = await app.inject({ method: "GET", url: "/api/houses/1/works", headers: auth });
       expect(list.json().items[0]).toEqual(expect.objectContaining({ id: 7, status: "NEW", isWatching: false }));
@@ -525,8 +557,10 @@ describe("business API", () => {
       expect(works.json().house.chat).toBeNull();
       expect(works.json().actions.manageChat).toBe(false);
       expect((await app.inject({ method: "GET", url: "/api/houses/1/observations", headers: auth })).json().items).toEqual([]);
+      f.setChat({ title: "Закрытый чат", joinUrl: "https://max.ru/join/private" });
       const me = await app.inject({ method: "GET", url: "/api/me", headers: auth });
       expect(me.json().houses[0].permissions).toEqual(expect.objectContaining({ viewObservations: false, viewHouseChat: false }));
+      expect(me.json().houses[0].chat).toBeNull();
       expect(detail.json().actions).toEqual(expect.objectContaining({ reportRemediation: false, confirmAcceptance: false, assignInspector: false }));
       expect(detail.json().representative).toEqual({ id: 1, name: "Сергей Петров", phone: null, maxUrl: null });
     } finally { await app.close(); }
@@ -564,6 +598,7 @@ describe("business API", () => {
         expect(works.json().actions.manageChat).toBe(role !== "RESIDENT");
         const me = await app.inject({ method: "GET", url: "/api/me", headers: auth });
         expect(me.json().houses[0].permissions).toEqual(expect.objectContaining({ viewObservations: true, viewHouseChat: true }));
+        expect(me.json().houses[0].chat).toEqual({ title: "Чат жителей", joinUrl: "https://max.ru/join/test123" });
       } finally { await app.close(); }
     }
   });
@@ -604,7 +639,12 @@ describe("business API", () => {
       expect(f.blobs.size).toBe(1);
       const firstId = first.json().id as number;
       const secondId = second.json().id as number;
+      expect(f.media.get(firstId)!.blobId).toBe(f.media.get(secondId)!.blobId);
       expect(f.media.get(firstId)).toEqual(expect.objectContaining({ temporary: true, publicKey: null }));
+      f.media.get(secondId)!.publicKey = "temporaryphotokey123";
+      expect((await app.inject({ method: "GET", url: "/photo/temporaryphotokey123" })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: "/photo/unknownphotokey12345" })).statusCode).toBe(404);
+      f.media.get(secondId)!.publicKey = null;
       expect((await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Тест", description: "Описание", mediaIds: [999] } })).statusCode).toBe(400);
       f.media.get(secondId)!.ownerUserId = 2;
       expect((await app.inject({ method: "POST", url: "/api/works/7/comments", headers: auth, payload: { text: "", mediaIds: [secondId] } })).statusCode).toBe(400);
@@ -631,6 +671,7 @@ describe("business API", () => {
       const key = f.media.get(firstId)!.publicKey!;
       const original = await app.inject({ method: "GET", url: `/photo/${key}` });
       expect(original.statusCode).toBe(200);
+      expect(original.headers["content-type"]).toBe("image/png");
       expect(original.headers["cache-control"]).toBe("private, no-store");
       expect(original.headers["x-robots-tag"]).toBe("noindex, nofollow, noarchive, nosnippet");
       for (const query of ["?w=200&h=200", "?w=400&h=240&fit=cover", "?w=800&h=800&fit=contain"]) {
@@ -647,6 +688,43 @@ describe("business API", () => {
       f.media.get(secondId)!.expiresAt = new Date(0);
       expect(await cleanupExpiredMedia(f.db, new Date(), dir)).toEqual({ media: 1, blobs: 0 });
       expect(await readFile(join(dir, blob.storagePath))).toEqual(bytes);
+    } finally { await app.close(); delete process.env.MEDIA_DIR; }
+  });
+
+  it("accepts PNG, JPEG and WebP and rejects mismatched, unsupported, invalid and oversized uploads", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "priemka-media-formats-"));
+    tempDirs.push(dir);
+    process.env.MEDIA_DIR = dir;
+    const app = await appFor(fixture().db);
+    try {
+      const source = sharp({ create: { width: 32, height: 32, channels: 3, background: "blue" } });
+      const png = await source.clone().png().toBuffer();
+      const jpeg = await source.clone().jpeg().toBuffer();
+      const webp = await source.clone().webp().toBuffer();
+      for (const [bytes, mime] of [[png, "image/png"], [jpeg, "image/jpeg"], [webp, "image/webp"]] as const) {
+        expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(bytes, mime) })).statusCode).toBe(201);
+      }
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(png, "image/jpeg") })).statusCode).toBe(400);
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(png, "image/gif") })).statusCode).toBe(400);
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(Buffer.from("not an image"), "image/png") })).statusCode).toBe(400);
+      expect((await app.inject({ method: "POST", url: "/api/media", ...multipartBody(Buffer.alloc(10 * 1024 * 1024 + 1), "image/png") })).statusCode).toBe(413);
+    } finally { await app.close(); delete process.env.MEDIA_DIR; }
+  });
+
+  it("rejects expired temporary media on the business attach path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "priemka-expired-attach-"));
+    tempDirs.push(dir);
+    process.env.MEDIA_DIR = dir;
+    const f = fixture();
+    const app = await appFor(f.db);
+    try {
+      const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: "red" } }).png().toBuffer();
+      const upload = await app.inject({ method: "POST", url: "/api/media", ...multipartBody(bytes) });
+      expect(upload.statusCode).toBe(201);
+      f.media.get(upload.json().id)!.expiresAt = new Date(0);
+      const attach = await app.inject({ method: "POST", url: "/api/houses/1/observations", headers: auth, payload: { category: "OTHER", title: "Истёкшее фото", description: "Описание", mediaIds: [upload.json().id] } });
+      expect(attach.statusCode).toBe(400);
+      expect(f.media.get(upload.json().id)!.temporary).toBe(true);
     } finally { await app.close(); delete process.env.MEDIA_DIR; }
   });
 

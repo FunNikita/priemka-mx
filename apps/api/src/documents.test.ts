@@ -67,3 +67,38 @@ it("keeps before and after photos with the reinspection result and QR on two pag
     expect(imageCount(pdf)).toBe(4);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+it("renders mixed photo shapes beneath their checklist items and beside refusal issues", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "priemka-inline-pdf-"));
+  try {
+    const shapes = [[800, 1200], [1200, 800], [900, 900], [1600, 400], [400, 1600], [1100, 700], [700, 1100]] as const;
+    const paths = await Promise.all(shapes.map(async ([width, height], index) => {
+      const path = join(dir, `shape-${index}.jpg`);
+      await writeFile(path, await sharp({ create: { width, height, channels: 3, background: { r: 50 + index * 20, g: 90, b: 140 } } }).jpeg().toBuffer());
+      return path;
+    }));
+    const checklist = [
+      { order: 1, title: "Дверь закрывается", method: "VISUAL", result: "FAIL", comment: "Доводчик неисправен" },
+      { order: 2, title: "Крепления", method: "VISUAL", result: "PASS", comment: null },
+      { order: 3, title: "Комплектация", method: "DOCUMENTARY", result: "PASS", comment: null },
+    ];
+    const inspection = await renderDocumentPdf("INSPECTION_REPORT", 3, 1, newPublicDocumentKey(), { ...sample, checklist, photoGroups: [
+      { title: "Пункт 1. Дверь закрывается — Доводчик неисправен", photos: paths.slice(0, 5) },
+      { title: "Пункт 2. Крепления", photos: [paths[5]] },
+      { title: "Пункт 3. Комплектация", photos: [paths[6]] },
+    ] }, "PriemkaDemoBot");
+    expect(imageCount(inspection)).toBe(9);
+    expect(pageCount(inspection)).toBeGreaterThanOrEqual(2);
+    expect(pageCount(inspection)).toBeLessThanOrEqual(8);
+    const refusal = await renderDocumentPdf("REASONED_REFUSAL", 4, 1, newPublicDocumentKey(), { ...sample, issues: [
+      { title: "Дверь", comment: "Дефект доводчика", checkedAt: sample.createdAt },
+      { title: "Крепления", comment: "Повреждения", checkedAt: sample.createdAt },
+    ], photoGroups: [
+      { title: "Замечание 1. Дверь", photos: paths.slice(0, 2) },
+      { title: "Замечание 2. Крепления", photos: [paths[2]] },
+    ] }, "PriemkaDemoBot");
+    expect(imageCount(refusal)).toBe(5);
+    expect(pageCount(refusal)).toBeGreaterThanOrEqual(1);
+    expect(pageCount(refusal)).toBeLessThanOrEqual(5);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

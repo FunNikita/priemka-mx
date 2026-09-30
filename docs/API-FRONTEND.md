@@ -29,7 +29,7 @@ const requestResponse = await apiFetch(`/api/houses/${houseId}/join-requests`, {
 
 ## Личность и доступ к дому
 
-`GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `executorCompanyName`, `permissions`. Компания может быть сохранена и при другой текущей роли. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
+`GET /api/me` возвращает `user` и `houses[]`. В каждом элементе `houses[]` frontend использует `id`, `address`, `role`, `status`, `joinedVia`, `executorCompanyName`, `permissions`, `chat`. Поле `chat` содержит `{title,joinUrl}` только при `permissions.viewHouseChat=true` и существующем чате, иначе `null`; отдельный запрос списка Work для ссылки на чат не нужен. Компания может быть сохранена и при другой текущей роли. `user.id` — внутренний числовой ID, `user.maxUserId` — строка: большой MAX ID нельзя переводить в JavaScript `Number`.
 
 MAX User сам по себе не является участником дома. Рабочие права от членства появляются только при `status=ACTIVE`; `PENDING` и `REJECTED` членства их не дают. `user.isAdmin` обозначает отдельного системного администратора, а не домовую роль; его административные полномочия могут действовать без членства. Frontend не передаёт `lastHouseId` как условие доступа и не использует его как механизм безопасности. Backend возвращает `lastHouseId` в `/api/me`; frontend сохраняет выбор явным `PUT /api/me/last-house` с `{ "houseId": 6 }`. Нужен ACTIVE membership, включая администратора с членством.
 
@@ -98,7 +98,7 @@ Legacy-клиент создаёт самостоятельную работу �
 | `assignInspector` | председатель назначает одного проверяющего после передачи |
 | `performInspection` | перейти к своей проверке |
 | `reportRemediation` | устранить открытое замечание |
-| `generateReasonedRefusal` | председатель оформляет отказ при незакрытых замечаниях |
+| `generateReasonedRefusal` | текущий активный председатель может оформить отказ при наличии `OPEN` замечания, если отказ ещё не создан |
 | `generateAcceptanceAct` | исполнитель формирует акт после устранения всех замечаний |
 | `confirmAcceptance` | текущая сторона подтверждает акт |
 | `watch`, `unwatch`, `comment`, `edit`, `manageDocuments` | подписка, комментарий, редактирование Work и документы |
@@ -117,7 +117,7 @@ Frontend использует эти флаги и всё равно обраб�
 
 Председатель получает шаблоны через `GET /api/checklist-templates`, кандидатов через `GET /api/houses/:houseId/members?role=COUNCIL_MEMBER` или `role=EXECUTOR`. Для EXECUTOR кандидат содержит `executorCompanyName` (nullable). После передачи работы он вызывает `POST /api/works/:workId/inspections` с `checklistTemplateId` той же категории, что и Work, и **одним** `assigneeUserId`. Только при `ALLOW_SELF_ROLE_SWITCH=true` активный председатель может назначить самого себя проверяющим и затем переключиться в `COUNCIL_MEMBER`. Backend создаёт snapshot пунктов и переводит работу в `IN_REVIEW`.
 
-Назначенный член совета видит список `GET /api/me/inspection-assignments` и детали `GET /api/inspection-assignments/:assignmentId`. Шаблон и snapshot пункта содержат `rules`: `allowedResults`, `commentAllowed`, `maxCommentLength=512`, `photosAllowed`, `maxPhotos=5`, `evidenceRequiredOnFail`. Пользователь выбирает `PASS` («Соответствует») или `FAIL` («Есть замечание»). До ответа пункт внутренне имеет `PENDING`.
+Назначенный член совета видит список `GET /api/me/inspection-assignments` и детали `GET /api/inspection-assignments/:assignmentId`. Detail сам содержит основной контекст проверки: описание и категорию работы, дом с адресом, объект дома (или `null`), компанию исполнителя, фотографии работы, исходное обращение с его описанием и фотографиями (или `null`), snapshot checklist, сохранённые ответы и `actions`. Для основной информации экрана проверки frontend не нужен отдельный `GET /api/works/:workId`. Шаблон и snapshot пункта содержат `rules`: `allowedResults`, `commentAllowed`, `maxCommentLength=512`, `photosAllowed`, `maxPhotos=5`, `evidenceRequiredOnFail`. Пользователь выбирает `PASS` («Соответствует») или `FAIL` («Есть замечание»). До ответа пункт внутренне имеет `PENDING`.
 
 `PUT /api/inspection-assignments/:assignmentId/answers/:itemId` принимает `{ "result": "FAIL", "comment": "Дефект", "mediaIds": [] }`. Комментарий ограничен 512 символами. Для `FAIL` нужен **комментарий или от 1 до 5 фото**; можно передать оба вида доказательства. `PASS` не требует доказательств. После ответа на каждый пункт `POST /api/inspection-assignments/:assignmentId/complete` с `{}` завершает проверку. После завершения ответы неизменяемы, повторное завершение безопасно. Каждый `FAIL` даёт отдельное замечание.
 
@@ -125,11 +125,13 @@ Frontend использует эти флаги и всё равно обраб�
 
 `GET /api/me/issues` и `GET /api/works/:workId/issues` возвращают `work` с `category`, `checklistItem` с названием, описанием и порядком, `evidence` с исходным комментарием и фото, статус, историю `remediations` и `reinspections`. `actions.submitRemediation` показывает возможность отправить устранение. Исполнитель должен устранить **все** замечания. `POST /api/issues/:issueId/remediations` требует комментарий и фото; каждая отправка остаётся отдельной неизменяемой попыткой. Backend создаёт повторную проверку исходному проверяющему.
 
-Проверяющий после переключения обратно в `COUNCIL_MEMBER` получает `GET /api/me/reinspections`, детали `GET /api/reinspections/:reinspectionId` и завершает `POST /api/reinspections/:reinspectionId/complete` с `RESOLVED` или `NOT_RESOLVED`. Для `NOT_RESOLVED` обязателен комментарий. Завершённая повторная проверка неизменяема. Пока хоть одно замечание `OPEN` или `REMEDIATION_SUBMITTED`, акт недоступен.
+Все `MediaRef` в frontend-facing API имеют единый вид `{ id, url, width, height, mimeType, size }`. Это относится к фотографиям работы и исходного обращения в detail проверки, ответам checklist, `before` и `evidence.photos` замечания, `remediations[].after`, а также `media`, `issue.before` и `remediation.after` повторной проверки.
+
+Проверяющий после переключения обратно в `COUNCIL_MEMBER` получает `GET /api/me/reinspections`, детали `GET /api/reinspections/:reinspectionId` и завершает `POST /api/reinspections/:reinspectionId/complete` с `RESOLVED` или `NOT_RESOLVED`. Detail повторной проверки всегда содержит её собственные `comment` и `media`: до завершения `comment: null` и `media: []`, после завершения — сохранённый комментарий проверяющего и контрольные фотографии. Для восстановления этих данных frontend может использовать detail повторной проверки без отдельного запроса `GET /api/works/:workId/issues`. Для `NOT_RESOLVED` обязателен комментарий. Завершённая повторная проверка неизменяема. Пока хоть одно замечание `OPEN` или `REMEDIATION_SUBMITTED`, акт недоступен.
 
 ## Документы и акт приёмки
 
-Backend автоматически формирует отчёты о проверках. Председатель может создать мотивированный отказ через `POST /api/works/:workId/documents` с `{ "type": "REASONED_REFUSAL" }`, если есть незакрытые замечания. Акт формируется backend автоматически после проверки без замечаний либо после закрытия всех замечаний. Старый `POST /api/works/:workId/documents` с `{ "type": "ACCEPTANCE_ACT" }` остаётся совместимым и возвращает `409`, если акт уже создан. Большую форму и вымышленные реквизиты frontend не передаёт: PDF строится из snapshot работы и результатов проверки.
+Backend автоматически формирует отчёты о проверках. Текущий активный председатель может создать максимум один мотивированный отказ на Work через `POST /api/works/:workId/documents` с `{ "type": "REASONED_REFUSAL" }`, только если есть хотя бы одно замечание со статусом `OPEN`. После отправки Remediation, если открытых замечаний не осталось, новый отказ недоступен. Отказ — дополнительный документ, а не обязательный переход workflow: замечания после `FAIL` сразу доступны исполнителю для устранения. Акт формируется backend автоматически после проверки без замечаний либо после закрытия всех замечаний. Старый `POST /api/works/:workId/documents` с `{ "type": "ACCEPTANCE_ACT" }` остаётся совместимым и возвращает `409`, если акт уже создан. Большую форму и вымышленные реквизиты frontend не передаёт: PDF строится из snapshot работы и результатов проверки.
 
 `POST /api/documents/:documentId/confirm` принимает `{}`. Сначала акт подтверждает назначенный активный `EXECUTOR`, затем единственный текущий активный `CHAIRMAN` дома. Член совета акт не подтверждает. Один и тот же `userId` может подтвердить обе стороны, переключившись из исполнителя в председателя. После двух подтверждений backend формирует финальную версию PDF и переводит работу в `ACCEPTED`. `fileUrl` указывает на PDF `/doc/:key.pdf`; подтверждение в приложении не является УКЭП.
 
@@ -156,3 +158,5 @@ Backend автоматически формирует отчёты о прове
 `WorkDetail.history` сохраняет прежнюю форму. `GET /api/works/:workId/activity` и `GET /api/observations/:observationId/history` возвращают страницы persistent `ActivityEvent` (`items,page,limit,total`) со snapshot имени и роли автора действия. Технические IP находятся только в JSONL логах, не в сущностях пользователя/работы/обращения.
 
 Все ответы содержат `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; `/robots.txt` запрещает обход. Это не заменяет авторизацию или PreviewAccess.
+
+`GET /api/me` возвращает `canSelfRoleSwitch: boolean` — backend capability для показа «Роль для демо». Правила ACTIVE membership и единственного ACTIVE CHAIRMAN сохраняются.

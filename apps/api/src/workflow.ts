@@ -26,7 +26,7 @@ const response = { 400: err, 403: err, 404: err, 409: err };
 const dateTime = { type: "string", format: "date-time" } as const;
 const nullableDateTime = { ...dateTime, nullable: true } as const;
 const nullableString = { type: "string", nullable: true } as const;
-const mediaSchema = { type: "object", additionalProperties: false, required: ["id", "url"], properties: { id, url: str } } as const;
+const mediaSchema = { type: "object", additionalProperties: false, required: ["id", "url", "width", "height", "mimeType", "size"], properties: { id, url: str, width: id, height: id, mimeType: str, size: id } } as const;
 const mediaListSchema = { type: "array", items: mediaSchema } as const;
 const executorSchema = { type: "object", additionalProperties: false, nullable: true, required: ["userId", "companyName", "representativeName"], properties: { userId: id, companyName: str, representativeName: nullableString } } as const;
 const workRefSchema = { type: "object", additionalProperties: false, required: ["id", "title", "houseId", "category", "executor"], properties: { id, title: str, houseId: id, category: str, executor: executorSchema } } as const;
@@ -42,10 +42,10 @@ const templateSchema = { type: "object", additionalProperties: false, required: 
 const assignmentSummarySchema = { type: "object", additionalProperties: false, required: ["id", "status", "work", "inspectionId"], properties: { id, status: str, work: workRefSchema, inspectionId: id } };
 const answerSchema = { type: "object", additionalProperties: false, required: ["result", "comment", "media"], properties: { result: str, comment: nullableString, media: mediaListSchema } };
 const checklistSnapshotSchema = { type: "object", additionalProperties: false, required: ["id", "order", "title", "description", "method", "sourceType", "sourceLabel", "rules", "answer"], properties: { ...templateItemSchema.properties, answer: answerSchema } };
-const assignmentDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "work", "inspection", "checklist", "actions"], properties: { id, status: str, work: { type: "object", additionalProperties: false, required: ["id", "title", "executor"], properties: { id, title: str, executor: executorSchema } }, inspection: { type: "object", additionalProperties: false, required: ["id", "templateVersion"], properties: { id, templateVersion: id } }, checklist: { type: "array", items: checklistSnapshotSchema }, actions: actionsSchema(["save", "complete"]) } };
+const assignmentDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "work", "inspection", "checklist", "actions"], properties: { id, status: str, work: { type: "object", additionalProperties: false, required: ["id", "title", "description", "category", "house", "houseObject", "executor", "media", "sourceObservation"], properties: { id, title: str, description: str, category: str, house: { type: "object", additionalProperties: false, required: ["id", "address"], properties: { id, address: str } }, houseObject: { type: "object", additionalProperties: false, nullable: true, required: ["id", "title"], properties: { id, title: str } }, executor: executorSchema, media: mediaListSchema, sourceObservation: { type: "object", additionalProperties: false, nullable: true, required: ["id", "title", "description", "category", "media"], properties: { id, title: str, description: str, category: str, media: mediaListSchema } } } }, inspection: { type: "object", additionalProperties: false, required: ["id", "templateVersion"], properties: { id, templateVersion: id } }, checklist: { type: "array", items: checklistSnapshotSchema }, actions: actionsSchema(["save", "complete"]) } };
 const issueSchema = { type: "object", additionalProperties: false, required: ["id", "workId", "title", "description", "status", "createdAt", "resolvedAt", "before", "checklistItem", "evidence", "actions", "work", "remediations", "reinspections"], properties: { id, workId: id, title: str, description: str, status: str, createdAt: dateTime, resolvedAt: nullableDateTime, before: mediaListSchema, checklistItem: { type: "object", additionalProperties: false, required: ["id", "order", "title", "description"], properties: { id, order: id, title: str, description: nullableString } }, evidence: { type: "object", additionalProperties: false, required: ["comment", "photos"], properties: { comment: nullableString, photos: mediaListSchema } }, actions: actionsSchema(["submitRemediation"]), remediations: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "comment", "createdAt", "after"], properties: { id, comment: str, createdAt: dateTime, after: mediaListSchema } } }, reinspections: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "status", "result", "comment", "createdAt", "completedAt"], properties: { id, status: str, result: nullableString, comment: nullableString, createdAt: dateTime, completedAt: nullableDateTime } } }, work: workRefSchema } };
 const reinspectionSummarySchema = { type: "object", additionalProperties: false, required: ["id", "status", "issueId", "work"], properties: { id, status: str, issueId: id, work: workRefSchema } };
-const reinspectionDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "result", "issue", "remediation", "actions"], properties: { id, status: str, result: nullableString, issue: { type: "object", additionalProperties: false, required: ["id", "title", "description", "before"], properties: { id, title: str, description: str, before: mediaListSchema } }, remediation: { type: "object", additionalProperties: false, required: ["id", "comment", "after"], properties: { id, comment: str, after: mediaListSchema } }, actions: actionsSchema(["complete"]) } };
+const reinspectionDetailSchema = { type: "object", additionalProperties: false, required: ["id", "status", "result", "comment", "media", "issue", "remediation", "actions"], properties: { id, status: str, result: nullableString, comment: nullableString, media: mediaListSchema, issue: { type: "object", additionalProperties: false, required: ["id", "title", "description", "before"], properties: { id, title: str, description: str, before: mediaListSchema } }, remediation: { type: "object", additionalProperties: false, required: ["id", "comment", "after"], properties: { id, comment: str, after: mediaListSchema } }, actions: actionsSchema(["complete"]) } };
 const remediationCreatedSchema = { type: "object", additionalProperties: false, required: ["id", "reinspectionId"], properties: { id, reinspectionId: id } };
 const documentCreatedSchema = { type: "object", additionalProperties: false, required: ["id", "version", "status", "fileUrl"], properties: { id, version: id, status: str, fileUrl: str } };
 const documentConfirmedSchema = { type: "object", additionalProperties: false, required: ["status"], properties: { status: str, confirmations: id, version: id, fileUrl: str } };
@@ -69,11 +69,12 @@ async function mayWork(ctx: Context, work: { houseId: number; executorUserId: nu
   const role = await houseRole(ctx, work.houseId);
   return role?.status === "ACTIVE" && (role.role !== "EXECUTOR" || work.executorUserId === ctx.userId);
 }
-function mediaRef(media: { id: number; publicKey: string | null }) { return { id: media.id, url: `/photo/${media.publicKey}` }; }
+type WorkflowMediaInput = { id: number; publicKey: string | null; blob: { width: number; height: number; mimeType: string; size: number } };
+function mediaRef(media: WorkflowMediaInput) { return { id: media.id, url: `/photo/${media.publicKey}`, width: media.blob.width, height: media.blob.height, mimeType: media.blob.mimeType, size: media.blob.size }; }
 type IssueViewInput = {
   id: number; workId: number; title: string; description: string; status: string; createdAt: Date; resolvedAt: Date | null;
-  answer: { comment: string | null; checklistItem: { id: number; order: number; title: string; description: string | null }; media: { id: number; publicKey: string | null }[] };
-  remediations: { id: number; comment: string; createdAt: Date; media: { id: number; publicKey: string | null }[] }[];
+  answer: { comment: string | null; checklistItem: { id: number; order: number; title: string; description: string | null }; media: WorkflowMediaInput[] };
+  remediations: { id: number; comment: string; createdAt: Date; media: WorkflowMediaInput[] }[];
   reinspections: { id: number; status: string; result: string | null; comment: string | null; createdAt: Date; completedAt: Date | null }[];
   work?: { id: number; title: string; houseId: number; category: string; executorUserId: number | null; executorName: string | null; representativeName: string | null };
 };
@@ -141,13 +142,12 @@ async function snapshotForWork(db: PrismaClient, workId: number, type: DocumentT
     const issues = await db.issue.findMany({ where: { workId, status: { not: "RESOLVED" } }, include: { answer: { include: { assignment: true, media: { orderBy: { id: "asc" }, include: { blob: true } } } } }, orderBy: { id: "asc" } });
     base.issues = issues.map((issue) => ({ title: issue.title, comment: issue.description, checkedAt: (issue.answer.assignment.completedAt ?? issue.createdAt).toISOString() }));
     base.summary = "Отказ от приёмки основан на перечисленных неустранённых замечаниях.";
-    const paths = issues.flatMap((issue) => issue.answer.media.map(mediaPath));
-    if (paths.length) base.photoGroups = [{ title: "ФОТОМАТЕРИАЛЫ", photos: paths }];
+    base.photoGroups = issues.flatMap((issue, index) => issue.answer.media.length ? [{ title: `Замечание ${index + 1}. ${issue.title}`, photos: issue.answer.media.map(mediaPath) }] : []);
   } else {
     const inspection = await db.inspection.findFirst({ where: { workId }, include: { items: true, assignments: { include: { answers: true } } }, orderBy: { id: "desc" } });
     const issues = await db.issue.findMany({ where: { workId }, select: { id: true, title: true, status: true }, orderBy: { id: "asc" } });
     base.rows = [{ label: "Категория", value: work.category }, { label: "Представитель исполнителя", value: work.representativeName ?? "" }, { label: "Проверено пунктов", value: String(inspection?.items.length ?? 0) }, { label: "Замечаний устранено", value: String(issues.filter((item) => item.status === "RESOLVED").length) }];
-    base.summary = issues.length ? `Все ${issues.length} замечаний устранены.` : "Замечаний по результатам проверки нет.";
+    base.summary = issues.length ? `${issues.length} ${issueWord(issues.length)} ${issues.length % 10 === 1 && issues.length % 100 !== 11 ? "устранено" : "устранены"}.` : "Замечаний по результатам проверки нет.";
   }
   return base;
 }
@@ -237,7 +237,7 @@ async function finalizeAcceptanceActIfReady(db: PrismaClient, documentId: number
     if (accepted.count) {
       await tx.workHistory.create({ data: { workId: document.workId, event: "ACCEPTANCE_CONFIRMED", details: `Документ №${document.id}, версия ${readyVersion.version}` } });
       await recordActivity(tx, { event: "WORK_ACCEPTED", subjectType: "WORK", subjectId: document.workId, houseId: currentWork.houseId, workId: document.workId, observationId: currentWork.sourceObservationId ?? undefined, actorUserId: representative.userId, metadata: { documentId } });
-      await notifyWorkWatchers(tx, botName, document.workId, "accepted", `Работа ${workLabel(currentWork)} принята. Акт приёмки приложен.`, { previewRequired, pdfPublicKey: readyVersion.publicKey });
+      await notifyWorkWatchers(tx, botName, document.workId, "accepted", `✅ Обращение ${workLabel(currentWork)} принято. Акт приёмки приложен.`, { previewRequired, pdfPublicKey: readyVersion.publicKey });
     }
     return true;
   });
@@ -300,7 +300,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       await syncLinkedObservationStatus(tx, workId, "IN_REVIEW");
       await tx.workHistory.create({ data: { workId, event: "INSPECTION_ASSIGNED", details: `Проверяющий ${input.assigneeUserId}` } });
       await recordActivity(tx, { event: "INSPECTION_ASSIGNED", subjectType: "WORK", subjectId: workId, houseId: current.houseId, workId, observationId: current.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { assigneeUserId: input.assigneeUserId, inspectionId: inspection.id } });
-      await notifyWorkWatchers(tx, config.botName, workId, `inspection_assigned:${inspection.id}`, `По работе ${workLabel(current)} назначена проверка.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: input.assigneeUserId, text: `Вам назначена проверка работы ${workLabel(current)}. Откройте работу и заполните чек-лист.` }] });
+      await notifyWorkWatchers(tx, config.botName, workId, `inspection_assigned:${inspection.id}`, `По обращению ${workLabel(current)} назначена проверка.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: input.assigneeUserId, text: `Вам назначена проверка обращения ${workLabel(current)}. Откройте обращение и заполните чек-лист.` }] });
       return inspection;
     }).catch((cause: unknown) => { if (cause instanceof Error && cause.message === "INSPECTION_CONFLICT") return null; throw cause; });
     if (!created) return fail(reply, 409, "Проверка уже назначена");
@@ -316,7 +316,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
   });
 
   const assignment = async (ctx: Context, assignmentId: number, readOnly = false) => {
-    const found = await ctx.db.inspectionAssignment.findUnique({ where: { id: assignmentId }, include: { inspection: { include: { work: true, items: { orderBy: { order: "asc" } } } }, answers: { include: { media: true } } } });
+    const found = await ctx.db.inspectionAssignment.findUnique({ where: { id: assignmentId }, include: { inspection: { include: { work: { include: { house: true, houseObject: true, media: { where: { temporary: false }, include: { blob: true } }, sourceObservation: { include: { media: { where: { temporary: false }, include: { blob: true } } } } } }, items: { orderBy: { order: "asc" } } } }, answers: { include: { media: { include: { blob: true } } } } } });
     void readOnly;
     if (!found || found.assigneeUserId !== ctx.userId) return null;
     const membership = await houseRole(ctx, found.inspection.work.houseId);
@@ -330,7 +330,8 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const role = await houseRole(ctx, found.inspection.work.houseId);
     const canAct = found.assigneeUserId === ctx.userId && role?.status === "ACTIVE" && role.role === "COUNCIL_MEMBER" && found.status !== "COMPLETED";
     const ready = found.inspection.items.every((item) => { const answer = found.answers.find((entry) => entry.checklistItemId === item.id); return answer && (answer.result === "PASS" || (answer.result === "FAIL" && (!!answer.comment?.trim() || !!answer.media.length))); });
-    return { id: found.id, status: found.status, work: { id: found.inspection.work.id, title: found.inspection.work.title, executor: workRef(found.inspection.work).executor }, inspection: { id: found.inspection.id, templateVersion: found.inspection.templateVersion }, checklist: found.inspection.items.map((item) => { const answer = found.answers.find((entry) => entry.checklistItemId === item.id); return { ...item, rules: checklistRules, answer: { result: answer?.result === "UNABLE_TO_CHECK" ? "PENDING" : answer?.result ?? "PENDING", comment: answer?.comment ?? null, media: answer?.media.map(mediaRef) ?? [] } }; }), actions: { save: canAct, complete: canAct && ready } };
+    const work = found.inspection.work;
+    return { id: found.id, status: found.status, work: { id: work.id, title: work.title, description: work.description, category: work.category, house: { id: work.house.id, address: work.house.address }, houseObject: work.houseObject ? { id: work.houseObject.id, title: work.houseObject.title } : null, executor: workRef(work).executor, media: work.media.map(mediaRef), sourceObservation: work.sourceObservation ? { id: work.sourceObservation.id, title: work.sourceObservation.title, description: work.sourceObservation.description, category: work.sourceObservation.category, media: work.sourceObservation.media.map(mediaRef) } : null }, inspection: { id: found.inspection.id, templateVersion: found.inspection.templateVersion }, checklist: found.inspection.items.map((item) => { const answer = found.answers.find((entry) => entry.checklistItemId === item.id); return { ...item, rules: checklistRules, answer: { result: answer?.result === "UNABLE_TO_CHECK" ? "PENDING" : answer?.result ?? "PENDING", comment: answer?.comment ?? null, media: answer?.media.map(mediaRef) ?? [] } }; }), actions: { save: canAct, complete: canAct && ready } };
   });
 
   app.put("/api/inspection-assignments/:assignmentId/answers/:itemId", { ...guarded, schema: { tags: ["Inspections"], ...secured, params: { type: "object", required: ["assignmentId", "itemId"], properties: { assignmentId: id, itemId: id } }, body: { type: "object", additionalProperties: false, required: ["result"], properties: { result: { type: "string", enum: ["PASS", "FAIL"] }, comment: { type: "string", nullable: true, maxLength: 512 }, mediaIds: { ...answerMediaIds, default: [] } } }, response: { 200: { type: "object", additionalProperties: false, required: ["id", "result", "comment", "mediaIds"], properties: { id, result: str, comment: { type: "string", nullable: true }, mediaIds: answerMediaIds } }, ...response } } }, async (request, reply) => {
@@ -397,7 +398,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     await ensureAcceptanceAct(ctx.db, found.inspection.workId, config.botName);
     if (outcome === "FINAL_COMPLETED" && report) {
       const issueCount = await ctx.db.issue.count({ where: { workId: found.inspection.workId, status: { not: "RESOLVED" } } });
-      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По работе ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка работы ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка работы ${workLabel(found.inspection.work)} завершена без замечаний.\n\nМожно оформить и подтвердить акт приёмки.` }] : [] });
+      await notifyWorkWatchers(ctx.db, config.botName, found.inspection.workId, `inspection_completed:${found.inspectionId}`, `По обращению ${workLabel(found.inspection.work)} завершена проверка.\n\nОбнаружено ${issueCount} ${issueWord(issueCount)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: found.inspection.work.executorUserId ? [{ userId: found.inspection.work.executorUserId, text: issueCount ? `Проверка обращения ${workLabel(found.inspection.work)} завершена. Обнаружено ${issueCount} ${issueWord(issueCount)}.\n\nВам необходимо перейти к устранению.` : `Проверка обращения ${workLabel(found.inspection.work)} завершена без замечаний.\n\nАкт приёмки сформирован автоматически. Подтвердите его.` }] : [] });
     }
     return { status: "COMPLETED" };
   });
@@ -409,7 +410,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const role = await houseRole(ctx, work.houseId);
     if (!ctx.isAdmin && !["CHAIRMAN", "COUNCIL_MEMBER", "EXECUTOR"].includes(role?.role ?? "")) return fail(reply, 403, "Нет доступа к замечаниям");
     const { page, limit, skip } = pageOf(request.query as { page?: number; limit?: number });
-    const [total, items] = await Promise.all([ctx.db.issue.count({ where: { workId } }), ctx.db.issue.findMany({ where: { workId }, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" } } } }, remediations: { include: { media: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } })]);
+    const [total, items] = await Promise.all([ctx.db.issue.count({ where: { workId } }), ctx.db.issue.findMany({ where: { workId }, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" }, include: { blob: true } } } }, remediations: { include: { media: { orderBy: { id: "asc" }, include: { blob: true } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } })]);
     return { items: items.map((issue) => issueView(issue, role?.status === "ACTIVE" && role.role === "EXECUTOR" && work.executorUserId === ctx.userId)), page, limit, total };
   });
 
@@ -423,7 +424,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         { house: { memberships: { some: { userId: ctx.userId, status: "ACTIVE", role: { in: ["CHAIRMAN", "COUNCIL_MEMBER"] } } } } },
       ] },
     ] } };
-    const [total, items] = await Promise.all([ctx.db.issue.count({ where }), ctx.db.issue.findMany({ where, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" } } } }, remediations: { include: { media: { orderBy: { id: "asc" } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "desc" } })]);
+    const [total, items] = await Promise.all([ctx.db.issue.count({ where }), ctx.db.issue.findMany({ where, skip, take: limit, include: { work: { select: { id: true, title: true, houseId: true, category: true, executorUserId: true, executorName: true, representativeName: true } }, answer: { include: { checklistItem: true, media: { orderBy: { id: "asc" }, include: { blob: true } } } }, remediations: { include: { media: { orderBy: { id: "asc" }, include: { blob: true } } }, orderBy: { id: "asc" } }, reinspections: { orderBy: { id: "asc" } } }, orderBy: { id: "desc" } })]);
     const roles = await ctx.db.houseMembership.findMany({ where: { userId: ctx.userId, status: "ACTIVE", role: "EXECUTOR" }, select: { houseId: true } });
     const executorHouses = new Set(roles.map((item) => item.houseId));
     return { items: items.map((issue) => issueView(issue, executorHouses.has(issue.work.houseId) && issue.work.executorUserId === ctx.userId)), page, limit, total };
@@ -450,7 +451,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         await updateWorkStatusFromIssues(tx, issue.workId);
         await tx.workHistory.create({ data: { workId: issue.workId, event: "REMEDIATION_SUBMITTED", details: input.comment.trim() } });
         await recordActivity(tx, { event: "REMEDIATION_SUBMITTED", subjectType: "ISSUE", subjectId: issueId, houseId: issue.work.houseId, workId: issue.workId, observationId: issue.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { remediationId: remediation.id, reinspectionId: reinspection.id } });
-        await notifyWorkWatchers(tx, config.botName, issue.workId, `remediation:${remediation.id}`, `По работе ${workLabel(issue.work)} отправлено устранение замечания.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: reinspection.assigneeUserId, text: `По работе ${workLabel(issue.work)} отправлено устранение. Вам назначена повторная проверка.` }] });
+        await notifyWorkWatchers(tx, config.botName, issue.workId, `remediation:${remediation.id}`, `По обращению ${workLabel(issue.work)} отправлено устранение замечания.`, { previewRequired: config.previewAccessRequired, actionRecipients: [{ userId: reinspection.assigneeUserId, text: `По обращению ${workLabel(issue.work)} отправлено устранение. Вам назначена повторная проверка.` }] });
         return { remediation, reinspection };
       });
       return reply.code(201).send({ id: created.remediation.id, reinspectionId: created.reinspection.id });
@@ -466,7 +467,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
   });
 
   const reinspection = async (ctx: Context, reinspectionId: number, readOnly = false) => {
-    const found = await ctx.db.reinspection.findUnique({ where: { id: reinspectionId }, include: { issue: { include: { work: true, answer: { include: { media: true } } } }, remediation: { include: { media: true } }, media: true } });
+    const found = await ctx.db.reinspection.findUnique({ where: { id: reinspectionId }, include: { issue: { include: { work: true, answer: { include: { media: { include: { blob: true } } } } } }, remediation: { include: { media: { include: { blob: true } } } }, media: { include: { blob: true } } } });
     void readOnly;
     if (!found || found.assigneeUserId !== ctx.userId) return null;
     const membership = await houseRole(ctx, found.issue.work.houseId);
@@ -478,7 +479,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     const ctx = context(request), found = await reinspection(ctx, numberParam(request, "reinspectionId"), true);
     if (!found) return fail(reply, 404, "Повторная проверка не найдена");
     const role = await houseRole(ctx, found.issue.work.houseId);
-    return { id: found.id, status: found.status, result: found.result, issue: { id: found.issue.id, title: found.issue.title, description: found.issue.description, before: found.issue.answer.media.map(mediaRef) }, remediation: { id: found.remediation.id, comment: found.remediation.comment, after: found.remediation.media.map(mediaRef) }, actions: { complete: found.assigneeUserId === ctx.userId && role?.status === "ACTIVE" && role.role === "COUNCIL_MEMBER" && found.status === "ASSIGNED" } };
+    return { id: found.id, status: found.status, result: found.result, comment: found.comment, media: found.media.map(mediaRef), issue: { id: found.issue.id, title: found.issue.title, description: found.issue.description, before: found.issue.answer.media.map(mediaRef) }, remediation: { id: found.remediation.id, comment: found.remediation.comment, after: found.remediation.media.map(mediaRef) }, actions: { complete: found.assigneeUserId === ctx.userId && role?.status === "ACTIVE" && role.role === "COUNCIL_MEMBER" && found.status === "ASSIGNED" } };
   });
 
   app.post("/api/reinspections/:reinspectionId/complete", { ...guarded, schema: { tags: ["Reinspections"], ...secured, description: "Повторное завершение возвращает сохранённый результат и восстанавливает отсутствующий отчёт без изменения замечания.", params: params("reinspectionId"), body: { type: "object", additionalProperties: false, required: ["result"], properties: { result: { type: "string", enum: ["RESOLVED", "NOT_RESOLVED"] }, comment: { type: "string", nullable: true, maxLength: 10000 }, mediaIds } }, response: { 200: { type: "object", additionalProperties: false, required: ["status", "result"], properties: { status: str, result: str } }, ...response } } }, async (request, reply) => {
@@ -512,23 +513,35 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
       await ensureAcceptanceAct(ctx.db, found.issue.workId, config.botName);
       if (report) {
         const remaining = await ctx.db.issue.count({ where: { workId: found.issue.workId, status: { not: "RESOLVED" } } });
-        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка работы ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по работе ${workLabel(found.issue.work)} устранены.\n\nМожно оформить и подтвердить акт приёмки.` }] : [];
-        await notifyWorkWatchers(ctx.db, config.botName, found.issue.workId, `reinspection:${found.id}`, `По работе ${workLabel(found.issue.work)} завершена повторная проверка. Результат: ${input.result === "RESOLVED" ? "замечание устранено" : "замечание осталось"}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: action });
+        const action = found.issue.work.executorUserId && (input.result === "NOT_RESOLVED" || !remaining) ? [{ userId: found.issue.work.executorUserId, text: input.result === "NOT_RESOLVED" ? `Повторная проверка обращения ${workLabel(found.issue.work)} не подтвердила устранение.\n\nИсправьте замечание и отправьте новое устранение.` : `Все замечания по обращению ${workLabel(found.issue.work)} устранены.\n\nАкт приёмки сформирован автоматически. Подтвердите его.` }] : [];
+        await notifyWorkWatchers(ctx.db, config.botName, found.issue.workId, `reinspection:${found.id}`, `По обращению ${workLabel(found.issue.work)} завершена повторная проверка. Результат: ${input.result === "RESOLVED" ? "замечание устранено" : "замечание осталось"}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: report.publicKey, actionRecipients: action });
       }
       return { status: persisted.status, result: persisted.result };
     } catch (error) { if (error instanceof Error && error.message === "INVALID_MEDIA") return fail(reply, 400, "Некорректные mediaIds"); throw error; }
   });
 
-  app.post("/api/works/:workId/documents", { ...guarded, schema: { tags: ["Documents"], ...secured, description: "Для одной работы допускается один акт приёмки; повторное создание ACCEPTANCE_ACT возвращает 409.", params: params("workId"), body: { type: "object", additionalProperties: false, required: ["type"], properties: { type: { type: "string", enum: ["REASONED_REFUSAL", "ACCEPTANCE_ACT"] } } }, response: { 201: documentCreatedSchema, ...response } } }, async (request, reply) => {
+  app.post("/api/works/:workId/documents", { ...guarded, schema: { tags: ["Documents"], ...secured, description: "Для одной работы допускается один акт приёмки и максимум один мотивированный отказ. REASONED_REFUSAL доступен только при наличии OPEN Issue; повторное создание документа возвращает 409.", params: params("workId"), body: { type: "object", additionalProperties: false, required: ["type"], properties: { type: { type: "string", enum: ["REASONED_REFUSAL", "ACCEPTANCE_ACT"] } } }, response: { 201: documentCreatedSchema, ...response } } }, async (request, reply) => {
     const ctx = context(request), workId = numberParam(request, "workId"), input = body<{ type: "REASONED_REFUSAL" | "ACCEPTANCE_ACT" }>(request);
     const work = await ctx.db.work.findUnique({ where: { id: workId } });
     if (!work || !await mayWork(ctx, work)) return fail(reply, 404, "Работа не найдена");
     if (input.type === "REASONED_REFUSAL") {
       if (!await isActiveChair(ctx, work.houseId)) return fail(reply, 403, "Только председатель оформляет отказ");
-      if (!await ctx.db.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) return fail(reply, 409, "Нет активных замечаний");
-      const created = await generate(ctx.db, workId, input.type, ctx.userId, config.botName);
-      await ctx.db.documentVersion.update({ where: { id: created.id }, data: { status: "CONFIRMED", confirmedAt: now() } });
-      await notifyWorkWatchers(ctx.db, config.botName, workId, `reasoned_refusal:${created.id}`, `По работе ${workLabel(work)} оформлен мотивированный отказ. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: work.executorUserId ? [{ userId: work.executorUserId, text: `По работе ${workLabel(work)} оформлен мотивированный отказ. Ознакомьтесь с PDF и устраните замечания.` }] : [] });
+      let created;
+      try {
+        created = await ctx.db.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM Work WHERE id = ${workId} FOR UPDATE`;
+          if (await tx.document.findFirst({ where: { workId, type: "REASONED_REFUSAL" }, select: { id: true } })) throw new Error("REASONED_REFUSAL_ALREADY_EXISTS");
+          if (!await tx.issue.count({ where: { workId, status: "OPEN" } })) throw new Error("NO_OPEN_ISSUES_FOR_REFUSAL");
+          const document = await generate(tx as PrismaClient, workId, input.type, ctx.userId, config.botName);
+          await tx.documentVersion.update({ where: { id: document.id }, data: { status: "CONFIRMED", confirmedAt: now() } });
+          return document;
+        }, { timeout: 15_000 });
+      } catch (error) {
+        if (error instanceof Error && error.message === "REASONED_REFUSAL_ALREADY_EXISTS") return fail(reply, 409, "Мотивированный отказ для этой работы уже сформирован");
+        if (error instanceof Error && error.message === "NO_OPEN_ISSUES_FOR_REFUSAL") return fail(reply, 409, "Нет открытых замечаний для мотивированного отказа");
+        throw error;
+      }
+      await notifyWorkWatchers(ctx.db, config.botName, workId, `reasoned_refusal:${created.id}`, `По обращению ${workLabel(work)} оформлен мотивированный отказ. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: work.executorUserId ? [{ userId: work.executorUserId, text: `По обращению ${workLabel(work)} оформлен мотивированный отказ. Ознакомьтесь с PDF и устраните замечания.` }] : [] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: "CONFIRMED", fileUrl: `/doc/${created.publicKey}.pdf` });
     }
     const role = await houseRole(ctx, work.houseId);
@@ -544,7 +557,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
         if (current.status !== "WAITING" || await tx.issue.count({ where: { workId, status: { not: "RESOLVED" } } })) throw new Error("WORK_NOT_READY");
         return generate(tx as PrismaClient, workId, "ACCEPTANCE_ACT", ctx.userId, config.botName);
       }, { timeout: 15_000 });
-      await notifyWorkWatchers(ctx.db, config.botName, workId, `acceptance_ready:${created.id}`, `По работе ${workLabel(work)} оформлен акт приёмки. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: [{ userId: ctx.userId, text: `Акт приёмки по работе ${workLabel(work)} готов. Подтвердите его, затем председатель сможет завершить приёмку.` }] });
+      await notifyWorkWatchers(ctx.db, config.botName, workId, `acceptance_ready:${created.id}`, `По обращению ${workLabel(work)} оформлен акт приёмки. Подробности во вложении.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: created.publicKey, actionRecipients: [{ userId: ctx.userId, text: `Акт приёмки по обращению ${workLabel(work)} готов. Подтвердите его, затем председатель сможет завершить приёмку.` }] });
       return reply.code(201).send({ id: created.documentId, version: created.version, status: created.status, fileUrl: `/doc/${created.publicKey}.pdf` });
     } catch (error) {
       if (error instanceof Error && error.message === "ACCEPTANCE_ACT_ALREADY_EXISTS") return fail(reply, 409, "Акт приёмки для этой работы уже сформирован");
@@ -586,7 +599,7 @@ export async function registerWorkflowApi(app: FastifyInstance, config: AppConfi
     await recordActivity(ctx.db, { event: "DOCUMENT_CONFIRMED", subjectType: "DOCUMENT", subjectId: documentId, houseId: document.work.houseId, workId: document.workId, observationId: document.work.sourceObservationId ?? undefined, actorUserId: ctx.userId, metadata: { role: roleSnapshot, version: original.version } });
     if (roleSnapshot === "EXECUTOR") {
       const chairmen = await ctx.db.houseMembership.findMany({ where: { houseId: document.work.houseId, role: "CHAIRMAN", status: "ACTIVE" }, select: { userId: true } });
-      await notifyWorkWatchers(ctx.db, config.botName, document.workId, `acceptance_executor_confirmed:${documentId}`, `Исполнитель подтвердил акт приёмки по работе ${workLabel(document.work)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: original.publicKey, actionRecipients: chairmen.map((chairman) => ({ userId: chairman.userId, text: `Исполнитель подтвердил акт приёмки по работе ${workLabel(document.work)}.\n\nТеперь вам нужно подтвердить акт. PDF приложен.` })) });
+      await notifyWorkWatchers(ctx.db, config.botName, document.workId, `acceptance_executor_confirmed:${documentId}`, `Исполнитель подтвердил акт приёмки по обращению ${workLabel(document.work)}.`, { previewRequired: config.previewAccessRequired, pdfPublicKey: original.publicKey, actionRecipients: chairmen.map((chairman) => ({ userId: chairman.userId, text: `Исполнитель подтвердил акт приёмки по обращению ${workLabel(document.work)}.\n\nТеперь вам нужно подтвердить акт. PDF приложен.` })) });
     }
     const result = await finalizeAcceptanceActIfReady(ctx.db, documentId, now, config.botName, config.previewAccessRequired);
     return result.status === "CONFLICT" ? fail(reply, 409, "Эта работа уже принята по другому акту") : result;
@@ -615,5 +628,5 @@ export async function publicDocumentStatus(db: PrismaClient, key: string) {
   if (!verified.ok) return { message: "Документ найден, но целостность файла не подтверждена.", bytes: null };
   const document = version.document;
   const names = version.confirmations.map((item) => `${item.roleSnapshot === "CHAIRMAN" ? "Председатель" : "Исполнитель"}: ${item.user.firstName} ${item.user.lastName}`).join("; ");
-  return { message: `✅ Документ №${document.id} найден\n\n${documentTitle[document.type]}\nДом: ${document.work.house.address}\nРабота: «${document.work.title}»\nВерсия: ${version.version}\nСформирован: ${version.createdAt.toLocaleString("ru-RU")}\nСтатус: ${documentStatusTitle(version.status)}${document.type === "ACCEPTANCE_ACT" ? `\nПодтвердил: ${names || "ожидает подтверждения"}` : ""}\n\nЦелостность файла: подтверждена 🤝`, bytes: verified.bytes };
+  return { message: `✅ Документ №${document.id} найден\n\n${documentTitle[document.type]}\nДом: ${document.work.house.address}\nОбращение: «${document.work.title}»\nВерсия: ${version.version}\nСформирован: ${version.createdAt.toLocaleString("ru-RU")}\nСтатус: ${documentStatusTitle(version.status)}${document.type === "ACCEPTANCE_ACT" ? `\nПодтвердил: ${names || "ожидает подтверждения"}` : ""}\n\nЦелостность файла: подтверждена 🤝`, bytes: verified.bytes };
 }

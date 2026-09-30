@@ -200,3 +200,10 @@ it('не блокирует выбор роли, когда в /api/me нет н
   await act(async () => trigger.click());
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(4);
 });
+
+it.each([false, true])('показывает «Роль для демо» только по backend capability: %s', async (canSelfRoleSwitch) => {
+  getMaxInitData.mockResolvedValue('signed');
+  apiFetch.mockResolvedValue({ ok: true, json: async () => ({ user: { isAdmin: false }, canSelfRoleSwitch, lastHouseId: 5, houses: [{ id: 5, address: 'Дом', role: 'RESIDENT', status: 'ACTIVE', permissions: {} }] }) });
+  await act(async () => root.render(<App />));
+  expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent.includes('Роль для демо'))).toBe(canSelfRoleSwitch);
+});

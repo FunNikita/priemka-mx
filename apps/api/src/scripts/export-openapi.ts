@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { createApp } from "../app.js";
 
 const app = await createApp({
-  config: { botName: "PriemkaDemoBot", botToken: "openapi-export-placeholder", maxInitDataMaxAgeSeconds: 3600 },
+  config: { botName: "PriemkaDemoBot", botToken: "openapi-export-placeholder", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true },
   userRepository: { isReady: async () => false, upsertFromMax: async () => ({ id: 1, isAdmin: false }) },
   logger: false,
 });

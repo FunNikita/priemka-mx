@@ -125,9 +125,13 @@
                     "user",
                     "auth_date",
                     "houses",
-                    "lastHouseId"
+                    "lastHouseId",
+                    "canSelfRoleSwitch"
                   ],
                   "properties": {
+                    "canSelfRoleSwitch": {
+                      "type": "boolean"
+                    },
                     "query_id": {
                       "type": "string"
                     },
@@ -222,7 +226,8 @@
                           "status",
                           "joinedVia",
                           "executorCompanyName",
-                          "permissions"
+                          "permissions",
+                          "chat"
                         ],
                         "properties": {
                           "id": {
@@ -306,6 +311,24 @@
                               },
                               "reviewJoinRequests": {
                                 "type": "boolean"
+                              }
+                            }
+                          },
+                          "chat": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "required": [
+                              "title",
+                              "joinUrl"
+                            ],
+                            "properties": {
+                              "title": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "joinUrl": {
+                                "type": "string"
                               }
                             }
                           }
@@ -7968,7 +7991,13 @@
                       "required": [
                         "id",
                         "title",
-                        "executor"
+                        "description",
+                        "category",
+                        "house",
+                        "houseObject",
+                        "executor",
+                        "media",
+                        "sourceObservation"
                       ],
                       "properties": {
                         "id": {
@@ -7977,6 +8006,47 @@
                         },
                         "title": {
                           "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "category": {
+                          "type": "string"
+                        },
+                        "house": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "address"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "address": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "houseObject": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "required": [
+                            "id",
+                            "title"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          }
                         },
                         "executor": {
                           "type": "object",
@@ -7998,6 +8068,111 @@
                             "representativeName": {
                               "type": "string",
                               "nullable": true
+                            }
+                          }
+                        },
+                        "media": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "url",
+                              "width",
+                              "height",
+                              "mimeType",
+                              "size"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "width": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "height": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "mimeType": {
+                                "type": "string"
+                              },
+                              "size": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            }
+                          }
+                        },
+                        "sourceObservation": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "required": [
+                            "id",
+                            "title",
+                            "description",
+                            "category",
+                            "media"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "category": {
+                              "type": "string"
+                            },
+                            "media": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "id",
+                                  "url",
+                                  "width",
+                                  "height",
+                                  "mimeType",
+                                  "size"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  },
+                                  "height": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  },
+                                  "mimeType": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  }
+                                }
+                              }
                             }
                           }
                         }
@@ -8125,7 +8300,11 @@
                                   "additionalProperties": false,
                                   "required": [
                                     "id",
-                                    "url"
+                                    "url",
+                                    "width",
+                                    "height",
+                                    "mimeType",
+                                    "size"
                                   ],
                                   "properties": {
                                     "id": {
@@ -8134,6 +8313,21 @@
                                     },
                                     "url": {
                                       "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "height": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "mimeType": {
+                                      "type": "string"
+                                    },
+                                    "size": {
+                                      "type": "integer",
+                                      "minimum": 1
                                     }
                                   }
                                 }
@@ -8734,7 +8928,11 @@
                               "additionalProperties": false,
                               "required": [
                                 "id",
-                                "url"
+                                "url",
+                                "width",
+                                "height",
+                                "mimeType",
+                                "size"
                               ],
                               "properties": {
                                 "id": {
@@ -8743,6 +8941,21 @@
                                 },
                                 "url": {
                                   "type": "string"
+                                },
+                                "width": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "height": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 1
                                 }
                               }
                             }
@@ -8793,7 +9006,11 @@
                                   "additionalProperties": false,
                                   "required": [
                                     "id",
-                                    "url"
+                                    "url",
+                                    "width",
+                                    "height",
+                                    "mimeType",
+                                    "size"
                                   ],
                                   "properties": {
                                     "id": {
@@ -8802,6 +9019,21 @@
                                     },
                                     "url": {
                                       "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "height": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "mimeType": {
+                                      "type": "string"
+                                    },
+                                    "size": {
+                                      "type": "integer",
+                                      "minimum": 1
                                     }
                                   }
                                 }
@@ -8850,7 +9082,11 @@
                                     "additionalProperties": false,
                                     "required": [
                                       "id",
-                                      "url"
+                                      "url",
+                                      "width",
+                                      "height",
+                                      "mimeType",
+                                      "size"
                                     ],
                                     "properties": {
                                       "id": {
@@ -8859,6 +9095,21 @@
                                       },
                                       "url": {
                                         "type": "string"
+                                      },
+                                      "width": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      },
+                                      "height": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      },
+                                      "mimeType": {
+                                        "type": "string"
+                                      },
+                                      "size": {
+                                        "type": "integer",
+                                        "minimum": 1
                                       }
                                     }
                                   }
@@ -9201,7 +9452,11 @@
                               "additionalProperties": false,
                               "required": [
                                 "id",
-                                "url"
+                                "url",
+                                "width",
+                                "height",
+                                "mimeType",
+                                "size"
                               ],
                               "properties": {
                                 "id": {
@@ -9210,6 +9465,21 @@
                                 },
                                 "url": {
                                   "type": "string"
+                                },
+                                "width": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "height": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "mimeType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 1
                                 }
                               }
                             }
@@ -9260,7 +9530,11 @@
                                   "additionalProperties": false,
                                   "required": [
                                     "id",
-                                    "url"
+                                    "url",
+                                    "width",
+                                    "height",
+                                    "mimeType",
+                                    "size"
                                   ],
                                   "properties": {
                                     "id": {
@@ -9269,6 +9543,21 @@
                                     },
                                     "url": {
                                       "type": "string"
+                                    },
+                                    "width": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "height": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    },
+                                    "mimeType": {
+                                      "type": "string"
+                                    },
+                                    "size": {
+                                      "type": "integer",
+                                      "minimum": 1
                                     }
                                   }
                                 }
@@ -9317,7 +9606,11 @@
                                     "additionalProperties": false,
                                     "required": [
                                       "id",
-                                      "url"
+                                      "url",
+                                      "width",
+                                      "height",
+                                      "mimeType",
+                                      "size"
                                     ],
                                     "properties": {
                                       "id": {
@@ -9326,6 +9619,21 @@
                                       },
                                       "url": {
                                         "type": "string"
+                                      },
+                                      "width": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      },
+                                      "height": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      },
+                                      "mimeType": {
+                                        "type": "string"
+                                      },
+                                      "size": {
+                                        "type": "integer",
+                                        "minimum": 1
                                       }
                                     }
                                   }
@@ -10015,6 +10323,8 @@
                     "id",
                     "status",
                     "result",
+                    "comment",
+                    "media",
                     "issue",
                     "remediation",
                     "actions"
@@ -10030,6 +10340,49 @@
                     "result": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "comment": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "media": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "url",
+                          "width",
+                          "height",
+                          "mimeType",
+                          "size"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        }
+                      }
                     },
                     "issue": {
                       "type": "object",
@@ -10058,7 +10411,11 @@
                             "additionalProperties": false,
                             "required": [
                               "id",
-                              "url"
+                              "url",
+                              "width",
+                              "height",
+                              "mimeType",
+                              "size"
                             ],
                             "properties": {
                               "id": {
@@ -10067,6 +10424,21 @@
                               },
                               "url": {
                                 "type": "string"
+                              },
+                              "width": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "height": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "mimeType": {
+                                "type": "string"
+                              },
+                              "size": {
+                                "type": "integer",
+                                "minimum": 1
                               }
                             }
                           }
@@ -10096,7 +10468,11 @@
                             "additionalProperties": false,
                             "required": [
                               "id",
-                              "url"
+                              "url",
+                              "width",
+                              "height",
+                              "mimeType",
+                              "size"
                             ],
                             "properties": {
                               "id": {
@@ -10105,6 +10481,21 @@
                               },
                               "url": {
                                 "type": "string"
+                              },
+                              "width": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "height": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "mimeType": {
+                                "type": "string"
+                              },
+                              "size": {
+                                "type": "integer",
+                                "minimum": 1
                               }
                             }
                           }
@@ -10414,7 +10805,7 @@
         "tags": [
           "Documents"
         ],
-        "description": "Для одной работы допускается один акт приёмки; повторное создание ACCEPTANCE_ACT возвращает 409.",
+        "description": "Для одной работы допускается один акт приёмки и максимум один мотивированный отказ. REASONED_REFUSAL доступен только при наличии OPEN Issue; повторное создание документа возвращает 409.",
         "requestBody": {
           "required": true,
           "content": {

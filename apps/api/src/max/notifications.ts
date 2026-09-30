@@ -70,6 +70,6 @@ export async function notifyWorkWatchers(db: Db, botName: string, workId: number
     if (!recipients.has(user.id)) continue;
     const access = { recipientUserId: user.id, houseId: work.houseId, accessKind: "WORK", subjectId: workId, chatId: user.maxUserId };
     if (!await canDeliverNotification(db, access, !!options.previewRequired)) continue;
-    await enqueueText(db, { key: `work:${workId}:${event}:user:${user.id}`, maxUserId: user.maxUserId, text: recipients.get(user.id)!, buttonText: "Открыть работу", buttonUrl: appLink(botName, "work", workId), recipientUserId: user.id, houseId: work.houseId, accessKind: "WORK", subjectId: workId, pdfPublicKey: options.pdfPublicKey });
+    await enqueueText(db, { key: `work:${workId}:${event}:user:${user.id}`, maxUserId: user.maxUserId, text: recipients.get(user.id)!, buttonText: "Открыть обращение", buttonUrl: appLink(botName, "work", workId), recipientUserId: user.id, houseId: work.houseId, accessKind: "WORK", subjectId: workId, pdfPublicKey: options.pdfPublicKey });
   }
 }

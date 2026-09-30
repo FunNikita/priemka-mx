@@ -72,12 +72,21 @@ async function throttle(target: string) {
 
 function keyboard(buttonText: string | null, buttonUrl: string | null, botName: string) {
   if (!buttonText || !buttonUrl) return [];
-  const url = new URL(buttonUrl);
+  let url: URL;
+  try { url = new URL(buttonUrl); } catch { return []; }
   const expected = `https://max.ru/${botName}`;
   if (`${url.origin}${url.pathname}` !== expected) return [];
   const payload = url.searchParams.get("startapp");
   const button = { type: "open_app", text: buttonText, web_app: botName, ...(payload && /^[A-Za-z0-9_-]{1,512}$/.test(payload) ? { payload } : {}) };
   return [{ type: "inline_keyboard", payload: { buttons: [[button]] } }];
+}
+
+export function outboxRetryDelayMs(attempts: number) {
+  return Math.min(3600000, 5000 * 2 ** attempts);
+}
+
+export function outboxRetryState(attempts: number, at: Date) {
+  return { attempts, nextAttemptAt: new Date(at.getTime() + outboxRetryDelayMs(attempts)), ...(attempts >= 8 ? { deadAt: at } : {}) };
 }
 
 export async function deliverBotOutbox(db: PrismaClient, token: string, outboxId: number, botName = process.env.MAX_BOT_NAME ?? "", previewRequired = false) {
@@ -166,7 +175,7 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
       return { ok: true };
     });
   });
-  if (db && secret && process.env.NODE_ENV !== "test") {
+  if (db && secret && config?.maxOutboundEnabled !== false && process.env.NODE_ENV !== "test") {
     let running = false;
     const timer = setInterval(async () => {
       if (running) return;
@@ -177,7 +186,7 @@ export function registerDocumentBot(app: FastifyInstance, db: PrismaClient | nul
           try { await deliverBotOutbox(db, token, job.id, botName, !!config?.previewAccessRequired); }
           catch {
             const attempts = job.attempts + 1;
-            await db.botOutbox.update({ where: { id: job.id }, data: { attempts, nextAttemptAt: new Date(Date.now() + Math.min(3600000, 5000 * 2 ** attempts)), ...(attempts >= 8 ? { deadAt: new Date() } : {}) } });
+            await db.botOutbox.update({ where: { id: job.id }, data: outboxRetryState(attempts, new Date()) });
             app.log.warn({ event: "outbox_retry", outboxId: job.id, attempts, dead: attempts >= 8 }, "MAX delivery retry scheduled");
           }
         }

@@ -1,0 +1,12 @@
+{
+  "houseAddress": "Демо: ул. Примерная, д. 12",
+  "executorCompanyName": "Демо УК",
+  "users": [
+    { "role": "RESIDENT", "maxUserId": "7000000000000000101" },
+    { "role": "COUNCIL_MEMBER", "maxUserId": "7000000000000000102" },
+    { "role": "CHAIRMAN", "maxUserId": "7000000000000000103" },
+    { "role": "EXECUTOR", "maxUserId": "7000000000000000104" },
+    { "role": "ADMIN", "maxUserId": "7000000000000000105" }
+  ],
+  "note": "Internal houseId, userId, workId and observationId are not fixed. Obtain them through API responses in each run."
+}

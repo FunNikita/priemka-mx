@@ -7,7 +7,8 @@ const destination = resolve(process.cwd(), "../../examples");
 const fixture = (name: string) => resolve(process.cwd(), "src/test/fixtures/review-pdfs", name);
 const beforeWide = fixture("door-before-landscape.png");
 const beforeTall = fixture("closer-before-portrait.png");
-const afterWide = fixture("door-after-landscape.png");
+const square = fixture("door-square.png");
+const panoramic = fixture("door-panoramic.png");
 const botName = process.env.MAX_BOT_NAME ?? "PriemkaDemoBot";
 await mkdir(destination, { recursive: true });
 const common: DocumentPayload = {
@@ -29,18 +30,24 @@ const examples = [
     ],
     issues: [{ title: "Дверь закрывается полностью", comment: "Доводчик не закрывает дверь до конца", checkedAt: actor.at }],
     summary: "Выявлено замечаний: 1. Требуется устранение замечаний.",
-    photoGroups: [{ title: "Пункт 1. Дверь закрывается полностью — Доводчик не закрывает дверь до конца", photos: [beforeTall, beforeWide] }, { title: "Пункт 2. Крепления без повреждений", photos: [afterWide] }],
+    photoGroups: [{ title: "Пункт 1. Дверь закрывается полностью — Доводчик не закрывает дверь до конца", photos: [beforeTall, beforeWide, panoramic] }],
   } },
   { name: "02-reasoned-refusal.pdf", type: "REASONED_REFUSAL" as const, payload: {
     ...common, actor: { name: "Никита Демо", role: "CHAIRMAN", at: "2026-09-25T12:30:00.000Z" },
-    summary: "Отказ от приёмки основан на неустранённом замечании.",
-    issues: [{ title: "Дверь закрывается полностью", comment: "Доводчик не закрывает дверь до конца", checkedAt: actor.at }],
-    photoGroups: [{ title: "ФОТОМАТЕРИАЛЫ", photos: [beforeWide] }],
+    summary: "Отказ от приёмки основан на перечисленных неустранённых замечаниях.",
+    issues: [
+      { title: "Дверь закрывается полностью", comment: "Доводчик не закрывает дверь до конца", checkedAt: actor.at },
+      { title: "Крепления двери", comment: "Повреждён крепёж", checkedAt: actor.at },
+    ],
+    photoGroups: [
+      { title: "Замечание 1. Дверь закрывается полностью", photos: [beforeTall, beforeWide] },
+      { title: "Замечание 2. Крепления двери", photos: [square, panoramic] },
+    ],
   } },
   { name: "03-acceptance-act.pdf", type: "ACCEPTANCE_ACT" as const, payload: {
     ...common,
     rows: [{ label: "Категория", value: "Входная группа" }, { label: "Представитель исполнителя", value: "Сергей Демо" }, { label: "Проверено пунктов", value: "3" }, { label: "Замечаний устранено", value: "1" }],
-    summary: "Все 1 замечаний устранены.",
+    summary: "1 замечание устранено.",
     confirmations: [{ name: "Сергей Демо", role: "EXECUTOR", at: "2026-09-25T12:00:00.000Z" }, { name: "Никита Демо", role: "CHAIRMAN", at: "2026-09-25T12:30:00.000Z" }],
   } },
 ];

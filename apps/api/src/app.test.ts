@@ -49,7 +49,7 @@ it("localizes schema validation and preserves an explicit business error", async
 });
 
 async function testApp(repository = new MemoryUserRepository(), options: Omit<Parameters<typeof createApp>[0], "config" | "userRepository" | "logger"> = {}) {
-  return { app: await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: repository, logger: false, ...options }), repository };
+  return { app: await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true }, userRepository: repository, logger: false, ...options }), repository };
 }
 
 describe("system routes", () => {
@@ -63,7 +63,7 @@ describe("system routes", () => {
   });
   it("logs socket IP on 200 and 404 without trusting a spoofed forwarded header", async () => {
     const logs: string[] = [];
-    const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 }, userRepository: new MemoryUserRepository(), logStream: { write: (line: string) => { logs.push(line); } }, staticRoot: "/nonexistent-priemka-static" });
+    const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true }, userRepository: new MemoryUserRepository(), logStream: { write: (line: string) => { logs.push(line); } }, staticRoot: "/nonexistent-priemka-static" });
     try {
       await app.inject({ method: "GET", url: "/api/health", headers: { "x-forwarded-for": "203.0.113.42" } });
       await app.inject({ method: "GET", url: "/not-found?secret=hidden", headers: { "x-forwarded-for": "203.0.113.42" } });
@@ -141,7 +141,7 @@ describe("system routes", () => {
 describe("GET /api/me", () => {
   it("keeps invalid auth at 401 and returns the signed MAX ID for preview denial", async () => {
     const db = { previewAccess: { findUnique: async () => null } } as unknown as PrismaClient;
-    const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, previewAccessRequired: true }, userRepository: new MemoryUserRepository(), businessDb: db, logger: false, staticRoot: "/nonexistent" });
+    const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true, previewAccessRequired: true }, userRepository: new MemoryUserRepository(), businessDb: db, logger: false, staticRoot: "/nonexistent" });
     try {
       expect((await app.inject({ method: "GET", url: "/api/health" })).statusCode).toBe(200);
       const invalid = await app.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": "invalid" } });
@@ -248,7 +248,7 @@ describe("GET /api/me", () => {
     const logs: string[] = [];
     const repository = new MemoryUserRepository();
     const loggedApp = await createApp({
-      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
+      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true },
       userRepository: repository,
       logStream: new Writable({
         write(chunk, _encoding, callback) {
@@ -288,7 +288,7 @@ describe("GET /api/me", () => {
   it("logs request metadata and an error stack without exposing initData", async () => {
     const logs: string[] = [];
     const loggedApp = await createApp({
-      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600 },
+      config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: true },
       userRepository: {
         isReady: async () => true,
         upsertFromMax: async () => { throw new Error("test repository failure"); },
@@ -314,4 +314,13 @@ describe("GET /api/me", () => {
       await loggedApp.close();
     }
   });
+});
+
+it.each([false, true])("exposes the backend self-role capability (%s) through /api/me", async (allowSelfRoleSwitch) => {
+  const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: false, allowSelfRoleSwitch }, userRepository: new MemoryUserRepository(), logger: false, staticRoot: "/nonexistent-priemka-static" });
+  try {
+    const response = await app.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": createSignedMaxInitData(botToken) } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().canSelfRoleSwitch).toBe(allowSelfRoleSwitch);
+  } finally { await app.close(); }
 });
