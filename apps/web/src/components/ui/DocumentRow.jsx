@@ -1,5 +1,6 @@
 import { Icon20DocumentOutline } from '@vkontakte/icons';
 import { useState } from 'react';
+import { callMaxBridge } from '../../utils/maxFeedback';
 import './DocumentRow.css';
 
 export function DocumentRow({ document, action }) {
@@ -14,7 +15,7 @@ export function DocumentRow({ document, action }) {
     try {
       const url = new URL(document.fileUrl, window.location.href);
       if (url.protocol !== 'https:') throw new Error('Для скачивания в MAX нужна HTTPS-ссылка.');
-      Promise.resolve(bridge.downloadFile(url.href, fileName)).catch(() => setError('Не удалось скачать документ. Повторите попытку.'));
+      callMaxBridge('downloadFile', () => bridge.downloadFile(url.href, fileName), true, () => setError('Не удалось скачать документ. Повторите попытку.'));
     } catch (failure) {
       setError(failure.message || 'Не удалось скачать документ. Повторите попытку.');
     }

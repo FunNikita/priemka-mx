@@ -1,9 +1,9 @@
+import { PanelBack } from '../components/layout/PanelBack';
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Button } from '../components/ui/LegacyButton';
 import { Icon12CancelCircleFillRed, Icon20Check, Icon20ReplayOutline, Icon24AddCircle, Icon24PenOutline } from '@vkontakte/icons';
 import { useEffect, useRef, useState } from 'react';
 
-import { PageHeader } from '../components/layout/PageHeader';
 import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 import { photoPreviewUrl } from '../components/common/photoPreviewUrl';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -69,14 +69,14 @@ export function ReportProblemPage({ onBack, houseId, houses = [], onAccessChange
     finally { setSending(false); }
   };
 
-  if (!hasActiveHouse) return <Panel mode="primary" className="inner-panel report-problem-panel"><PageHeader title="Сообщить о проблеме" onBack={onBack} /><main className="panel-content report-problem-content"><Typography.Body>Сначала выберите дом.</Typography.Body></main></Panel>;
+  if (!hasActiveHouse) return <Panel mode="primary" className="inner-panel report-problem-panel"><PanelBack onBack={onBack} /><main className="panel-content report-problem-content"><Typography.Body>Сначала выберите дом.</Typography.Body></main></Panel>;
   if (isSent) return <Panel mode="primary" className="inner-panel report-problem-panel">
-    <PageHeader title="Сообщить о проблеме" onBack={onBack} />
+    <PanelBack onBack={onBack} />
     <main className="panel-content report-problem-content"><section className="report-problem-card report-problem-success"><span className="report-problem-success__icon"><Icon20Check /></span><Typography.Title>Наблюдение отправлено</Typography.Title><Typography.Body>Наблюдение сохранено и появится в разделе «События дома».</Typography.Body><Button mode="primary" appearance="themed" onClick={onBack}>Вернуться на главную</Button></section></main>
   </Panel>;
 
   return <Panel mode="primary" className="inner-panel report-problem-panel">
-    <PageHeader title="Сообщить о проблеме" onBack={onBack} />
+    <PanelBack onBack={onBack} />
     <main className="panel-content report-problem-content">
       <section className="report-problem-card">
         <div className="report-problem-field"><Typography.Label>Адрес дома</Typography.Label><AppSelect value={address} options={addressOptions} ariaLabel="Адрес дома" onChange={setAddress} /></div>

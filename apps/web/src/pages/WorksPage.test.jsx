@@ -20,7 +20,7 @@ it('показывает обращения без legacy Work list', async () =
   expect(container.querySelector('.house-event-card--work')).toBeNull();
   expect(allPages).toHaveBeenCalledTimes(2);
   expect(container.querySelector('.house-event-card--observation')).not.toBeNull();
-  expect(container.textContent).toContain('События');
+  expect(container.querySelector('.page-header')).toBeNull();
   expect(allPages).toHaveBeenCalledWith('/api/houses/1/observations', { tab: 'active', search: '' }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(allPages).toHaveBeenCalledWith('/api/houses/1/observations', { tab: 'history', search: '' }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(container.textContent).toContain('Принятое обращение');

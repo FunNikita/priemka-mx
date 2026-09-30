@@ -1,7 +1,7 @@
+import { PanelBack } from '../components/layout/PanelBack';
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Icon24AddCircle } from '@vkontakte/icons';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { PageHeader } from '../components/layout/PageHeader';
 import { HouseSwitcher } from '../components/common/HouseSwitcher';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { PhotoGallery } from '../components/common/PhotoStrip';
@@ -60,7 +60,7 @@ export function WorksPage({ onBack, onOpenReport, houseId, houses = [], onHouseC
   const events = useMemo(() => eventsData.filter((item) => (filter === 'all' || item.status === filter) && (item.kind !== 'work' || !search || `${item.title} ${item.description} ${item.category}`.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => new Date(b.when) - new Date(a.when)), [eventsData, filter, search]);
   if (selectedWorkId) return <ResidentWorkDetails workId={selectedWorkId} onBack={() => { setSelectedWorkId(null); setRevision((value) => value + 1); }} />;
   if (selectedObservation) return <ObservationDetail observationId={selectedObservation.id} onBack={() => { setSelectedObservation(null); setRevision((value) => value + 1); }} onOpenWork={(id) => { setSelectedObservation(null); setSelectedWorkId(id); }} />;
-  return <Panel mode="primary" className="inner-panel house-events-panel"><PageHeader title="События" onBack={onBack} /><main className="panel-content house-events-content"><section className="house-events-layout">
+  return <Panel mode="primary" className="inner-panel house-events-panel"><PanelBack onBack={onBack} /><main className="panel-content house-events-content"><section className="house-events-layout">
     <HouseSwitcher houseId={houseId} houses={houses} onHouseChange={onHouseChange} />
     {!houseId ? <EmptyState message="Сначала выберите дом" detail="После выбора дома здесь появятся его события." /> : <>
       <div className="house-events-toolbar">{canCreateObservation ? <button type="button" className="house-events-toolbar__report" onClick={onOpenReport}><span className="house-events-toolbar__report-icon"><Icon24AddCircle /></span><span className="house-events-toolbar__report-copy"><b>Сообщить о проблеме</b><small>Новое наблюдение жителя</small></span></button> : null}<SearchInput placeholder="Поиск событий" value={query} onChange={(event) => setQuery(typeof event === 'string' ? event : event.target.value)} /></div>

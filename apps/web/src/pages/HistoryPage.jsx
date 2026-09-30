@@ -1,6 +1,6 @@
+import { PanelBack } from '../components/layout/PanelBack';
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Icon28BookSpreadOutline } from '@vkontakte/icons';
-import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorState } from '../components/ui/ErrorState';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -24,7 +24,7 @@ export function HistoryPage({ onBack, houseId }) {
     return () => { active = false; };
   }, [houseId, revision]);
   const visible = items.filter((item) => filter === 'all' || (filter === 'green' ? item.status === 'ACCEPTED' : item.status === 'WAITING'));
-  return <Panel mode="primary" className="inner-panel"><PageHeader title="История" onBack={onBack} />
+  return <Panel mode="primary" className="inner-panel"><PanelBack onBack={onBack} />
     <main className="panel-content"><Typography.Body className="page-lead">Реальные работы дома и их текущие статусы</Typography.Body>
       <SegmentedControl label="Фильтр истории" value={filter} onChange={setFilter} items={[{ id: 'all', label: 'Все' }, { id: 'green', label: 'Принято' }, { id: 'orange', label: 'Замечания' }]} />
       <Section title="Работы дома"><div className="list-card">{loading ? <LoadingSpinner /> : error ? <ErrorState message={error} onRetry={() => { setLoading(true); setRevision((value) => value + 1); }} /> : !houseId ? <EmptyState message="Выберите дом, чтобы увидеть историю." /> : visible.length ? visible.map((item) => <ListRow key={item.id} title={item.title} description={formatDate(item.createdAt)} icon={Icon28BookSpreadOutline} tone={item.status === 'ACCEPTED' ? 'green' : 'orange'} trailing={<StatusBadge tone={item.status === 'ACCEPTED' ? 'green' : 'orange'}>{workStatuses[item.status]}</StatusBadge>} />) : <EmptyState message="Работ с таким статусом пока нет." />}</div></Section>

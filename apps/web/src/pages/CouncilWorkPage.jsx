@@ -1,8 +1,8 @@
+import { PanelBack } from '../components/layout/PanelBack';
 import { Avatar, Panel, Typography } from '@maxhub/max-ui';
 import { Icon12CancelCircleFillRed, Icon24AddCircle, Icon24ChevronDown, Icon24ChevronUpSmall, Icon24PenOutline } from '@vkontakte/icons';
 import { useRef, useState } from 'react';
 
-import { PageHeader } from '../components/layout/PageHeader';
 import { Button } from '../components/ui/LegacyButton';
 import { PhotoGroup } from '../components/ui/PhotoGroup';
 import { Modal } from '../components/ui/Modal';
@@ -59,7 +59,7 @@ function DemoCouncilWorkPage({ inspection, onBack }) {
     setPendingDecision(null);
   };
   return <Panel mode="primary" className="home-panel active-work-details-panel council-work-panel">
-    <PageHeader title="Работа" onBack={onBack} />
+    <PanelBack onBack={onBack} />
     <main className="panel-content active-work-details-content">
       <header className="active-work-details__head"><div className="active-work-details__title-row"><div className="active-work-details__title-status"><Typography.Title variant="small-strong" className="council-work__title">Ремонтные работы</Typography.Title><div className="active-work-details__status-list"><span className={`active-work-details__status active-work-details__status--${work.statusTone ?? inspectionType}`}>{repeatOutcome ? 'Повторная проверка завершена' : work.status}</span>{repeatOutcome ? <span className="active-work-details__status">{repeatOutcome === 'RESOLVED' ? 'Устранено' : 'Не устранено'}</span> : work.review ? <span className="active-work-details__status">{work.review}</span> : null}{!isCompleted && !repeatOutcome ? <span className="active-work-details__status active-work-details__status--checking">Вы проверяете</span> : null}</div></div><Typography.Label>ID {work.id}</Typography.Label></div></header>
       <section className="active-work-details__card">

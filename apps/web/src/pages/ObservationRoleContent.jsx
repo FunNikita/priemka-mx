@@ -8,6 +8,7 @@ import { ConfirmActionModal } from '../components/ui/ConfirmActionModal';
 import { DocumentRow } from '../components/ui/DocumentRow';
 import { formatDate, jsonRequest, observationStatusLabel, request, uploadPhoto } from './residentApi';
 import { sortHistoryNewestFirst } from './sortHistory';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 
 const checklistCategoryLabels = { COMMON_AREAS: 'Общие помещения', LIGHTING: 'Освещение', ROOF: 'Кровля', OUTDOOR: 'Придомовая территория' };
 
@@ -32,8 +33,8 @@ export function ObservationRoleContent({ detail, onReload, children, renderDocum
   const mutate = async (operation) => {
     if (busy) return;
     setBusy(true); setError('');
-    try { await operation(); await onReload(); }
-    catch (failure) { setError(failure.message); }
+    try { await operation(); hapticSuccess(); await onReload(); }
+    catch (failure) { hapticError(); setError(failure.message); }
     finally { setBusy(false); }
   };
   const addFiles = (event) => {

@@ -1,7 +1,6 @@
 import { Panel, Typography } from '@maxhub/max-ui';
 import { useMemo, useState } from 'react';
 
-import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { PhotoGroup } from '../components/ui/PhotoGroup';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -49,7 +48,7 @@ export function InspectionsPage({ houseId, embedded = false, assignedOnly = fals
         </>}
       </section>
     </main>;
-  return embedded ? <div className="inspections-embedded-content">{content}</div> : <Panel mode="primary" className="inner-panel house-events-panel inspections-panel"><PageHeader title="Проверки" />{content}</Panel>;
+  return embedded ? <div className="inspections-embedded-content">{content}</div> : <Panel mode="primary" className="inner-panel house-events-panel inspections-panel">{content}</Panel>;
 }
 
 function InspectionCard({ inspection, onOpen }) {

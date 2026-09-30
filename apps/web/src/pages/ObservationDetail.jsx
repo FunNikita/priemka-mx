@@ -1,7 +1,8 @@
+import { PanelBack } from '../components/layout/PanelBack';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Icon12CancelCircleFillRed, Icon24AddCircle, Icon24Attach, Icon24PenOutline } from '@vkontakte/icons';
-import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorState } from '../components/ui/ErrorState';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -53,8 +54,8 @@ export function ObservationDetail({ observationId, onBack }) {
   const mutate = async (operation, refreshSilently = false) => {
     if (busy) return;
     setBusy(true); setError('');
-    try { await operation(); await reload(!refreshSilently); }
-    catch (failure) { setError(failure.message); if (failure.status === 409) await reload(!refreshSilently); }
+    try { await operation(); hapticSuccess(); await reload(!refreshSilently); }
+    catch (failure) { hapticError(); setError(failure.message); if (failure.status === 409) await reload(!refreshSilently); }
     finally { setBusy(false); }
   };
   const openCreate = async () => {
@@ -90,7 +91,7 @@ export function ObservationDetail({ observationId, onBack }) {
   const executor = detail?.workflow?.executor ?? detail?.linkedWork?.executor;
   const history = detail?.history ?? [];
   const comments = detail?.comments ?? [];
-  return <Panel mode="primary" className="home-panel active-work-details-panel observation-details-panel"><PageHeader title="Наблюдение" onBack={onBack} /><main className="panel-content active-work-details-content">
+  return <Panel mode="primary" className="home-panel active-work-details-panel observation-details-panel"><PanelBack onBack={onBack} /><main className="panel-content active-work-details-content">
     {loading ? <LoadingSpinner /> : error && !detail ? <ErrorState message={error} onRetry={() => void reload()} /> : detail ? <>
       <header className="active-work-details__head"><div className="active-work-details__title-row"><div className="active-work-details__title-status"><Typography.Title variant="small-strong" className="active-work-details__main-title">{detail.title}</Typography.Title><div className="active-work-details__status-list"><span className="active-work-details__status">{observationStatusLabel(detail)}</span>{detail.isWatching && detail.watchReason !== 'AUTHOR' ? <span className="active-work-details__status active-work-details__status--observed">Вы наблюдаете</span> : null}</div></div><Typography.Label>ID {detail.id}</Typography.Label></div></header>
       <section className="active-work-details__card"><Typography.Title variant="small-strong" className="active-work-details__section-title">История изменений</Typography.Title>{history.length ? <ol className="active-work-details__history">{sortHistoryNewestFirst(history).map((item) => <li key={item.id}><i /><time>{formatDate(item.createdAt)}</time><span>{item.title}</span></li>)}</ol> : <EmptyState message="История пока пуста." />}

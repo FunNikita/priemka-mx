@@ -1,8 +1,8 @@
+import { PanelBack } from '../components/layout/PanelBack';
 import { Panel, Typography } from '@maxhub/max-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon12CancelCircleFillRed, Icon24AddCircle, Icon24ChevronDown, Icon24PenOutline } from '@vkontakte/icons';
 
-import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorState } from '../components/ui/ErrorState';
 import { Button } from '../components/ui/LegacyButton';
@@ -13,7 +13,7 @@ import { Modal } from '../components/ui/Modal';
 import { DocumentRow } from '../components/ui/DocumentRow';
 import { councilJson, councilRequest, uploadCouncilPhoto } from './councilApi';
 import { allPages, formatDate, historyEvents, roleLabels, workStatuses } from './residentApi';
-import { hapticError, hapticSelection, hapticSuccess } from '../utils/maxFeedback';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 import './HomePage.css';
 import './ReportProblemPage.css';
 import './CouncilApiWorkPage.css';
@@ -77,7 +77,7 @@ function ResultSelect({ value, onChange, options, disabled = false }) {
   const tone = value === 'PASS' || value === 'RESOLVED' ? 'pass' : value === 'FAIL' || value === 'NOT_RESOLVED' ? 'fail' : 'pending';
   return <div className="admin-select council-api__select">
     <button type="button" className={`admin-select__trigger council-work__select--${tone}`} aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span>{options[value] ?? answerLabels[value]}</span><Icon24ChevronDown width={20} height={20} /></button>
-    {open ? <div className="admin-select__menu" role="listbox">{Object.entries(options).map(([result, label]) => <button key={result} type="button" className="admin-select__option" onClick={() => { if (result && result !== value) hapticSelection(); onChange(result); setOpen(false); }}>{label}</button>)}</div> : null}
+    {open ? <div className="admin-select__menu" role="listbox">{Object.entries(options).map(([result, label]) => <button key={result} type="button" className="admin-select__option" onClick={() => { onChange(result); setOpen(false); }}>{label}</button>)}</div> : null}
   </div>;
 }
 
@@ -205,8 +205,9 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
     setError('');
     try {
       await councilRequest(`/api/documents/${documentId}/confirm`, councilJson('POST', {}));
+      hapticSuccess();
       await load();
-    } catch (failure) { setError(failure.message); if (failure.status === 409) await load(); }
+    } catch (failure) { hapticError(); setError(failure.message); if (failure.status === 409) await load(); }
     finally { setBusy(false); }
   };
 
@@ -222,7 +223,7 @@ export function CouncilApiWorkPage({ inspection: task, onBack, onUpdated }) {
   const canComplete = isRepeat ? observationId ? repeatReady : Boolean(review.result && (review.result === 'RESOLVED' || review.comment.trim())) : Boolean(hasAllAnswers);
 
   return <Panel mode="primary" className="home-panel active-work-details-panel council-work-panel">
-    <PageHeader title="Работа" onBack={onBack} />
+    <PanelBack onBack={onBack} />
     <main className="panel-content active-work-details-content">
       {loading && !detail ? <LoadingSpinner /> : null}
       {error && !detail ? <ErrorState message={error} onRetry={() => void load()} /> : null}

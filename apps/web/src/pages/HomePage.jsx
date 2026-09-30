@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Panel, Typography } from '@maxhub/max-ui';
-import { PageHeader } from '../components/layout/PageHeader';
 import { HouseSwitcher } from '../components/common/HouseSwitcher';
 import { PhotoGallery } from '../components/common/PhotoStrip';
 import { photoPreviewUrl } from '../components/common/photoPreviewUrl';
@@ -21,7 +20,7 @@ export function HomePage(props) {
 function CouncilMemberHome({ houseId, houses, onHouseChange, onOpenInspection }) {
 
   return <Panel mode="primary" className="home-panel">
-    <PageHeader title="Главная" />
+
     <main className="panel-content">
       <div className="home-sections council-home-sections">
         <HouseSwitcher houseId={houseId} houses={houses} onHouseChange={onHouseChange} />

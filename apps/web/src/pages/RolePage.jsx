@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Avatar, CellSimple, Panel, Typography } from '@maxhub/max-ui';
-import { PageHeader } from '../components/layout/PageHeader';
 import { AppSelect } from '../components/ui/AppSelect';
 import { Button } from '../components/ui/LegacyButton';
 import { roleLabels } from './residentApi';
@@ -21,7 +20,7 @@ export function RolePage({ user, maxProfile, houses = [], onSave, busy, error, e
     }
   };
 
-  return <Panel mode="primary" className="role-panel"><PageHeader title="Роль" /><main className="panel-content role-page">
+  return <Panel mode="primary" className="role-panel"><main className="panel-content role-page">
     <section className="role-page__card">
       <CellSimple className="role-page__profile" height="normal" before={<Avatar.Container size={48}><Avatar.Image src={photoUrl} alt="" fallback={initials} /></Avatar.Container>} title={name} />
       {houses.length ? <div className="role-page__houses">{houses.map((house) => {

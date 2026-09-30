@@ -1,7 +1,8 @@
+import { PanelBack } from '../components/layout/PanelBack';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Avatar, Panel, Typography } from '@maxhub/max-ui';
 import { Icon24Attach } from '@vkontakte/icons';
-import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorState } from '../components/ui/ErrorState';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -37,8 +38,9 @@ export function ResidentWorkDetails({ workId, onBack }) {
     setBusy(true); setActionError('');
     try {
       await request(`/api/works/${workId}/watch`, { method: work.actions.watch ? 'POST' : 'DELETE' });
+      hapticSuccess();
       await reload();
-    } catch (failure) { setActionError(failure.message); if (failure.status === 409) await reload(); }
+    } catch (failure) { hapticError(); setActionError(failure.message); if (failure.status === 409) await reload(); }
     finally { setBusy(false); }
   };
   const sendComment = async () => {
@@ -48,11 +50,12 @@ export function ResidentWorkDetails({ workId, onBack }) {
       const mediaIds = [];
       for (const file of files) mediaIds.push((await uploadPhoto(file)).id);
       await request(`/api/works/${workId}/comments`, jsonRequest('POST', { text: remarkText.trim(), mediaIds }));
+      hapticSuccess();
       setRemarkText(''); setFiles([]); await reload();
-    } catch (failure) { setActionError(failure.message); if (failure.status === 409) await reload(); }
+    } catch (failure) { hapticError(); setActionError(failure.message); if (failure.status === 409) await reload(); }
     finally { setBusy(false); }
   };
-  return <Panel mode="primary" className="home-panel active-work-details-panel"><PageHeader title="Работа" onBack={onBack} /><main className="panel-content active-work-details-content">
+  return <Panel mode="primary" className="home-panel active-work-details-panel"><PanelBack onBack={onBack} /><main className="panel-content active-work-details-content">
     {loading ? <LoadingSpinner /> : error ? <ErrorState message={error} onRetry={() => void reload()} /> : work ? <>
       <header className="active-work-details__head"><div className="active-work-details__title-row"><div className="active-work-details__title-status"><Typography.Title variant="small-strong" className="active-work-details__main-title">Ремонтные работы</Typography.Title><div className="active-work-details__status-list"><span className="active-work-details__status">{workStatuses[work.status]}</span>{work.isWatching ? <span className="active-work-details__status active-work-details__status--observed">Вы наблюдаете</span> : null}</div></div><Typography.Label>ID {work.id}</Typography.Label></div></header>
       <section className="active-work-details__card"><Typography.Title variant="small-strong" className="active-work-details__section-title">История изменений</Typography.Title>{activity.length ? <ol className="active-work-details__history">{sortHistoryNewestFirst(activity).map((item, index) => <li className={index === 0 ? 'active-work-details__history-current' : undefined} key={item.id}><i /><time>{formatDate(item.createdAt)}</time><span>{historyEvents[item.event] ?? item.event} · {item.actorName ?? 'Система'}{item.actorRole ? ` (${item.actorRole})` : ''}</span></li>)}</ol> : work.history.length ? <ol className="active-work-details__history">{sortHistoryNewestFirst(work.history).map((item, index) => <li className={index === 0 ? 'active-work-details__history-current' : undefined} key={item.id}><i /><time>{formatDate(item.createdAt)}</time><span>{historyEvents[item.event] ?? 'Обновление работы'}{item.details ? `: ${item.details === 'NOT_RESOLVED' ? 'Не устранено' : item.details === 'RESOLVED' ? 'Устранено' : item.details}` : ''}</span></li>)}</ol> : <Typography.Body>История изменений пока пуста.</Typography.Body>}

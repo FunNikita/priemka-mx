@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Panel, Typography } from '@maxhub/max-ui';
-import { PageHeader } from '../components/layout/PageHeader';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 import { Button } from '../components/ui/LegacyButton';
 import { HouseSwitcher } from '../components/common/HouseSwitcher';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -40,8 +40,10 @@ export function ResidentHome({ onOpen, houseId, onHouseChange, houses, userId })
     setWatchingId(key); setWatchError(null);
     try {
       await request(`/api/observations/${observationId}/watch`, { method: 'POST' });
+      hapticSuccess();
       await reload();
     } catch (failure) {
+      hapticError();
       setWatchError({ key, message: failure.message });
       if (failure.status === 409) await reload();
     } finally { setWatchingId(null); }
@@ -50,7 +52,7 @@ export function ResidentHome({ onOpen, houseId, onHouseChange, houses, userId })
   if (selectedObservationId) return <ObservationDetail observationId={selectedObservationId} onBack={() => { setSelectedObservationId(null); void reload(); }} />;
 
   return <Panel mode="primary" className="home-panel">
-    <PageHeader title="Главная" />
+
     <main className="panel-content"><div className="home-sections">
       <HouseSwitcher houseId={houseId} houses={houses} onHouseChange={onHouseChange} />
       {!houseId ? <EmptyState message="Сначала выберите дом" /> : <>{membership?.permissions?.viewHouseChat ? <CouncilHouseChat houseId={houseId} house={houses?.find((item) => item.id === houseId)} /> : null}<section className="home-active-works"><Typography.Headline className="home-section-title">Активные события</Typography.Headline><div className="home-active-works__list">

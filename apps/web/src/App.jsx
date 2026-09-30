@@ -1,3 +1,4 @@
+import { PanelBack } from './components/layout/PanelBack';
 import { useEffect, useRef, useState } from 'react';
 
 import { BottomTabBar } from './components/layout/BottomTabBar';
@@ -21,15 +22,25 @@ import { ExecutorWorkDetail } from './pages/ExecutorHome';
 import { ChairmanWorkDetail } from './pages/ChairmanHome';
 import { CouncilWorkPage } from './pages/CouncilWorkPage';
 import { Panel } from '@maxhub/max-ui';
-import { PageHeader } from './components/layout/PageHeader';
 import { request, jsonRequest } from './pages/residentApi';
 import { allPages } from './pages/residentApi';
 import { ChairmanHome } from './pages/ChairmanHome';
 import { RolePage } from './pages/RolePage';
-import { hapticSuccess } from './utils/maxFeedback';
+import { hapticError, hapticSelection, hapticSuccess } from './utils/maxFeedback';
 
 const pages = { works: WorksPage, 'report-problem': ReportProblemPage, notifications: NotificationsPage, history: HistoryPage, achievements: AchievementsPage, showcase: ShowcasePage };
 function readSession(key, fallback = null) { try { const value = sessionStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
+function handleSelectionClick(event) {
+  if (!(event.target instanceof Element)) return;
+  const option = event.target.closest('[role="radio"], [role="option"], .admin-select__option');
+  if (!option || option.disabled || option.getAttribute('aria-disabled') === 'true') return;
+  if (option.getAttribute('aria-checked') !== 'true' && option.getAttribute('aria-selected') !== 'true') {
+    hapticSelection();
+  }
+}
+function handleSelectionHaptic(event) {
+  if (event.target.matches('select, input[type="checkbox"], input[type="radio"]')) hapticSelection();
+}
 
 export default function App() {
   const scrollRef = useRef(null);
@@ -96,7 +107,7 @@ export default function App() {
       await request(`/api/me/houses/${targetHouseId}/membership`, jsonRequest('PATCH', { role: targetRole, ...(targetRole === 'EXECUTOR' ? { executorCompanyName: targetCompany.trim() } : {}) }));
       await refreshMe(); hapticSuccess();
       return true;
-    } catch (failure) { setRoleError(failure.message); if (failure.status === 409) await refreshMe(); return false; }
+    } catch (failure) { hapticError(); setRoleError(failure.message); if (failure.status === 409) await refreshMe(); return false; }
     finally { setRoleBusy(false); }
   };
   useEffect(() => {
@@ -152,9 +163,9 @@ export default function App() {
   if (authPending) return <div className="app-root app-root--boot"><div className="app-center"><LoadingSpinner /></div></div>;
   if (previewDenied) return <div className="app-root app-root--boot"><div className="app-center"><ErrorState message={`Доступ к закрытому тесту пока не открыт. Передайте администратору ваш MAX ID: ${previewDenied}`} onRetry={() => { setPreviewDenied(null); setAuthPending(true); setAuthRevision((value) => value + 1); }} /></div></div>;
   if (authError) return <div className="app-root app-root--boot"><div className="app-center"><ErrorState message={authError} onRetry={() => { setAuthPending(true); setAuthError(''); setAuthRevision((value) => value + 1); }} /></div></div>;
-  return <div className="app-root">
+  return <div className="app-root" onClickCapture={handleSelectionClick} onChangeCapture={handleSelectionHaptic}>
     <div ref={scrollRef} className={`app-scroll${hideTabBar ? ' app-scroll--without-tabbar' : ''}`}>
-      {deepLink?.kind === 'inspection' ? <CouncilWorkPage inspection={{ ...deepLink.inspection, apiKind: true }} onUpdated={() => {}} onBack={() => { sessionStorage.removeItem('max-active-inspection'); setDeepLink(null); }} /> : deepLink?.kind === 'work' ? currentRole === 'executor' ? <ExecutorWorkDetail workId={deepLink.id} onBack={() => setDeepLink(null)} /> : currentRole === 'chairman' ? <ChairmanWorkDetail houseId={houseId} workId={deepLink.id} onBack={() => setDeepLink(null)} /> : <ResidentWorkDetails workId={deepLink.id} onBack={() => setDeepLink(null)} /> : deepLink?.kind === 'observation' ? currentRole === 'executor' ? <ExecutorWorkDetail observationId={deepLink.id} onBack={() => setDeepLink(null)} /> : currentRole === 'chairman' ? <ChairmanWorkDetail houseId={houseId} observationId={deepLink.id} onBack={() => setDeepLink(null)} /> : <ObservationDetail observationId={deepLink.id} onBack={() => setDeepLink(null)} /> : deepLink?.kind === 'join_request' ? <ChairmanHome houseId={deepLink.houseId} houses={me.houses} onHouseChange={selectHouse} focusJoinRequestId={deepLink.id} onBack={() => setDeepLink(null)} /> : deepLink?.kind === 'unavailable' ? <Panel mode="primary" className="home-panel"><PageHeader title="Ссылка недоступна" onBack={() => setDeepLink(null)} /><main className="panel-content"><ErrorState message={deepLink.message} /></main></Panel> : page && InnerPage ? page === 'works' ? <WorksPage key={houseId} onBack={closePage} onOpenReport={() => openPage('report-problem')} houseId={houseId} canCreateObservation={membership?.permissions?.createObservation} canViewObservations={membership?.permissions?.viewObservations} userId={me.user?.id} houses={me.houses} onHouseChange={(id) => selectHouse(id, true)} /> : <InnerPage onBack={closePage} houseId={houseId} houses={me.houses} onAccessChanged={refreshMe} /> : visibleTab === 'home' ? <HomePage key={houseId} onOpen={openPage} onOpenInspection={(inspection) => { const next = { kind: 'inspection', inspection }; sessionStorage.setItem('max-active-inspection', JSON.stringify(next)); setDeepLink(next); }} role={currentRole} houseId={houseId} onHouseChange={selectHouse} houses={me.houses} userId={me.user?.id} /> : visibleTab === 'works' ? <WorksPage key={houseId} onBack={() => setTab('home')} onOpenReport={() => openPage('report-problem')} houseId={houseId} canCreateObservation={membership?.permissions?.createObservation} canViewObservations={membership?.permissions?.viewObservations} userId={me.user?.id} houses={me.houses} onHouseChange={(id) => selectHouse(id, true)} /> : visibleTab === 'role' ? <RolePage user={me.user} maxProfile={maxProfile} houses={me.houses} onSave={changeRole} busy={roleBusy} error={roleError} errorHouseId={roleErrorHouseId} /> : <AdminPage onMembershipChanged={refreshMe} />}
+      {deepLink?.kind === 'inspection' ? <CouncilWorkPage inspection={{ ...deepLink.inspection, apiKind: true }} onUpdated={() => {}} onBack={() => { sessionStorage.removeItem('max-active-inspection'); setDeepLink(null); }} /> : deepLink?.kind === 'work' ? currentRole === 'executor' ? <ExecutorWorkDetail workId={deepLink.id} onBack={() => setDeepLink(null)} /> : currentRole === 'chairman' ? <ChairmanWorkDetail houseId={houseId} workId={deepLink.id} onBack={() => setDeepLink(null)} /> : <ResidentWorkDetails workId={deepLink.id} onBack={() => setDeepLink(null)} /> : deepLink?.kind === 'observation' ? currentRole === 'executor' ? <ExecutorWorkDetail observationId={deepLink.id} onBack={() => setDeepLink(null)} /> : currentRole === 'chairman' ? <ChairmanWorkDetail houseId={houseId} observationId={deepLink.id} onBack={() => setDeepLink(null)} /> : <ObservationDetail observationId={deepLink.id} onBack={() => setDeepLink(null)} /> : deepLink?.kind === 'join_request' ? <ChairmanHome houseId={deepLink.houseId} houses={me.houses} onHouseChange={selectHouse} focusJoinRequestId={deepLink.id} onBack={() => setDeepLink(null)} /> : deepLink?.kind === 'unavailable' ? <Panel mode="primary" className="home-panel"><PanelBack onBack={() => setDeepLink(null)} /><main className="panel-content"><ErrorState message={deepLink.message} /></main></Panel> : page && InnerPage ? page === 'works' ? <WorksPage key={houseId} onBack={closePage} onOpenReport={() => openPage('report-problem')} houseId={houseId} canCreateObservation={membership?.permissions?.createObservation} canViewObservations={membership?.permissions?.viewObservations} userId={me.user?.id} houses={me.houses} onHouseChange={(id) => selectHouse(id, true)} /> : <InnerPage onBack={closePage} houseId={houseId} houses={me.houses} onAccessChanged={refreshMe} /> : visibleTab === 'home' ? <HomePage key={houseId} onOpen={openPage} onOpenInspection={(inspection) => { const next = { kind: 'inspection', inspection }; sessionStorage.setItem('max-active-inspection', JSON.stringify(next)); setDeepLink(next); }} role={currentRole} houseId={houseId} onHouseChange={selectHouse} houses={me.houses} userId={me.user?.id} /> : visibleTab === 'works' ? <WorksPage key={houseId} onBack={() => setTab('home')} onOpenReport={() => openPage('report-problem')} houseId={houseId} canCreateObservation={membership?.permissions?.createObservation} canViewObservations={membership?.permissions?.viewObservations} userId={me.user?.id} houses={me.houses} onHouseChange={(id) => selectHouse(id, true)} /> : visibleTab === 'role' ? <RolePage user={me.user} maxProfile={maxProfile} houses={me.houses} onSave={changeRole} busy={roleBusy} error={roleError} errorHouseId={roleErrorHouseId} /> : <AdminPage onMembershipChanged={refreshMe} />}
     </div>
     {!hideTabBar ? <BottomTabBar activeTab={visibleTab} onChange={changeTab} role={currentRole} isAdmin={isAdmin} /> : null}
   </div>;
