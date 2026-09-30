@@ -200,8 +200,8 @@ export async function registerHousesApi(app: FastifyInstance, config: AppConfig,
     let current = await ctx.db.houseMembership.findUnique({ where: key });
     if (!current) {
       try {
-        const created = await ctx.db.houseMembership.create({ data: { houseId, userId: ctx.userId, role: "RESIDENT", status: "PENDING", joinedVia: "REQUEST" } });
-        await notifyChairmenOfRequest(created);
+        const created = await ctx.db.houseMembership.create({ data: { houseId, userId: ctx.userId, role: "RESIDENT", status: config.demoAutoApproveJoinRequests ? "ACTIVE" : "PENDING", joinedVia: "REQUEST" } });
+        if (!config.demoAutoApproveJoinRequests) await notifyChairmenOfRequest(created);
         return reply.code(201).send(view(created));
       } catch (cause) {
         if (typeof cause !== "object" || cause === null || !("code" in cause) || cause.code !== "P2002") throw cause;
@@ -211,6 +211,14 @@ export async function registerHousesApi(app: FastifyInstance, config: AppConfig,
     if (!current) return failure(reply, 409, "Заявка изменилась, повторите запрос");
     if (current.role !== "RESIDENT") return failure(reply, 409, "Роль участника нельзя изменить заявкой");
     if (current.status === "ACTIVE") return failure(reply, 409, "Пользователь уже состоит в доме");
+    if (config.demoAutoApproveJoinRequests) {
+      const changed = await ctx.db.houseMembership.updateMany({
+        where: { id: current.id, role: "RESIDENT", status: current.status },
+        data: { status: "ACTIVE", ...(current.status === "REJECTED" ? { joinedVia: "REQUEST", requestedAt: now() } : {}) },
+      });
+      if (!changed.count) return failure(reply, 409, "Заявка изменилась, повторите запрос");
+      return view(await ctx.db.houseMembership.findUniqueOrThrow({ where: { id: current.id } }));
+    }
     if (current.status === "PENDING") return current.joinedVia === "REQUEST" ? view(current) : failure(reply, 409, "Уже есть заявка из другого источника");
     const changed = await ctx.db.houseMembership.updateMany({ where: { id: current.id, role: "RESIDENT", status: "REJECTED" }, data: { status: "PENDING", joinedVia: "REQUEST", requestedAt: now() } });
     if (!changed.count) return failure(reply, 409, "Заявка изменилась, повторите запрос");
