@@ -115,3 +115,13 @@ it("normalizes the optional demo address and rejects oversized configuration", (
     else process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = before;
   }
 });
+
+it("defaults demo auto-approval to false and accepts only boolean values", () => {
+  const before = process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS;
+  process.env.MAX_BOT_TOKEN = "test-token"; process.env.MAX_BOT_NAME = "PriemkaDemoBot";
+  try {
+    delete process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS; expect(getConfig().demoAutoApproveJoinRequests).toBe(false);
+    for (const value of ["false", "true"]) { process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS = value; expect(getConfig().demoAutoApproveJoinRequests).toBe(value === "true"); }
+    process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS = "yes"; expect(() => getConfig()).toThrow("must be true or false");
+  } finally { if (before === undefined) delete process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS; else process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS = before; }
+});

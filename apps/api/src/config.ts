@@ -9,6 +9,7 @@ export type AppConfig = {
   previewAccessRequired?: boolean;
   botTimeZone?: string;
   demoAutoEnrollHouseAddress?: string;
+  demoAutoApproveJoinRequests?: boolean;
 };
 
 export function getConfig(): AppConfig {
@@ -24,6 +25,8 @@ export function getConfig(): AppConfig {
   }
   const rawSelfRoleSwitch = process.env.ALLOW_SELF_ROLE_SWITCH ?? "false";
   if (rawSelfRoleSwitch !== "true" && rawSelfRoleSwitch !== "false") throw new Error("ALLOW_SELF_ROLE_SWITCH must be true or false");
+  const rawAutoApprove = process.env.DEMO_AUTO_APPROVE_JOIN_REQUESTS ?? "false";
+  if (rawAutoApprove !== "true" && rawAutoApprove !== "false") throw new Error("DEMO_AUTO_APPROVE_JOIN_REQUESTS must be true or false");
   const rawOutbound = process.env.MAX_OUTBOUND_ENABLED ?? "true";
   if (rawOutbound !== "true" && rawOutbound !== "false") throw new Error("MAX_OUTBOUND_ENABLED must be true or false");
   const preview = process.env.PREVIEW_ACCESS_REQUIRED ?? "false";
@@ -43,5 +46,6 @@ export function getConfig(): AppConfig {
     previewAccessRequired: preview === "true",
     botTimeZone,
     demoAutoEnrollHouseAddress,
+    demoAutoApproveJoinRequests: rawAutoApprove === "true",
   };
 }
