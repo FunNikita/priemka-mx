@@ -96,3 +96,22 @@ describe("MAX_BOT_NAME", () => {
     expect(getConfig().botName).toBe("PriemkaDemoBot");
   });
 });
+
+it("normalizes the optional demo address and rejects oversized configuration", () => {
+  const before = process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS;
+  process.env.MAX_BOT_TOKEN = "test-token";
+  process.env.MAX_BOT_NAME = "PriemkaDemoBot";
+  try {
+    delete process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS;
+    expect(getConfig().demoAutoEnrollHouseAddress).toBeUndefined();
+    process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = "  ";
+    expect(getConfig().demoAutoEnrollHouseAddress).toBeUndefined();
+    process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = "  Exact house  ";
+    expect(getConfig().demoAutoEnrollHouseAddress).toBe("Exact house");
+    process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = "x".repeat(513);
+    expect(() => getConfig()).toThrow("at most 512");
+  } finally {
+    if (before === undefined) delete process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS;
+    else process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS = before;
+  }
+});

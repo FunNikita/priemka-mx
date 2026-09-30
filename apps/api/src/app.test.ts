@@ -315,3 +315,12 @@ describe("GET /api/me", () => {
     }
   });
 });
+
+it.each([false, true])("exposes the backend self-role capability (%s) through /api/me", async (allowSelfRoleSwitch) => {
+  const app = await createApp({ config: { botToken, botName: "PriemkaDemoBot", maxInitDataMaxAgeSeconds: 3600, maxOutboundEnabled: false, allowSelfRoleSwitch }, userRepository: new MemoryUserRepository(), logger: false, staticRoot: "/nonexistent-priemka-static" });
+  try {
+    const response = await app.inject({ method: "GET", url: "/api/me", headers: { "x-max-init-data": createSignedMaxInitData(botToken) } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().canSelfRoleSwitch).toBe(allowSelfRoleSwitch);
+  } finally { await app.close(); }
+});

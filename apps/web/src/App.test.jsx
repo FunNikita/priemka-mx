@@ -115,3 +115,10 @@ it('меняет собственную роль через API и перест�
   expect(apiFetch).toHaveBeenCalledWith('/api/me/houses/5/membership', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ role: 'EXECUTOR', executorCompanyName: 'Демо УК' }) }));
   expect(container.querySelector('[data-testid="home-role"]').textContent).toBe('executor');
 });
+
+it.each([false, true])('показывает «Роль для демо» только по backend capability: %s', async (canSelfRoleSwitch) => {
+  getMaxInitData.mockResolvedValue('signed');
+  apiFetch.mockResolvedValue({ ok: true, json: async () => ({ user: { isAdmin: false }, canSelfRoleSwitch, lastHouseId: 5, houses: [{ id: 5, address: 'Дом', role: 'RESIDENT', status: 'ACTIVE', permissions: {} }] }) });
+  await act(async () => root.render(<App />));
+  expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent.includes('Роль для демо'))).toBe(canSelfRoleSwitch);
+});

@@ -85,6 +85,7 @@ docker compose up -d --build
 | `MAX_INIT_DATA_MAX_AGE_SECONDS` | Предельный возраст подписанных данных MAX. | `3600` секунд. |
 | `MAX_OUTBOUND_ENABLED` | Регистрация webhook и отправка уведомлений BotOutbox. | `true`; на EVAL — `false`. |
 | `ALLOW_SELF_ROLE_SWITCH` | Демонстрационная смена собственной роли. | `false`; включается явно только для демо. |
+| `DEMO_AUTO_ENROLL_HOUSE_ADDRESS` | Точный адрес единственного демо-дома: успешная MAX-авторизация добавляет ACTIVE RESIDENT; существующие повышенные роли сохраняются. | Пусто — отключено; только для демо. |
 | `PREVIEW_ACCESS_REQUIRED` | Дополнительный доступ к закрытому тесту. | `false`. |
 | `BOT_TIME_ZONE` | Часовой пояс бота. | `Europe/Moscow` |
 | `LOG_LEVEL` | Уровень журналирования сервера. | `info` |

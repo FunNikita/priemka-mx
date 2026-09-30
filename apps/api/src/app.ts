@@ -53,7 +53,7 @@ export type CreateAppOptions = {
 export async function createApp(options: CreateAppOptions = {}): Promise<FastifyInstance> {
   const config = options.config ?? getConfig();
   if (!isValidMaxBotName(config.botName)) throw new Error("MAX_BOT_NAME must be a valid MAX bot name");
-  const repository = options.userRepository ?? new PrismaUserRepository();
+  const repository = options.userRepository ?? new PrismaUserRepository(config.demoAutoEnrollHouseAddress);
   const now = options.now ?? (() => new Date());
   const retentionDays = Number(process.env.LOG_RETENTION_DAYS ?? "14");
   if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 365) throw new Error("LOG_RETENTION_DAYS must be 1-365");
@@ -136,8 +136,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
         200: {
           type: "object",
           additionalProperties: false,
-          required: ["user", "auth_date", "houses", "lastHouseId"],
+          required: ["user", "auth_date", "houses", "lastHouseId", "canSelfRoleSwitch"],
           properties: {
+            canSelfRoleSwitch: { type: "boolean" },
             query_id: { type: "string" },
             ip: { type: "string" },
             auth_date: { type: "integer" },
@@ -186,7 +187,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
       const rank = (m: typeof a) => m.status === "ACTIVE" ? (m.houseId === lastHouseId ? 0 : 1) : 2;
       return rank(a) - rank(b) || a.houseId - b.houseId;
     });
-    return { ...toMaxResponse(initData, identity), lastHouseId: lastHouseId ?? null, houses: sorted.map((membership) => { const permissions = permissionsFor(membership.role, membership.status); return { id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions, chat: permissions.viewHouseChat && membership.house.chat ? { title: membership.house.chat.title, joinUrl: membership.house.chat.joinUrl } : null }; }) };
+    return { ...toMaxResponse(initData, identity), canSelfRoleSwitch: config.allowSelfRoleSwitch === true, lastHouseId: lastHouseId ?? null, houses: sorted.map((membership) => { const permissions = permissionsFor(membership.role, membership.status); return { id: membership.houseId, address: membership.house.address, role: membership.role, status: membership.status, joinedVia: membership.joinedVia, executorCompanyName: membership.executorCompanyName, permissions, chat: permissions.viewHouseChat && membership.house.chat ? { title: membership.house.chat.title, joinUrl: membership.house.chat.joinUrl } : null }; }) };
   });
 
   await registerHousesApi(app, config, repository, now, options.businessDb);
