@@ -26,3 +26,19 @@ export function getMaxInitData(): Promise<string | undefined> {
     () => fetch("/__dev/max-init-data", { cache: "no-store" }),
   );
 }
+
+export function profileFromMaxInitData(initData: string | undefined) {
+  if (!initData) return null;
+  try {
+    const rawUser = new URLSearchParams(initData).get('user');
+    if (!rawUser) return null;
+    const user = JSON.parse(rawUser);
+    return {
+      firstName: typeof user.first_name === 'string' ? user.first_name : '',
+      lastName: typeof user.last_name === 'string' ? user.last_name : '',
+      photoUrl: typeof user.photo_url === 'string' ? user.photo_url : null,
+    };
+  } catch {
+    return null;
+  }
+}

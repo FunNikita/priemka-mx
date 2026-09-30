@@ -11,7 +11,11 @@
 .inspections-embedded-content { width: 100%; }
 .inspections-embedded-content .house-events-content { padding: 0; }
 .inspections-embedded-content .house-events-layout { gap: 16px; }
-.inspections-embedded-content .house-event-card { padding: 20px; border-radius: 20px; }
+.inspections-embedded-content .house-events-layout > .home-section-title { margin-bottom: 0; }
+.inspections-embedded-content .house-events-layout > .house-events-list { margin-top: 0; }
+.inspections-embedded-content .council-inspection-history > .home-section-title { margin-bottom: 16px; }
+.inspections-embedded-content .house-event-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 0; border-radius: 20px; box-shadow: none; }
+.inspections-embedded-content .house-event-card__main { display: contents; }
 
 .house-events-layout { display: flex; flex-direction: column; gap: 16px; padding: 0; border: 0; background: transparent; box-shadow: none; }
 
@@ -19,9 +23,10 @@
 .house-events-address__button { display: inline-flex; max-width: 100%; align-items: center; gap: 8px; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 12px; background: #2a2b30; color: var(--app-text-primary); cursor: pointer; font: inherit; font-size: 15px; font-weight: 500; line-height: 20px; text-align: left; }
 .house-events-address__button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .house-events-address__button svg { flex: 0 0 auto; color: #0D7AFB; }
-.house-events-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }.house-events-toolbar__report { display: flex; width: 100%; min-width: 0; align-items: center; gap: 12px; min-height: 68px; padding: 13px 16px; border: 0; border-radius: 20px; box-sizing: border-box; background: #202125; box-shadow: 0 0 0 1px rgb(255 255 255 / 8%); color: var(--app-text-primary); cursor: pointer; font: inherit; text-align: left; }.house-events-toolbar__report-icon { display: grid; width: 42px; height: 42px; place-items: center; flex: 0 0 auto; border-radius: 12px; background: rgb(13 122 251 / 18%); color: #0d7afb; }.house-events-toolbar__report-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }.house-events-toolbar__report-copy b { color: var(--app-text-primary); font-size: 16px; font-weight: 500; line-height: 22px; }.house-events-toolbar__report-copy small { color: var(--app-text-secondary); font-size: 13px; line-height: 18px; overflow-wrap: anywhere; }.house-events-toolbar__report-chevron { flex: 0 0 auto; color: var(--app-text-secondary); }
+.house-events-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }.house-events-toolbar__report { display: flex; width: 100%; min-width: 0; align-items: center; gap: 12px; min-height: 68px; padding: 13px 16px; border: 0; border-radius: 20px; box-sizing: border-box; background: var(--app-surface-floating); box-shadow: var(--app-card-shadow); color: var(--app-text-primary); cursor: pointer; font: inherit; text-align: left; }.house-events-toolbar__report-icon { display: grid; width: 42px; height: 42px; place-items: center; flex: 0 0 auto; border-radius: 12px; background: rgb(13 122 251 / 18%); color: #0d7afb; }.house-events-toolbar__report-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }.house-events-toolbar__report-copy b { color: var(--app-text-primary); font-size: 16px; font-weight: 500; line-height: 22px; }.house-events-toolbar__report-copy small { color: var(--app-text-secondary); font-size: 13px; line-height: 18px; overflow-wrap: anywhere; }.house-events-toolbar__report-chevron { flex: 0 0 auto; color: var(--app-text-secondary); }
 
 .house-events-filters {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(6, minmax(112px, 1fr));
   gap: 3px;
@@ -35,7 +40,22 @@
 
 .house-events-filters::-webkit-scrollbar { display: none; }
 
+.house-events-filter-indicator {
+  position: absolute;
+  z-index: 0;
+  border-radius: 12px;
+  background: #101113;
+  box-shadow: 0 0 0 1px var(--app-stroke), 0 4px 10px rgba(15, 23, 42, .08);
+  opacity: 0;
+  pointer-events: none;
+  transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease;
+}
+
+.house-events-filter-indicator--ready { opacity: 1; }
+
 .house-events-filter {
+  position: relative;
+  z-index: 1;
   min-width: 112px;
   min-height: 34px;
   padding: 0 10px;
@@ -46,14 +66,18 @@
   cursor: pointer;
   font: inherit;
   font-size: 15px;
+  font-weight: 400;
   line-height: 18px;
+  transition: background-color .2s ease, box-shadow .2s ease, color .2s ease;
 }
 
 .house-events-filter--active {
-  background: #101113;
-  box-shadow: 0 0 0 1px var(--app-stroke), 0 4px 10px rgba(15, 23, 42, .08);
   color: #fff;
-  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .house-events-filter,
+  .house-events-filter-indicator { transition: none; }
 }
 
 .inspections-filters { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
@@ -80,8 +104,13 @@
 .inspections-embedded-content .house-event-card { display: flex; flex-direction: column; gap: 10px; }
 .inspections-embedded-content .house-event-card__gallery-trigger { display: flex; width: fit-content; max-width: 100%; height: 100px; gap: 8px; overflow: visible; background: transparent; }
 .inspections-embedded-content .house-event-card__gallery-trigger img { width: 100px; height: 100px; flex: 0 0 100px; border-radius: 14px; }
+.house-event-card__photos { display: flex; width: fit-content; max-width: 100%; min-width: 0; gap: 8px; overflow-x: hidden; cursor: pointer; }
+.house-event-card__photos--scrollable { overflow-x: auto; }
+.house-event-card__photos .media-preview__button { width: 112px; height: 112px; flex: 0 0 112px; border-radius: 14px; pointer-events: auto; }
+.house-event-card__photos .media-preview__image { width: 100%; height: 100%; object-fit: cover; }
+.inspections-embedded-content .house-event-card__photos .media-preview__button { width: 100px; height: 100px; flex: 0 0 100px; }
 
-.house-event-card { display: grid; width: 100%; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: start; gap: 14px; padding: 16px 18px; border: 0; border-radius: 18px; background: #202125; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.house-event-card { display: grid; width: 100%; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: start; gap: 14px; padding: 16px 18px; border: 0; border-radius: 18px; background: #202125; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); color: inherit; cursor: pointer; font: inherit; text-align: left; user-select: none; }
 
 .house-event-card:active { transform: scale(.995); }
 
@@ -269,7 +298,7 @@
   .house-events-layout { gap: 8px; padding: 0; }
   .house-events-toolbar, .house-events-list { gap: 12px; }
   .house-events-filters { display: flex; grid-template-columns: none; overflow-x: auto; scroll-padding-inline: 10px; scroll-snap-type: x proximity; }
-  .house-events-filter { min-width: max-content; flex: 0 0 auto; padding: 0 12px; font-size: 13px; scroll-snap-align: start; }
+  .house-events-filter { min-width: max-content; flex: 1 0 auto; padding: 0 12px; font-size: 13px; scroll-snap-align: start; }
   .house-event-card { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 14px; }
   .house-event-card__gallery-trigger { width: 72px; height: 72px; border-radius: 12px; }
   .house-event-card__head { flex-direction: row; align-items: flex-start; gap: 8px; transform: translateY(-5px); }
@@ -286,8 +315,9 @@
 :root[data-color-scheme='light'] .address-dialog-suggestions,
 :root[data-color-scheme='light'] .address-dialog-map { background-color: #eef1f5; }
 
-:root[data-color-scheme='light'] .house-events-filter--active { background: #fff; color: #0f172a; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 4px 10px rgba(15, 23, 42, .08); }
-:root[data-color-scheme='light'] .house-events-filters { background: #f1f2f4; }
+:root[data-color-scheme='light'] .house-events-filter--active { color: #0f172a; }
+:root[data-color-scheme='light'] .house-events-filter-indicator { background: #fff; box-shadow: 0 0 0 1px rgba(15, 23, 42, .18), 0 4px 10px rgba(15, 23, 42, .10); }
+:root[data-color-scheme='light'] .house-events-filters { background: #f1f2f4; box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .10); }
 :root[data-color-scheme='light'] .house-event-card,
 :root[data-color-scheme='light'] .house-events-empty,
 :root[data-color-scheme='light'] .house-events-panel .modal,
@@ -318,6 +348,7 @@
 .house-event-card__head > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .house-event-card__date { white-space: normal; }
 .house-event-card__statuses .house-event-card__status--observed { background: rgb(34 197 94 / 18%); color: #22c55e; }
+.house-event-card__statuses .house-event-card__status--success { background: rgb(34 197 94 / 18%); color: #22c55e; }
 @media (max-width: 820px) {
   .house-event-card { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
   .house-event-card--without-image { grid-template-columns: minmax(0, 1fr); }

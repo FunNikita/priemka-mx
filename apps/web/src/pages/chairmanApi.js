@@ -25,7 +25,7 @@ export function createChairmanWork(houseId, input) {
 }
 
 export async function createChairmanObservation(houseId, input, onCreated) {
-  const observation = await request(`/api/houses/${houseId}/observations`, jsonRequest('POST', { title: input.title, description: input.description, category: input.category }));
+  const observation = await request(`/api/houses/${houseId}/observations`, jsonRequest('POST', { title: input.title, description: input.description, category: input.category, ...(input.mediaIds?.length ? { mediaIds: input.mediaIds } : {}) }));
   onCreated?.(observation.id);
   await assignObservationExecutor(observation.id, { executorUserId: input.executorUserId, category: input.workflowCategory });
   return observation;

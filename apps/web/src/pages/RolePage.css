@@ -1,0 +1,15 @@
+.role-panel { display: flex; width: 100%; min-width: 0; min-height: 100%; align-self: stretch; box-sizing: border-box; background: #17181c; }
+.role-panel.role-panel { min-height: 0; height: auto; flex: 0 0 auto; }
+.role-panel .panel-content.role-page { width: 100%; max-width: none; min-width: 0; align-self: stretch; box-sizing: border-box; margin: 0; padding: 16px 12px 24px; }
+@media (max-width: 640px) { .role-panel .panel-content.role-page { padding-top: 14px; } }
+.role-page__card { display: flex; width: 100%; min-width: 0; align-self: stretch; align-items: stretch; box-sizing: border-box; flex-direction: column; gap: 8px; padding: 8px 10px 10px; border-radius: 18px; background: var(--app-surface-primary); box-shadow: var(--app-card-shadow); }
+:root[data-color-scheme='dark'] .role-page__card { background: #202125; }
+:root[data-color-scheme='light'] .role-panel { background: #f3f4f6; }
+.role-page__card > .role-page__profile { min-width: 0; min-height: 56px; padding: 4px 8px; }
+.role-page__houses { display: flex; width: 100%; min-width: 0; align-self: stretch; box-sizing: border-box; flex-direction: column; gap: 8px; }
+.role-page__house { display: flex; width: 100%; min-width: 0; align-self: stretch; box-sizing: border-box; flex-direction: column; gap: 8px; padding: 8px; border-radius: 14px; background: var(--app-surface-secondary); }
+.role-page__house-info { min-width: 0; }
+.role-page__field { display: flex; width: calc(100% - 8px); align-self: stretch; box-sizing: border-box; flex-direction: column; gap: 6px; min-width: 0; margin-left: 8px; }
+.role-page__card > button { align-self: stretch; margin-left: 8px; }
+.role-page__field input { width: 100%; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--app-stroke); border-radius: 12px; background: var(--app-surface-secondary); color: var(--app-text-primary); font: inherit; }
+.role-page__field .app-select .app-select__trigger { border: 1px solid var(--app-field-border); }

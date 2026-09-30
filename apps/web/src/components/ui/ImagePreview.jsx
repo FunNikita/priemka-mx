@@ -12,7 +12,7 @@ export function ImagePreview({ title, src, photo, placeholder, onOpen }) {
 
   return <>
     <button type="button" className="media-preview__button" aria-label={`Открыть изображение: ${title}`} onClick={onOpen ?? (() => setIsOpen(true))}>
-      <img className="media-preview__image" src={photoPreviewUrl(photo ?? src)} alt={title} />
+      <img className="media-preview__image" src={photoPreviewUrl(photo ?? src)} alt={title} draggable={false} />
     </button>
     {isOpen && !onOpen ? <PhotoGallery photos={[photo ?? { url: src }]} title={title} onClose={() => setIsOpen(false)} /> : null}
   </>;

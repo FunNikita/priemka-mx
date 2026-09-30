@@ -5,7 +5,7 @@
 .report-problem-photos h3 { font-size: 14px; line-height: 20px; }
 .report-problem-field { display: flex; flex-direction: column; gap: 7px; color: var(--app-text-secondary); }
 .report-problem-field > span:first-child, .report-problem-address > span { font-size: 12px; line-height: 16px; }
-.report-problem-field input, .report-problem-field textarea { width: 100%; padding: 12px 14px; border: 0; border-radius: 14px; box-sizing: border-box; background: var(--app-surface-secondary); color: var(--app-text-primary); font: inherit; font-size: 14px; line-height: 20px; outline: none; }
+.report-problem-field input, .report-problem-field textarea, .report-problem-field select { width: 100%; min-height: 44px; padding: 12px 14px; border: 0; border-radius: 14px; box-sizing: border-box; background: var(--app-surface-secondary); color: var(--app-text-primary); font: inherit; font-size: 14px; line-height: 20px; outline: none; }
 .report-problem-field textarea { min-height: 76px; resize: vertical; }
 .report-problem-field input::placeholder, .report-problem-field textarea::placeholder { color: var(--app-text-secondary); opacity: .65; }
 .report-problem-description-photos { display: flex; flex-direction: column; gap: 12px; }

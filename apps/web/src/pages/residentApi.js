@@ -51,6 +51,11 @@ export const workStatuses = {
   NEW: 'Новая', IN_REVIEW: 'Рассматривается', IN_PROGRESS: 'В работе', WAITING: 'Ожидает', ACCEPTED: 'Принята',
 };
 
+export function observationStatusLabel(observation) {
+  const status = (value) => workStatuses[String(value ?? '').trim().toUpperCase()];
+  return status(observation.status) ?? status(observation.linkedWork?.status) ?? (observation.workflow?.workId ? workStatuses.IN_PROGRESS : '');
+}
+
 export const historyEvents = {
   WORK_CREATED: 'Работа создана', SUBMITTED_FOR_INSPECTION: 'Работа передана на проверку',
   INSPECTION_ASSIGNED: 'Назначен проверяющий', INSPECTION_COMPLETED: 'Проверка завершена',

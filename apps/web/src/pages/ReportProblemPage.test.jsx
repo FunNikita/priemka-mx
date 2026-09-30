@@ -66,15 +66,16 @@ it('оставляет ошибочное фото для ручного retry �
   expect(container.querySelectorAll('.report-problem-photo img')).toHaveLength(2);
 });
 
-it('ограничивает наблюдение двадцатью фотографиями', async () => {
+it('ограничивает наблюдение пятью фотографиями', async () => {
   uploadPhoto.mockImplementation(() => new Promise(() => {}));
   await act(async () => root.render(<ReportProblemPage houseId={1} houses={[{ id: 1, address: 'Дом', status: 'ACTIVE', permissions: { createObservation: true } }]} onBack={() => {}} />));
   const input = container.querySelector('input[type="file"]');
-  const files = Array.from({ length: 21 }, (_, index) => new File(['a'], `${index}.png`, { type: 'image/png' }));
+  const files = Array.from({ length: 6 }, (_, index) => new File(['a'], `${index}.png`, { type: 'image/png' }));
   await act(async () => { Object.defineProperty(input, 'files', { configurable: true, value: files }); input.dispatchEvent(new Event('change', { bubbles: true })); });
-  expect(container.querySelectorAll('.report-problem-photo')).toHaveLength(20);
+  expect(container.querySelectorAll('.report-problem-photo')).toHaveLength(5);
   expect(uploadPhoto).toHaveBeenCalledTimes(1);
-  expect(container.textContent).toContain('не более 20');
+  expect(container.textContent).toContain('не более 5');
+  expect(container.querySelector('.report-problem-photo-action').disabled).toBe(true);
 });
 
 it('держит отправку недоступной до окончания очереди', async () => {

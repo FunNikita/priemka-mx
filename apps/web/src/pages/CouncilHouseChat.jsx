@@ -6,6 +6,7 @@ import { ErrorState } from '../components/ui/ErrorState';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmActionModal } from '../components/ui/ConfirmActionModal';
 import { councilJson, councilRequest } from './councilApi';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 
 export function CouncilHouseChat({ houseId, house }) {
   const [chatOverride, setChatOverride] = useState(null);
@@ -22,16 +23,17 @@ export function CouncilHouseChat({ houseId, house }) {
     setError('');
     try {
       const updatedChat = await councilRequest(`/api/houses/${houseId}/chat`, councilJson('PUT', { joinUrl: draft.trim() }));
+      hapticSuccess();
       setChatOverride({ houseId, chat: updatedChat });
       setEditing(false);
-    } catch (failure) { setError(failure.message); }
+    } catch (failure) { hapticError(); setError(failure.message); }
     finally { setBusy(false); }
   };
   const remove = async () => {
     setBusy(true);
     setError('');
-    try { await councilRequest(`/api/houses/${houseId}/chat`, { method: 'DELETE' }); setChatOverride({ houseId, chat: null }); setEditing(false); setConfirmRemoval(false); }
-    catch (failure) { setError(failure.message); }
+    try { await councilRequest(`/api/houses/${houseId}/chat`, { method: 'DELETE' }); hapticSuccess(); setChatOverride({ houseId, chat: null }); setEditing(false); setConfirmRemoval(false); }
+    catch (failure) { hapticError(); setError(failure.message); }
     finally { setBusy(false); }
   };
   const openEditor = () => { setDraft(chat?.joinUrl ?? ''); setEditing(true); };

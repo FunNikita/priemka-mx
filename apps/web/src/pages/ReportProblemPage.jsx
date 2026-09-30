@@ -1,9 +1,9 @@
+import { PanelBack } from '../components/layout/PanelBack';
 import { Panel, Typography } from '@maxhub/max-ui';
 import { Button } from '../components/ui/LegacyButton';
 import { Icon12CancelCircleFillRed, Icon20Check, Icon20ReplayOutline, Icon24AddCircle, Icon24PenOutline } from '@vkontakte/icons';
 import { useEffect, useRef, useState } from 'react';
 
-import { PageHeader } from '../components/layout/PageHeader';
 import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 import { photoPreviewUrl } from '../components/common/photoPreviewUrl';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -46,8 +46,8 @@ export function ReportProblemPage({ onBack, houseId, houses = [], onAccessChange
     const files = Array.from(event.target.files ?? []);
     const valid = files.filter((file) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && file.size <= 10 * 1024 * 1024);
     if (valid.length !== files.length) setError('Допустимы JPEG, PNG, WebP до 10 МБ.');
-    const available = Math.max(0, 20 - photosRef.current.length);
-    if (valid.length > available) setError('Можно прикрепить не более 20 фотографий.');
+    const available = Math.max(0, 5 - photosRef.current.length);
+    if (valid.length > available) setError('Можно прикрепить не более 5 фотографий.');
     const next = valid.slice(0, available).map((file) => ({ id: `${file.name}-${file.lastModified}-${Math.random()}`, url: URL.createObjectURL(file), file, status: 'queued', mediaId: null }));
     setPhotos((items) => [...items, ...next]);
     event.target.value = '';
@@ -69,14 +69,14 @@ export function ReportProblemPage({ onBack, houseId, houses = [], onAccessChange
     finally { setSending(false); }
   };
 
-  if (!hasActiveHouse) return <Panel mode="primary" className="inner-panel report-problem-panel"><PageHeader title="Сообщить о проблеме" onBack={onBack} /><main className="panel-content report-problem-content"><Typography.Body>Сначала выберите дом.</Typography.Body></main></Panel>;
+  if (!hasActiveHouse) return <Panel mode="primary" className="inner-panel report-problem-panel"><PanelBack onBack={onBack} /><main className="panel-content report-problem-content"><Typography.Body>Сначала выберите дом.</Typography.Body></main></Panel>;
   if (isSent) return <Panel mode="primary" className="inner-panel report-problem-panel">
-    <PageHeader title="Сообщить о проблеме" onBack={onBack} />
+    <PanelBack onBack={onBack} />
     <main className="panel-content report-problem-content"><section className="report-problem-card report-problem-success"><span className="report-problem-success__icon"><Icon20Check /></span><Typography.Title>Наблюдение отправлено</Typography.Title><Typography.Body>Наблюдение сохранено и появится в разделе «События дома».</Typography.Body><Button mode="primary" appearance="themed" onClick={onBack}>Вернуться на главную</Button></section></main>
   </Panel>;
 
   return <Panel mode="primary" className="inner-panel report-problem-panel">
-    <PageHeader title="Сообщить о проблеме" onBack={onBack} />
+    <PanelBack onBack={onBack} />
     <main className="panel-content report-problem-content">
       <section className="report-problem-card">
         <div className="report-problem-field"><Typography.Label>Адрес дома</Typography.Label><AppSelect value={address} options={addressOptions} ariaLabel="Адрес дома" onChange={setAddress} /></div>
@@ -84,7 +84,7 @@ export function ReportProblemPage({ onBack, houseId, houses = [], onAccessChange
         <label className="report-problem-field"><Typography.Label>Название проблемы</Typography.Label><input value={title} maxLength={80} placeholder="Например, не работает свет у входа" onChange={(event) => setTitle(event.target.value)} /></label>
         <div className="report-problem-description-photos"><label className="report-problem-field report-problem-field--description"><Typography.Label>Описание</Typography.Label><textarea value={description} maxLength={500} rows="3" placeholder="Расскажите подробнее, где и когда возникла проблема" onChange={(event) => setDescription(event.target.value)} /></label>
           <div className="report-problem-photos"><Typography.Title variant="small-strong">Фотографии</Typography.Title><input ref={fileInputRef} className="report-problem-photos__input" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={addPhotos} />
-            <div className={`report-problem-photos__list${photos.length ? ' report-problem-photos__list--with-actions' : ''}`}>{photos.length ? <div className="report-problem-photo-actions"><button type="button" className="report-problem-photo-action" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 20} aria-label="Добавить фотографии к комментарию"><Icon24AddCircle /></button><button type="button" className={`report-problem-photo-action${isEditingPhotos ? ' report-problem-photo-action--active' : ''}`} onClick={() => setEditingPhotos((value) => !value)} aria-label="Редактировать фотографии комментария" aria-pressed={isEditingPhotos}><Icon24PenOutline /></button></div> : null}{photos.map((photo, index) => <div key={photo.id} className="report-problem-photo">{photo.status === 'uploaded' ? <img src={photoPreviewUrl(photo)} alt={`Фото проблемы ${index + 1}`} /> : photo.status === 'error' ? <button type="button" className="report-problem-photo__retry" aria-label={`Повторить загрузку фото ${index + 1}`} onClick={() => setPhotos((items) => items.map((item) => item.id === photo.id ? { ...item, status: 'queued' } : item))}><Icon20ReplayOutline /></button> : <LoadingSpinner />}<button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => removePhoto(photo.id)}><Icon12CancelCircleFillRed width={20} height={20} /></button></div>)}{!photos.length ? <button type="button" className="report-problem-photo-add" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 20} aria-label="Добавить фотографии к комментарию"><Icon24AddCircle /></button> : null}</div>
+            <div className={`report-problem-photos__list${photos.length ? ' report-problem-photos__list--with-actions' : ''}`}>{photos.length ? <div className="report-problem-photo-actions"><button type="button" className="report-problem-photo-action" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 5} aria-label="Добавить фотографии к комментарию"><Icon24AddCircle /></button><button type="button" className={`report-problem-photo-action${isEditingPhotos ? ' report-problem-photo-action--active' : ''}`} onClick={() => setEditingPhotos((value) => !value)} aria-label="Редактировать фотографии комментария" aria-pressed={isEditingPhotos}><Icon24PenOutline /></button></div> : null}{photos.map((photo, index) => <div key={photo.id} className="report-problem-photo">{photo.status === 'uploaded' ? <img src={photoPreviewUrl(photo)} alt={`Фото проблемы ${index + 1}`} /> : photo.status === 'error' ? <button type="button" className="report-problem-photo__retry" aria-label={`Повторить загрузку фото ${index + 1}`} onClick={() => setPhotos((items) => items.map((item) => item.id === photo.id ? { ...item, status: 'queued' } : item))}><Icon20ReplayOutline /></button> : <LoadingSpinner />}<button type="button" aria-label={`Удалить фото ${index + 1}`} onClick={() => removePhoto(photo.id)}><Icon12CancelCircleFillRed width={20} height={20} /></button></div>)}{!photos.length ? <button type="button" className="report-problem-photo-add" onClick={() => fileInputRef.current?.click()} disabled={photos.length >= 5} aria-label="Добавить фотографии к комментарию"><Icon24AddCircle /></button> : null}</div>
           </div>
         </div>
         {error ? <Typography.Body role="alert">{error}</Typography.Body> : null}
