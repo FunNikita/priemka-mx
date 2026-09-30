@@ -158,3 +158,5 @@ Backend автоматически формирует отчёты о прове
 `WorkDetail.history` сохраняет прежнюю форму. `GET /api/works/:workId/activity` и `GET /api/observations/:observationId/history` возвращают страницы persistent `ActivityEvent` (`items,page,limit,total`) со snapshot имени и роли автора действия. Технические IP находятся только в JSONL логах, не в сущностях пользователя/работы/обращения.
 
 Все ответы содержат `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; `/robots.txt` запрещает обход. Это не заменяет авторизацию или PreviewAccess.
+
+`GET /api/me` возвращает `canSelfRoleSwitch: boolean` — backend capability для показа «Роль для демо». Правила ACTIVE membership и единственного ACTIVE CHAIRMAN сохраняются.

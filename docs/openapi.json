@@ -125,9 +125,13 @@
                     "user",
                     "auth_date",
                     "houses",
-                    "lastHouseId"
+                    "lastHouseId",
+                    "canSelfRoleSwitch"
                   ],
                   "properties": {
+                    "canSelfRoleSwitch": {
+                      "type": "boolean"
+                    },
                     "query_id": {
                       "type": "string"
                     },

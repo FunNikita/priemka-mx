@@ -8,6 +8,7 @@ export type AppConfig = {
   allowSelfRoleSwitch?: boolean;
   previewAccessRequired?: boolean;
   botTimeZone?: string;
+  demoAutoEnrollHouseAddress?: string;
 };
 
 export function getConfig(): AppConfig {
@@ -30,6 +31,9 @@ export function getConfig(): AppConfig {
   const botTimeZone = process.env.BOT_TIME_ZONE ?? "Europe/Moscow";
   try { new Intl.DateTimeFormat("ru-RU", { timeZone: botTimeZone }); } catch { throw new Error("BOT_TIME_ZONE must be a valid time zone"); }
 
+  const demoAutoEnrollHouseAddress = process.env.DEMO_AUTO_ENROLL_HOUSE_ADDRESS?.trim() || undefined;
+  if (demoAutoEnrollHouseAddress && demoAutoEnrollHouseAddress.length > 512) throw new Error("DEMO_AUTO_ENROLL_HOUSE_ADDRESS must be at most 512 characters");
+
   return {
     botToken,
     botName,
@@ -38,5 +42,6 @@ export function getConfig(): AppConfig {
     allowSelfRoleSwitch: rawSelfRoleSwitch === "true",
     previewAccessRequired: preview === "true",
     botTimeZone,
+    demoAutoEnrollHouseAddress,
   };
 }
