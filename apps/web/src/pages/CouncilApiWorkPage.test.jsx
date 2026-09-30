@@ -6,7 +6,7 @@ import { CouncilApiWorkPage } from './CouncilApiWorkPage';
 
 const { councilRequest, allPages } = vi.hoisted(() => ({ councilRequest: vi.fn(), allPages: vi.fn() }));
 vi.mock('./councilApi', () => ({ councilRequest, councilJson: vi.fn(), uploadCouncilPhoto: vi.fn() }));
-vi.mock('./residentApi', () => ({ allPages, formatDate: (value) => value, historyEvents: {}, roleLabels: {} }));
+vi.mock('./residentApi', () => ({ allPages, formatDate: (value) => value, historyEvents: {}, roleLabels: {}, workStatuses: {}, observationStatusLabel: () => '' }));
 
 let container;
 let root;
@@ -40,17 +40,68 @@ it('загружает связанную проверку без Work GET и п
   expect(container.textContent).toContain('Обращение создано');
 });
 
-it('загружает связанную повторную проверку без Work/issues GET и показывает сохранённые comment/media', async () => {
+it('показывает все замечания связанного обращения без отдельных GET повторных проверок', async () => {
   councilRequest.mockImplementation((path) => {
-    if (path === '/api/reinspections/2') return Promise.resolve({ status: 'COMPLETED', result: 'NOT_RESOLVED', comment: 'Дефект остался', media: [{ id: 9, url: '/photo/9' }], issue: { id: 5, title: 'Дверь', description: 'Не закрывается', before: [] }, remediation: { id: 6, comment: 'Исправлено', after: [] }, actions: { complete: false } });
-    if (path === '/api/observations/42') return Promise.resolve({ id: 42, title: 'Дверь', description: 'Не закрывается', house: { address: 'Дом' }, category: 'COMMON_AREAS', media: [], history: [], comments: [], workflow: { executor: null, documents: [] } });
+    if (path === '/api/reinspections/2') return Promise.resolve({ comment: 'Дефект остался', media: [{ id: 9, url: '/photo/9' }] });
+    if (path === '/api/observations/42') return Promise.resolve({ id: 42, title: 'Дверь', description: 'Не закрывается', house: { address: 'Дом' }, category: 'COMMON_AREAS', media: [], history: [], comments: [], workflow: { executor: null, documents: [], issues: [{ id: 5, title: 'Дверь', description: 'Не закрывается', photos: [], remediation: { comment: 'Исправлено', photos: [] }, reinspections: [{ id: 2, status: 'COMPLETED', result: 'NOT_RESOLVED' }] }, { id: 6, title: 'Плафон', description: 'Трещина', photos: [], remediation: { comment: 'Заменён', photos: [] }, reinspections: [{ id: 3, status: 'ASSIGNED', result: null }] }] }, myTasks: { reinspectionIds: [2, 3] } });
     throw new Error(path);
   });
   await act(async () => root.render(<CouncilApiWorkPage inspection={{ kind: 'reinspection', id: 2, status: 'COMPLETED', work: { id: 7, title: 'Дверь' }, observation: { id: 42 } }} onBack={() => {}} />));
-  expect(councilRequest.mock.calls.map(([path]) => path)).toEqual(['/api/reinspections/2', '/api/observations/42']);
+  expect(councilRequest.mock.calls.map(([path]) => path)).toEqual(['/api/observations/42', '/api/reinspections/2']);
   expect(allPages).not.toHaveBeenCalled();
+  expect(container.querySelectorAll('.council-api__repeat-card')).toHaveLength(2);
+  expect(container.textContent).toContain('Плафон');
+  expect(container.textContent).toContain('Исправлено');
   expect(container.textContent).toContain('Дефект остался');
-  expect(container.querySelector('img[alt="Фото повторной проверки: фото 1"]')).not.toBeNull();
+  expect(container.querySelector('img[alt="Замечание: фото 1"]')).not.toBeNull();
+});
+
+it('оставляет завершённые замечания видимыми после очистки myTasks', async () => {
+  councilRequest.mockImplementation((path) => {
+    if (path === '/api/reinspections/3') return Promise.resolve({ comment: 'Остался мусор', media: [] });
+    if (path === '/api/observations/42') return Promise.resolve({ id: 42, title: 'Работа', description: 'Ремонт', house: { address: 'Дом' }, media: [], history: [], comments: [], workflow: { executor: null, documents: [], issues: [{ id: 8, title: 'Территория', description: 'Мусор', status: 'OPEN', photos: [], remediation: { comment: 'Убрано', photos: [] }, reinspections: [{ id: 3, status: 'COMPLETED', result: 'NOT_RESOLVED' }] }, { id: 7, title: 'Покрытие', description: '', status: 'RESOLVED', photos: [], remediation: { comment: 'Исправлено', photos: [] }, reinspections: [{ id: 2, status: 'COMPLETED', result: 'RESOLVED' }] }] }, myTasks: { reinspectionIds: [] } });
+    throw new Error(path);
+  });
+  await act(async () => root.render(<CouncilApiWorkPage inspection={{ kind: 'reinspection', id: 3, status: 'COMPLETED', work: { id: 7, title: 'Работа' }, observation: { id: 42 } }} onBack={() => {}} />));
+  expect(container.querySelectorAll('.council-api__repeat-card')).toHaveLength(2);
+  expect(container.textContent).toContain('Остался мусор');
+  expect(container.querySelector('.council-api__result--unresolved').textContent).toBe('Не устранено');
+  expect(container.querySelector('.council-api__result--resolved').textContent).toBe('Устранено');
+  expect(container.querySelector('.council-api__repeat-card summary').textContent).not.toContain('Требуется устранение');
+  expect(container.querySelector('.council-work__decision-actions')).toBeNull();
+});
+
+it('завершает замечания последовательно и при ошибке второго не отправляет первое повторно', async () => {
+  const events = [];
+  let failSecond = true;
+  let releaseFirst;
+  const firstDone = new Promise((resolve) => { releaseFirst = resolve; });
+  const observation = { id: 42, title: 'Дверь', description: 'Ремонт', house: { address: 'Дом' }, media: [], history: [], comments: [], workflow: { executor: null, documents: [], issues: [2, 3].map((id) => ({ id, title: `Пункт ${id}`, description: 'Замечание', photos: [], remediation: { comment: 'Исправлено', photos: [] }, reinspections: [{ id, status: 'ASSIGNED', result: null }] })) }, myTasks: { reinspectionIds: [2, 3] } };
+  councilRequest.mockImplementation((path) => {
+    if (path === '/api/observations/42') return Promise.resolve(observation);
+    if (path === '/api/reinspections/2/complete') { events.push(2); return firstDone; }
+    if (path === '/api/reinspections/3/complete') { events.push(3); if (failSecond) { failSecond = false; return Promise.reject(new Error('Сбой второго запроса')); } return Promise.resolve({}); }
+    throw new Error(path);
+  });
+  await act(async () => root.render(<CouncilApiWorkPage inspection={{ kind: 'reinspection', id: 2, status: 'ASSIGNED', work: { id: 7, title: 'Дверь' }, observation: { id: 42 } }} onBack={() => {}} />));
+  for (const card of container.querySelectorAll('.council-api__repeat-card')) {
+    await act(async () => card.querySelector('.admin-select__trigger').click());
+    await act(async () => Array.from(card.querySelectorAll('.admin-select__option')).find((button) => button.textContent === 'Устранено').click());
+  }
+  const approved = Array.from(container.querySelectorAll('.council-work__decision-actions button')).find((button) => button.textContent === 'Замечаний нет');
+  expect(approved.disabled).toBe(false);
+  await act(async () => approved.click());
+  const confirmation = Array.from(container.querySelectorAll('.modal button')).find((button) => button.textContent === 'Подтвердить');
+  const completion = act(async () => confirmation.click());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(events).toEqual([2]);
+  releaseFirst({});
+  await completion;
+  expect(events).toEqual([2, 3]);
+  expect(container.textContent).toContain('Сбой второго запроса');
+  await act(async () => approved.click());
+  await act(async () => Array.from(container.querySelectorAll('.modal button')).find((button) => button.textContent === 'Подтвердить').click());
+  expect(events).toEqual([2, 3, 3]);
 });
 
 it('сохраняет Work и activity GET для MANUAL Work', async () => {

@@ -2,7 +2,6 @@ import { Avatar, CellHeader, Input, Panel, Typography } from '@maxhub/max-ui';
 import { Button, IconButton } from '../components/ui/LegacyButton';
 import { Icon16CopyOutline, Icon16Done, Icon20Cancel, Icon24ChevronDown, Icon24ChevronUpSmall, Icon24Filter, Icon24PenOutline } from '@vkontakte/icons';
 import { useCallback, useEffect, useState } from 'react';
-import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorState } from '../components/ui/ErrorState';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -11,6 +10,7 @@ import { allPages, queryPath, request } from './residentApi';
 import { saveAdminMembership } from './adminApi';
 import { PreviewAccessPage } from './PreviewAccessPage';
 import { Modal } from '../components/ui/Modal';
+import { hapticError, hapticSuccess } from '../utils/maxFeedback';
 
 const ROLES = [
   { value: 'RESIDENT', label: 'Житель', tone: 'resident' },
@@ -67,26 +67,27 @@ export function AdminPage({ onMembershipChanged }) {
     setSaving(true); setSaveError('');
     try {
       await saveAdminMembership(roleDraft);
+      hapticSuccess();
       setRoleDraft(null); await reload(); await onMembershipChanged?.();
-    } catch (failure) { setSaveError(failure.message); if (failure.status === 409) { await reload(); await onMembershipChanged?.(); } }
+    } catch (failure) { hapticError(); setSaveError(failure.message); if (failure.status === 409) { await reload(); await onMembershipChanged?.(); } }
     finally { setSaving(false); }
   };
   const deleteRole = async () => {
     if (!roleDraft || roleDraft.isNew || saving) return;
     setSaving(true); setSaveError('');
-    try { await request(`/api/admin/houses/${roleDraft.houseId}/members/${roleDraft.user.id}`, { method: 'DELETE' }); setDeletePending(false); setRoleDraft(null); await reload(); await onMembershipChanged?.(); }
-    catch (failure) { setSaveError(failure.message); if (failure.status === 409) await reload(); }
+    try { await request(`/api/admin/houses/${roleDraft.houseId}/members/${roleDraft.user.id}`, { method: 'DELETE' }); hapticSuccess(); setDeletePending(false); setRoleDraft(null); await reload(); await onMembershipChanged?.(); }
+    catch (failure) { hapticError(); setSaveError(failure.message); if (failure.status === 409) await reload(); }
     finally { setSaving(false); }
   };
   if (showPreview) return <PreviewAccessPage onBack={() => setShowPreview(false)} />;
-  return <Panel mode="primary" className="admin-panel"><PageHeader title="Админка" /><main className="panel-content admin-content"><div className="admin-layout"><div className="admin-toolbar"><div className="admin-toolbar__search-row"><SearchInput placeholder="Поиск" value={query} onChange={(event) => { setQuery(typeof event === 'string' ? event : event.target.value); setPage(1); }} /><button type="button" className={`admin-toolbar__filter${filter !== 'all' ? ' admin-toolbar__filter--active' : ''}`} aria-label="Фильтр по роли" onClick={() => { setFilterDraft(filter); setFilterOpen(true); }}><Icon24Filter width={20} height={20} /></button></div><div className="chairman-actions"><Button mode="secondary" onClick={() => setShowPreview(true)}>Доступ к тесту</Button><Button mode="secondary" onClick={() => setShowHouse(true)}>Добавить дом</Button></div></div>
+  return <Panel mode="primary" className="admin-panel"><main className="panel-content admin-content"><div className="admin-layout"><div className="admin-toolbar"><div className="admin-toolbar__search-row"><SearchInput placeholder="Поиск" value={query} onChange={(event) => { setQuery(typeof event === 'string' ? event : event.target.value); setPage(1); }} /><button type="button" className={`admin-toolbar__filter${filter !== 'all' ? ' admin-toolbar__filter--active' : ''}`} aria-label="Фильтр по роли" onClick={() => { setFilterDraft(filter); setFilterOpen(true); }}><Icon24Filter width={20} height={20} /></button></div><div className="chairman-actions"><Button mode="secondary" onClick={() => setShowPreview(true)}>Доступ к тесту</Button><Button mode="secondary" onClick={() => setShowHouse(true)}>Добавить дом</Button></div></div>
     {loading ? <LoadingSpinner /> : error ? <ErrorState message={error} onRetry={() => { void reload(); void reloadHouses(); }} /> : null}
     <div className="admin-users-list">{!loading && !error && visibleUsers.length ? visibleUsers.map((user) => <article key={user.id} className="admin-user-card"><div className="admin-user-card__header"><div className="admin-user-card__author"><Avatar.Container size={32} className="admin-user-card__avatar"><Avatar.Image src={user.photoUrl} alt={fullName(user)} fallback={userInitial(user)} /></Avatar.Container><div className="admin-user-card__author-text"><Typography.Body className="admin-user-card__title">{fullName(user)}</Typography.Body><div className="admin-user-card__meta-row"><Typography.Label className="admin-user-card__meta">ID: {user.maxUserId}</Typography.Label><button type="button" className="admin-user-card__copy" aria-label={`Скопировать ID пользователя ${user.maxUserId}`} onClick={() => void copy(user.maxUserId)}>{copiedId === user.maxUserId ? <Icon16Done width={16} height={16} /> : <Icon16CopyOutline width={16} height={16} />}</button></div></div></div><button type="button" className="admin-role-pill" onClick={() => user.memberships.length ? setSelectedUser(user) : openRole(user, null)}>{user.memberships.length ? 'Дома и роли' : 'Назначить дом'}</button></div></article>) : !loading && !error ? <EmptyState message="Пользователи не найдены." /> : null}</div>
     {total > 20 ? <div className="admin-pagination"><Button disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Назад</Button><Typography.Label>{page} / {Math.ceil(total / 20)}</Typography.Label><Button disabled={page * 20 >= total} onClick={() => setPage((value) => value + 1)}>Далее</Button></div> : null}
   </div></main>
     {roleDraft ? <RoleDialog draft={roleDraft} setDraft={setRoleDraft} houses={houses} saving={saving} error={saveError} onClose={() => setRoleDraft(null)} onSave={() => void saveRole()} onDelete={() => setDeletePending(true)} /> : null}
     {deletePending ? <Modal className="home-access-modal" title="Удалить членство?" onClose={() => setDeletePending(false)} actions={<><Button mode="secondary" onClick={() => setDeletePending(false)}>Отмена</Button><Button disabled={saving} appearance="negative" onClick={() => void deleteRole()}>Удалить</Button></>}><Typography.Body>Пользователь потеряет доступ к выбранному дому.</Typography.Body>{saveError ? <Typography.Body role="alert">{saveError}</Typography.Body> : null}</Modal> : null}
-    {showHouse ? <AdminDialog title="Добавить дом" onClose={() => setShowHouse(false)} actions={<><Button mode="secondary" onClick={() => setShowHouse(false)}>Отмена</Button><Button disabled={saving || !newHouse.trim()} onClick={() => { setSaving(true); setSaveError(''); void request('/api/admin/houses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: newHouse.trim() }) }).then(() => { setShowHouse(false); setNewHouse(''); return reloadHouses(); }).catch((failure) => setSaveError(failure.message)).finally(() => setSaving(false)); }}>Создать</Button></>}><div className="admin-form"><label className="admin-form__field">Адрес<input value={newHouse} maxLength={255} onChange={(event) => setNewHouse(event.target.value)} /></label>{saveError ? <Typography.Body role="alert">{saveError}</Typography.Body> : null}</div></AdminDialog> : null}
+    {showHouse ? <AdminDialog title="Добавить дом" onClose={() => setShowHouse(false)} actions={<><Button mode="secondary" onClick={() => setShowHouse(false)}>Отмена</Button><Button disabled={saving || !newHouse.trim()} onClick={() => { setSaving(true); setSaveError(''); void request('/api/admin/houses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: newHouse.trim() }) }).then(() => { hapticSuccess(); setShowHouse(false); setNewHouse(''); return reloadHouses(); }).catch((failure) => { hapticError(); setSaveError(failure.message); }).finally(() => setSaving(false)); }}>Создать</Button></>}><div className="admin-form"><label className="admin-form__field">Адрес<input value={newHouse} maxLength={255} onChange={(event) => setNewHouse(event.target.value)} /></label>{saveError ? <Typography.Body role="alert">{saveError}</Typography.Body> : null}</div></AdminDialog> : null}
     {selectedUser && !roleDraft ? <MembershipsDialog user={selectedUser} canAdd={houses.some((house) => !selectedUser.memberships.some((item) => item.houseId === house.id))} onClose={() => setSelectedUser(null)} onEdit={(membership) => openRole(selectedUser, membership)} onAdd={() => openRole(selectedUser, null)} /> : null}
     {isFilterOpen ? <AdminDialog title="Фильтр" onClose={() => setFilterOpen(false)} actions={<><Button appearance="neutral" mode="secondary" size="medium" stretched disabled={filterDraft === 'all'} onClick={() => setFilterDraft('all')}>Сбросить</Button><Button appearance="themed" mode="primary" size="medium" stretched onClick={() => { setFilter(filterDraft); setFilterOpen(false); }}>Применить</Button></>}><div className="admin-form"><div className="admin-form__field"><CellHeader titleStyle="caps">Роль</CellHeader><AdminSelect value={filterDraft} options={[ALL_ROLES, ...ROLES]} onChange={setFilterDraft} ariaLabel="Выбор фильтра пользователей" /></div></div></AdminDialog> : null}
   </Panel>;

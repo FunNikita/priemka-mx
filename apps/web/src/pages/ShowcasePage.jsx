@@ -1,9 +1,10 @@
+import { PanelBack } from '../components/layout/PanelBack';
+import { PageHeader } from '../components/layout/PageHeader';
 import { CellHeader, Container, Counter, Flex, Grid, Input, Panel, Switch, Typography } from '@maxhub/max-ui';
 import { Button } from '../components/ui/LegacyButton';
 import { Icon24MenuOutline, Icon24MessageOutline, Icon28BookSpreadOutline, Icon28WriteOutline } from '@vkontakte/icons';
 import { useState } from 'react';
 
-import { PageHeader } from '../components/layout/PageHeader';
 import { SearchInput } from '../components/ui/SearchInput';
 import { ListRow } from '../components/ui/ListRow';
 import { Modal } from '../components/ui/Modal';
@@ -58,7 +59,7 @@ export function ShowcasePage({ onBack }) {
   const [calendarMax, setCalendarMax] = useState('2026-10-10');
   const systemScheme = useSystemColorScheme();
   const resolvedPreviewScheme = previewScheme === 'system' ? systemScheme : previewScheme;
-  return <Panel mode="primary" className="showcase-panel"><PageHeader title="Витрина компонентов" onBack={onBack} />
+  return <Panel mode="primary" className="showcase-panel"><PanelBack onBack={onBack} />
     <main className="panel-content">
       <div className="showcase-intro"><Typography.Headline variant="large-strong">Компоненты</Typography.Headline><Typography.Body>Откройте нужный блок: его параметры, доступные значения и текущее состояние находятся рядом с примером.</Typography.Body></div>
       <Section title="Тема компонента" component="ThemePreview">
@@ -67,7 +68,7 @@ export function ShowcasePage({ onBack }) {
       </Section>
       <div className="theme-preview" data-color-scheme={resolvedPreviewScheme}>
         <Section title="Заголовок панели" component="PageHeader">
-          <div className="header-preview"><PageHeader title="Заголовок экрана" onBack={() => {}} rightContent={<span className="header-preview__action">Готово</span>} /></div>
+          <div className="header-preview"><PageHeader title="Заголовок экрана" onBack={() => {}} bridgeBack={false} rightContent={<span className="header-preview__action">Готово</span>} /></div>
         </Section>
         <Section title="Типографика" component="Typography">
           <div className="type-sample"><Typography.Headline variant="large-strong" className="type-sample__display">Заголовок крупный</Typography.Headline><Typography.Headline variant="small-strong" className="type-sample__heading">Заголовок раздела</Typography.Headline><Typography.Body className="type-sample__body">Основной текст для описаний, карточек и абзацев.</Typography.Body><Typography.Label className="type-sample__label">Подпись и вспомогательная информация</Typography.Label></div>

@@ -5,6 +5,7 @@ import './BottomTabBar.css';
 const tabs = [
   { id: 'home', label: 'Главная', icon: Icon28HomeOutline },
   { id: 'works', label: 'События', icon: Icon28WriteOutline },
+  { id: 'role', label: 'Роль', icon: Icon28UserCircleOutline },
   { id: 'admin', label: 'Админка', icon: Icon28UserCircleOutline },
 ];
 

@@ -9,6 +9,7 @@ import { ErrorState } from '../ui/ErrorState';
 import { LoadingSpinner } from './LoadingSpinner';
 import { jsonRequest, queryPath, request } from '../../pages/residentApi';
 import { groupHouses } from './houseGroups';
+import { hapticError, hapticSuccess } from '../../utils/maxFeedback';
 
 export function HouseSwitcher({ houseId, houses = [], onHouseChange }) {
   const [open, setOpen] = useState(false);
@@ -39,8 +40,9 @@ export function HouseSwitcher({ houseId, houses = [], onHouseChange }) {
     setMutating(true); setError('');
     try {
       await request(`/api/houses/${house.id}/join-requests${method === 'DELETE' ? '/me' : ''}`, method === 'POST' ? jsonRequest('POST', {}) : { method: 'DELETE' });
+      hapticSuccess();
       setLoading(true); setRevision((value) => value + 1);
-    } catch (failure) { setError(failure.message); if (failure.status === 409) { setLoading(true); setRevision((value) => value + 1); } }
+    } catch (failure) { hapticError(); setError(failure.message); if (failure.status === 409) { setLoading(true); setRevision((value) => value + 1); } }
     finally { setMutating(false); }
   };
   const close = () => { setOpen(false); setQuery(''); setPage(1); };
@@ -48,12 +50,12 @@ export function HouseSwitcher({ houseId, houses = [], onHouseChange }) {
     if (selecting) return;
     if (selectedHouseId === houseId) { close(); return; }
     setSelecting(true); setError('');
-    try { await onHouseChange(selectedHouseId); close(); }
-    catch (failure) { setError(failure.message); }
+    try { await onHouseChange(selectedHouseId); hapticSuccess(); close(); }
+    catch (failure) { hapticError(); setError(failure.message); }
     finally { setSelecting(false); }
   };
   return <>
-    <CellAction before={<Avatar.Container size={40}><Avatar.Icon><Icon28BuildingOutline /></Avatar.Icon></Avatar.Container>} className="home-location-action" height="normal" mode="custom" style={{ '--MaxUi-CellAction_color': 'var(--text-secondary)' }} onClick={() => { setSelectedHouseId(houseId); setLoading(true); setOpen(true); }}>
+    <CellAction before={<Avatar.Container size={40}><Avatar.Icon><Icon28BuildingOutline className="home-location-building-icon" /></Avatar.Icon></Avatar.Container>} className="home-location-action" height="normal" mode="custom" style={{ '--MaxUi-CellAction_color': 'var(--text-secondary)' }} onClick={() => { setSelectedHouseId(houseId); setLoading(true); setOpen(true); }}>
       <Flex align="center" gap={5} className="home-location-address-group"><Typography.Body>{current?.address ?? 'Выберите дом'}</Typography.Body><Icon20ChevronRight className="home-location-chevron" /></Flex>
     </CellAction>
     {open ? <Modal className="home-access-modal house-picker-modal" title="Доступ к работам дома" onClose={close} actions={<Button mode="secondary" appearance="neutral" stretched disabled={selecting} onClick={() => void finishSelection()}>{selecting ? 'Сохраняем…' : 'Готово'}</Button>}><div className="home-access-dialog">
